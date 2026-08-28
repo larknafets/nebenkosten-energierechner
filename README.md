@@ -1,6 +1,6 @@
 # Nebenkosten-Energierechner
 
-Web-App zur monatlichen Nebenkostenabrechnung für ein Zweifamilienhaus mit Wärmepumpe und PV-Anlage. Berechnet Strom-, Heizung/Warmwasser- und Wasserkosten je Wohnung aus monatlich erfassten Zählerständen. Single-User, läuft als Docker-Container mit SQLite, später als Home Assistant Addon.
+Web-App zur monatlichen Nebenkostenabrechnung für ein Zweifamilienhaus mit Wärmepumpe und PV-Anlage. Berechnet Strom-, Heizung/Warmwasser- und Wasserkosten je Wohnung aus monatlich erfassten Zählerständen.
 
 Details und Entscheidungshistorie: [Spec-Map (Issue #1)](https://github.com/larknafets/nebenkosten-energierechner/issues/1).
 
