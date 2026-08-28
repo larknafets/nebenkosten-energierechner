@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/larknafets/nebenkosten-energierechner/internal/store"
+	"github.com/larknafets/nebenkosten-energierechner/internal/web"
 )
 
 func main() {
@@ -22,7 +23,7 @@ func main() {
 	}
 	defer db.Close()
 
-	mux := http.NewServeMux()
+	mux := web.NewMux(db)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := db.PingContext(r.Context()); err != nil {
 			http.Error(w, "db unreachable", http.StatusServiceUnavailable)

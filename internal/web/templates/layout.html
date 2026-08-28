@@ -1,0 +1,50 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nebenkosten-Energierechner</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --border: #e0e2e7; --text: #1c1e21;
+    --muted: #6b7280; --accent: #2563eb; --accent-soft: #eef2ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  h1, h2, h3 { margin: 0 0 .5rem; }
+  .app { max-width: 700px; margin: 0 auto; padding: 1.5rem 1.5rem 3rem; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; }
+  .muted { color: var(--muted); font-size: .85rem; }
+  label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: .25rem; }
+  input[type=number], input[type=date] { width: 100%; padding: .5rem .6rem; border: 1px solid var(--border); border-radius: 6px; font-size: .95rem; }
+  .field { margin-bottom: .9rem; }
+  .grid { display: grid; gap: 1rem; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  button.primary { background: var(--accent); color: white; border: none; border-radius: 6px; padding: .6rem 1.1rem; font-size: .9rem; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: .6rem 1.1rem; font-size: .9rem; cursor: pointer; }
+  .wizard-actions { display: flex; justify-content: space-between; margin-top: 1.25rem; }
+  .c-steps { display: flex; gap: .5rem; margin-bottom: 1.25rem; }
+  .c-step-dot { flex: 1; text-align: center; padding: .5rem; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: .8rem; font-weight: 600; }
+  .c-step-dot.active { background: var(--accent); color: white; }
+  .c-pane { display: none; }
+  .c-pane.active { display: block; }
+  table.letzte { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.letzte th, table.letzte td { padding: .4rem .5rem; text-align: left; border-bottom: 1px solid var(--border); }
+
+  @media (max-width: 480px) {
+    .app { padding: 1rem 1rem 3rem; }
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .c-steps { flex-wrap: wrap; }
+    .c-step-dot { flex: 1 1 45%; font-size: .75rem; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  {{template "content" .}}
+</div>
+</body>
+</html>
+{{end}}

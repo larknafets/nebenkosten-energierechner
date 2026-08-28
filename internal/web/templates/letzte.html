@@ -1,0 +1,32 @@
+{{define "content"}}
+<h1>Letzte Ablesung</h1>
+
+{{if not .Period}}
+<p class="muted">Noch keine Ablesung erfasst. <a href="/ablesungen/neu">Jetzt erfassen</a>.</p>
+{{else}}
+<div class="panel">
+  <p><strong>Ablesedatum:</strong> {{.Period.ReadingDate}}</p>
+  <p><strong>Preise:</strong> Strom {{.Period.Strompreis}} EUR/kWh · Frischwasser {{.Period.FrischwasserPreis}} EUR/m³ · Abwasser {{.Period.AbwasserPreis}} EUR/m³</p>
+
+  <table class="letzte">
+    <thead><tr><th>Zähler</th><th>Stand</th></tr></thead>
+    <tbody>
+      {{range .Meters}}
+      <tr><td>{{.Label}}</td><td>{{.Value}} {{.Unit}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  <table class="letzte" style="margin-top:1rem">
+    <thead><tr><th>Wohnung</th><th>Personen</th><th>Wohnfläche</th></tr></thead>
+    <tbody>
+      {{range .Apartments}}
+      <tr><td>{{.Name}}</td><td>{{index $.Personen .ID}}</td><td>{{.QM}} m²</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+
+<p style="margin-top:1rem"><a href="/ablesungen/neu">Neue Ablesung erfassen</a></p>
+{{end}}
+{{end}}
