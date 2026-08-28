@@ -25,6 +25,21 @@
       {{end}}
     </tbody>
   </table>
+
+  <h3 style="margin-top:1.25rem">Stromkosten (PV-Netzbezug-Zuteilung)</h3>
+  {{if .KostenNote}}
+  <p class="muted">{{.KostenNote}}</p>
+  {{else if .Strom}}
+  <table class="letzte">
+    <tbody>
+      <tr><td>Netzbezug Gesamt</td><td>{{.Strom.NetzbezugGesamtKWh}} kWh</td></tr>
+      <tr><td>Wohnung 2 Anteil</td><td>{{.Strom.W2AnteilKWh}} kWh</td></tr>
+      <tr><td><strong>Kosten Wohnung 2</strong></td><td><strong>{{.Strom.KostenW2}} EUR</strong></td></tr>
+      <tr><td>Wärmepumpe Anteil</td><td>{{.Strom.WPAnteilKWh}} kWh</td></tr>
+      <tr><td>Kosten Wärmepumpe gesamt (Basis Heizungskosten)</td><td>{{.Strom.KostenWPGesamtUnrounded}} EUR</td></tr>
+    </tbody>
+  </table>
+  {{end}}
 </div>
 
 <p style="margin-top:1rem"><a href="/ablesungen/neu">Neue Ablesung erfassen</a></p>
