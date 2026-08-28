@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE — Ticket #7: Eingabeformular + Dashboard</title>
+<!--
+  THROWAWAY PROTOTYPE — answers Ticket #7 (larknafets/nebenkosten-energierechner):
+  "Wie soll das monatliche Eingabeformular für Zählerstände aussehen, und wie
+  das Dashboard mit den berechneten Kosten je Wohnung?"
+
+  Three structurally different variants of a combined "Ablesung erfassen" +
+  "Dashboard" surface, switchable via ?variant=A|B|C. Static HTML/CSS/JS,
+  hardcoded mock data, no backend. Not production code - do not fold this
+  file into the real app; only the winning layout idea should survive.
+
+  Run: open this file directly in a browser (file://) or `python3 -m http.server`.
+-->
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --border: #e0e2e7;
+    --text: #1c1e21;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-soft: #eef2ff;
+    --w1: #2563eb;
+    --w2: #d97706;
+    --good: #16a34a;
+    --radius: 10px;
+    --cat-strom: #f59e0b;
+    --cat-heizung: #ef4444;
+    --cat-wasser: #3b82f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  h1, h2, h3 { margin: 0 0 .5rem; }
+  .app { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1.5rem 6rem; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+  }
+  .muted { color: var(--muted); font-size: .85rem; }
+  label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: .25rem; }
+  input[type=number], input[type=date], input[type=text] {
+    width: 100%;
+    padding: .5rem .6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: .95rem;
+  }
+  .field { margin-bottom: .9rem; }
+  .grid { display: grid; gap: 1rem; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  button.primary {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: .6rem 1.1rem;
+    font-size: .9rem;
+    cursor: pointer;
+  }
+  .card-w1 { border-left: 4px solid var(--w1); }
+  .card-w2 { border-left: 4px solid var(--w2); }
+  .cost-row { display: flex; justify-content: space-between; padding: .4rem 0; border-bottom: 1px dashed var(--border); font-size: .9rem; }
+  .cost-row:last-child { border-bottom: none; }
+  .cost-total { font-weight: 700; font-size: 1.1rem; padding-top: .6rem; }
+  .badge { display: inline-block; background: var(--accent-soft); color: var(--accent); font-size: .75rem; padding: .15rem .5rem; border-radius: 999px; }
+
+  section[data-variant] { display: none; }
+  section[data-variant].active { display: block; }
+
+  /* ---- Variant A: stacked, form on top, dashboard below ---- */
+  .a-section { margin-bottom: 1.5rem; }
+  .a-group-title { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 1rem 0 .5rem; }
+
+  /* ---- Variant B: sidebar nav (HA-ingress-style) ---- */
+  .b-shell { display: grid; grid-template-columns: 220px 1fr; gap: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--panel); }
+  .b-sidebar { background: #1c1e21; color: #cfd3da; padding: 1rem 0; }
+  .b-sidebar h3 { color: white; padding: 0 1rem; font-size: .9rem; margin-bottom: 1rem; }
+  .b-nav-item { padding: .6rem 1rem; cursor: pointer; font-size: .9rem; border-left: 3px solid transparent; }
+  .b-nav-item.active { background: #2a2d33; border-left-color: var(--accent); color: white; }
+  .b-content { padding: 1.5rem; }
+  .b-pane { display: none; }
+  .b-pane.active { display: block; }
+
+  /* ---- Variant C: wizard + compact dashboard ---- */
+  .c-steps { display: flex; gap: .5rem; margin-bottom: 1.25rem; }
+  .c-step-dot { flex: 1; text-align: center; padding: .5rem; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: .8rem; font-weight: 600; cursor: pointer; }
+  .c-step-dot.active { background: var(--accent); color: white; }
+  .c-pane { display: none; }
+  .c-pane.active { display: block; }
+  .c-stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 1rem; }
+  .c-stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+  .c-stat .value { font-size: 1.8rem; font-weight: 700; }
+  .c-bar-track { height: 8px; background: var(--border); border-radius: 999px; overflow: hidden; margin-top: .5rem; }
+  .c-bar-fill { height: 100%; background: var(--accent); }
+
+  /* ---- Verlauf (history) table, shared by variants A + B ---- */
+  table.verlauf { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  table.verlauf th, table.verlauf td { padding: .5rem .6rem; text-align: right; border-bottom: 1px solid var(--border); }
+  table.verlauf th:first-child, table.verlauf td:first-child { text-align: left; }
+  table.verlauf th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+  table.verlauf td.spark { min-width: 90px; }
+  .mini-bar-track { height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; }
+  .mini-bar-fill { height: 100%; }
+  tr.is-current td { font-weight: 700; }
+
+  /* ---- Variant C verlauf: bar-per-month, styled like the current-month stat cards ---- */
+  .verlauf-c-legend { display: flex; gap: 1.25rem; font-size: .75rem; color: var(--muted); margin-bottom: .9rem; flex-wrap: wrap; }
+  .verlauf-c-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .35rem; vertical-align: middle; }
+  .verlauf-c-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 1.75rem; }
+  .verlauf-c-col h4 { font-size: .8rem; color: var(--muted); margin-bottom: .6rem; }
+  .verlauf-c-row { display: flex; align-items: center; gap: .5rem; padding: .3rem 0; }
+  .verlauf-c-row.is-current .month-label { font-weight: 700; color: var(--text); }
+  .month-label { width: 60px; font-size: .72rem; color: var(--muted); flex-shrink: 0; }
+  .bar-track { flex: 1; height: 22px; border-radius: 4px; background: var(--border); display: flex; overflow: hidden; position: relative; }
+  .bar-track > div { height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .bar-track > div span { color: white; font-size: .68rem; font-weight: 600; text-shadow: 0 1px 1px rgba(0,0,0,.25); white-space: nowrap; padding: 0 .2rem; }
+  .verlauf-c-row.is-current .bar-track { box-shadow: 0 0 0 2px var(--accent); }
+  .value-label { width: 64px; text-align: right; font-size: .78rem; font-weight: 600; flex-shrink: 0; }
+
+  .verlauf-c-year-sep { display: flex; align-items: center; gap: .6rem; margin: .6rem 0 .35rem; }
+  .verlauf-c-year-sep .line { flex: 1; height: 1px; background: var(--border); }
+  .verlauf-c-year-sep .label { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; flex-shrink: 0; }
+  .verlauf-c-year-row { display: flex; justify-content: space-between; align-items: center; background: var(--accent-soft); border-radius: 6px; padding: .5rem .7rem; margin-bottom: .5rem; font-weight: 700; font-size: .85rem; color: var(--accent); }
+
+  @media (max-width: 480px) {
+    .app { padding: 1rem 1rem 6rem; }
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .c-stat-grid { grid-template-columns: 1fr; }
+    .c-steps { flex-wrap: wrap; }
+    .c-step-dot { flex: 1 1 45%; font-size: .75rem; }
+    .verlauf-c-wrap { grid-template-columns: 1fr; }
+    .b-shell { grid-template-columns: 1fr; }
+    .b-sidebar { display: flex; overflow-x: auto; padding: .5rem; }
+    .b-nav-item { border-left: none; border-bottom: 3px solid transparent; white-space: nowrap; }
+    .b-nav-item.active { border-left-color: transparent; border-bottom-color: var(--accent); }
+    .verlauf-c-row { flex-wrap: wrap; justify-content: space-between; row-gap: .25rem; }
+    .month-label { width: auto; font-size: .72rem; order: 1; }
+    .value-label { width: auto; font-size: .78rem; order: 2; }
+    .bar-track { flex-basis: 100%; order: 3; height: 20px; }
+  }
+
+  /* ---- floating variant switcher ---- */
+  #proto-switcher {
+    position: fixed;
+    bottom: 1.25rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #111827;
+    color: white;
+    border-radius: 999px;
+    padding: .5rem .75rem;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    box-shadow: 0 6px 20px rgba(0,0,0,.25);
+    font-family: monospace;
+    font-size: .85rem;
+    z-index: 999;
+  }
+  #proto-switcher button {
+    background: rgba(255,255,255,.1);
+    border: none;
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+  #proto-switcher button:hover { background: rgba(255,255,255,.2); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <p class="muted">PROTOTYPE für Ticket #7 — nicht die echte App. Wechsle unten zwischen den drei Layout-Varianten.</p>
+
+  <!-- ============================================================= -->
+  <!-- VARIANT A — Stacked: Formular oben, Dashboard darunter -->
+  <!-- ============================================================= -->
+  <section data-variant="A">
+    <h1>Nebenkosten-Energierechner</h1>
+
+    <div class="panel a-section">
+      <h2>Ablesung erfassen — November 2026</h2>
+      <div class="field" style="max-width:220px">
+        <label>Ablesedatum</label>
+        <input type="date" id="a-reading-date">
+      </div>
+
+      <div class="a-group-title">Zählerstände — Strom (kWh)</div>
+      <div class="grid grid-4">
+        <div class="field"><label>Gesamt (Netzbezug)</label><input type="number" value="18420"></div>
+        <div class="field"><label>Wohnung 2</label><input type="number" value="6120"></div>
+        <div class="field"><label>Wärmepumpe</label><input type="number" value="9840"></div>
+        <div class="field"><label>Wallboxen</label><input type="number" value="3210"></div>
+      </div>
+
+      <div class="a-group-title">Zählerstände — Wasser (m³)</div>
+      <div class="grid grid-3">
+        <div class="field"><label>Gesamt</label><input type="number" value="612"></div>
+        <div class="field"><label>Wohnung 2</label><input type="number" value="188"></div>
+        <div class="field"><label>Warmwasseraufbereitung</label><input type="number" value="94"></div>
+      </div>
+
+      <div class="a-group-title">Zählerstände — Wärme (MWh)</div>
+      <div class="grid grid-2">
+        <div class="field"><label>Wohnung 1</label><input type="number" step="0.01" value="14.2"></div>
+        <div class="field"><label>Wohnung 2</label><input type="number" step="0.01" value="9.6"></div>
+      </div>
+
+      <div class="a-group-title">Preise &amp; Personen</div>
+      <div class="grid grid-3">
+        <div class="field"><label>Strompreis (EUR/kWh)</label><input type="number" step="0.01" value="0.22"></div>
+        <div class="field"><label>Frischwasser (EUR/m³)</label><input type="number" step="0.01" value="1.46"></div>
+        <div class="field"><label>Abwasser (EUR/m³)</label><input type="number" step="0.01" value="4.87"></div>
+      </div>
+      <div class="grid grid-2">
+        <div class="field"><label>Personen Wohnung 1</label><input type="number" value="2"></div>
+        <div class="field"><label>Personen Wohnung 2</label><input type="number" value="1"></div>
+      </div>
+
+      <button class="primary">Ablesung speichern &amp; berechnen</button>
+    </div>
+
+    <div class="a-section">
+      <h2>Dashboard — November 2026</h2>
+      <div class="grid grid-2">
+        <div class="panel card-w1">
+          <h3>Wohnung 1 <span class="badge">116,23 m² · 2 Pers.</span></h3>
+          <div class="cost-row"><span>Strom</span><span>41,80 €</span></div>
+          <div class="cost-row"><span>Heizung/Warmwasser</span><span>112,40 €</span></div>
+          <div class="cost-row"><span>Frischwasser</span><span>38,20 €</span></div>
+          <div class="cost-row"><span>Abwasser</span><span>127,50 €</span></div>
+          <div class="cost-row cost-total"><span>Summe</span><span>319,90 €</span></div>
+        </div>
+        <div class="panel card-w2">
+          <h3>Wohnung 2 <span class="badge">86 m² · 1 Pers.</span></h3>
+          <div class="cost-row"><span>Strom</span><span>67,20 €</span></div>
+          <div class="cost-row"><span>Heizung/Warmwasser</span><span>84,10 €</span></div>
+          <div class="cost-row"><span>Frischwasser</span><span>29,60 €</span></div>
+          <div class="cost-row"><span>Abwasser</span><span>98,70 €</span></div>
+          <div class="cost-row cost-total"><span>Summe</span><span>279,60 €</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="a-section panel">
+      <h2>Verlauf</h2>
+      <table class="verlauf" id="verlauf-table-a"></table>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- VARIANT B — Sidebar-Navigation (HA-Ingress-Stil) -->
+  <!-- ============================================================= -->
+  <section data-variant="B">
+    <div class="b-shell">
+      <div class="b-sidebar">
+        <h3>Nebenkosten</h3>
+        <div class="b-nav-item active" data-pane="erfassung">📋 Ablesung erfassen</div>
+        <div class="b-nav-item" data-pane="dashboard">📊 Dashboard</div>
+        <div class="b-nav-item" data-pane="verlauf">🕒 Verlauf</div>
+      </div>
+      <div class="b-content">
+
+        <div class="b-pane active" data-pane="erfassung">
+          <h2>Ablesung erfassen — November 2026</h2>
+          <div class="grid grid-2">
+            <div class="panel">
+              <h3>Strom (kWh)</h3>
+              <div class="field"><label>Gesamt (Netzbezug)</label><input type="number" value="18420"></div>
+              <div class="field"><label>Wohnung 2</label><input type="number" value="6120"></div>
+              <div class="field"><label>Wärmepumpe</label><input type="number" value="9840"></div>
+              <div class="field"><label>Wallboxen</label><input type="number" value="3210"></div>
+            </div>
+            <div class="panel">
+              <h3>Wasser (m³)</h3>
+              <div class="field"><label>Gesamt</label><input type="number" value="612"></div>
+              <div class="field"><label>Wohnung 2</label><input type="number" value="188"></div>
+              <div class="field"><label>Warmwasseraufbereitung</label><input type="number" value="94"></div>
+            </div>
+            <div class="panel">
+              <h3>Wärme (MWh)</h3>
+              <div class="field"><label>Wohnung 1</label><input type="number" step="0.01" value="14.2"></div>
+              <div class="field"><label>Wohnung 2</label><input type="number" step="0.01" value="9.6"></div>
+            </div>
+            <div class="panel">
+              <h3>Preise &amp; Personen</h3>
+              <div class="field"><label>Strompreis</label><input type="number" step="0.01" value="0.22"></div>
+              <div class="field"><label>Frischwasser</label><input type="number" step="0.01" value="1.46"></div>
+              <div class="field"><label>Abwasser</label><input type="number" step="0.01" value="4.87"></div>
+              <div class="field"><label>Personen W1 / W2</label>
+                <div class="grid grid-2"><input type="number" value="2"><input type="number" value="1"></div>
+              </div>
+            </div>
+          </div>
+          <button class="primary" style="margin-top:1rem">Speichern &amp; berechnen</button>
+        </div>
+
+        <div class="b-pane" data-pane="dashboard">
+          <h2>Dashboard — November 2026</h2>
+          <div class="grid grid-2">
+            <div class="panel card-w1">
+              <h3>Wohnung 1</h3>
+              <div class="cost-row"><span>Strom</span><span>41,80 €</span></div>
+              <div class="cost-row"><span>Heizung/Warmwasser</span><span>112,40 €</span></div>
+              <div class="cost-row"><span>Frischwasser</span><span>38,20 €</span></div>
+              <div class="cost-row"><span>Abwasser</span><span>127,50 €</span></div>
+              <div class="cost-row cost-total"><span>Summe</span><span>319,90 €</span></div>
+            </div>
+            <div class="panel card-w2">
+              <h3>Wohnung 2</h3>
+              <div class="cost-row"><span>Strom</span><span>67,20 €</span></div>
+              <div class="cost-row"><span>Heizung/Warmwasser</span><span>84,10 €</span></div>
+              <div class="cost-row"><span>Frischwasser</span><span>29,60 €</span></div>
+              <div class="cost-row"><span>Abwasser</span><span>98,70 €</span></div>
+              <div class="cost-row cost-total"><span>Summe</span><span>279,60 €</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="b-pane" data-pane="verlauf">
+          <h2>Verlauf</h2>
+          <table class="verlauf" id="verlauf-table-b"></table>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= -->
+  <!-- VARIANT C — Wizard-Erfassung + kompaktes Stat-Dashboard -->
+  <!-- ============================================================= -->
+  <section data-variant="C">
+    <h1>Nebenkosten-Energierechner</h1>
+
+    <div class="panel">
+      <h2>Ablesung erfassen — November 2026</h2>
+      <div class="field" style="max-width:220px">
+        <label>Ablesedatum</label>
+        <input type="date" id="c-reading-date">
+      </div>
+      <div class="c-steps">
+        <div class="c-step-dot active" data-step="1">1 · Strom</div>
+        <div class="c-step-dot" data-step="2">2 · Wasser</div>
+        <div class="c-step-dot" data-step="3">3 · Wärme</div>
+        <div class="c-step-dot" data-step="4">4 · Preise &amp; Personen</div>
+      </div>
+
+      <div class="c-pane active" data-step="1">
+        <div class="grid grid-2">
+          <div class="field"><label>Gesamt (Netzbezug) kWh</label><input type="number" value="18420"></div>
+          <div class="field"><label>Wohnung 2 kWh</label><input type="number" value="6120"></div>
+          <div class="field"><label>Wärmepumpe kWh</label><input type="number" value="9840"></div>
+          <div class="field"><label>Wallboxen kWh</label><input type="number" value="3210"></div>
+        </div>
+      </div>
+      <div class="c-pane" data-step="2">
+        <div class="grid grid-3">
+          <div class="field"><label>Gesamt m³</label><input type="number" value="612"></div>
+          <div class="field"><label>Wohnung 2 m³</label><input type="number" value="188"></div>
+          <div class="field"><label>Warmwasseraufbereitung m³</label><input type="number" value="94"></div>
+        </div>
+      </div>
+      <div class="c-pane" data-step="3">
+        <div class="grid grid-2">
+          <div class="field"><label>Wohnung 1 MWh</label><input type="number" step="0.01" value="14.2"></div>
+          <div class="field"><label>Wohnung 2 MWh</label><input type="number" step="0.01" value="9.6"></div>
+        </div>
+      </div>
+      <div class="c-pane" data-step="4">
+        <div class="grid grid-3">
+          <div class="field"><label>Strompreis</label><input type="number" step="0.01" value="0.22"></div>
+          <div class="field"><label>Frischwasser</label><input type="number" step="0.01" value="1.46"></div>
+          <div class="field"><label>Abwasser</label><input type="number" step="0.01" value="4.87"></div>
+        </div>
+        <div class="grid grid-2">
+          <div class="field"><label>Personen Wohnung 1</label><input type="number" value="2"></div>
+          <div class="field"><label>Personen Wohnung 2</label><input type="number" value="1"></div>
+        </div>
+        <div class="grid grid-2">
+          <div class="field"><label>Wohnfläche Wohnung 1 (m²)</label><input type="number" step="0.01" value="116.23"></div>
+          <div class="field"><label>Wohnfläche Wohnung 2 (m²)</label><input type="number" step="0.01" value="86"></div>
+        </div>
+        <button class="primary">Speichern &amp; berechnen</button>
+      </div>
+    </div>
+
+    <h2 style="margin-top:1.5rem">Dashboard — November 2026</h2>
+    <div class="c-stat-grid">
+      <div class="c-stat">
+        <div class="muted">Wohnung 1 <span class="badge">116,23 m² · 2 Pers.</span></div>
+        <div class="value">319,90 €</div>
+        <div class="c-bar-track"><div class="c-bar-fill" style="width:53%; background:var(--w1)"></div></div>
+        <div class="muted" style="margin-top:.4rem">Strom 41,80 € (190 kWh) · Heizung 112,40 € (14,2 MWh) · Wasser 165,70 € (26,2 m³)</div>
+      </div>
+      <div class="c-stat">
+        <div class="muted">Wohnung 2 <span class="badge">86 m² · 1 Pers.</span></div>
+        <div class="value">279,60 €</div>
+        <div class="c-bar-track"><div class="c-bar-fill" style="width:47%; background:var(--w2)"></div></div>
+        <div class="muted" style="margin-top:.4rem">Strom 67,20 € (305 kWh) · Heizung 84,10 € (9,6 MWh) · Wasser 128,30 € (20,3 m³)</div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:1rem">
+      <h3 style="font-size:.9rem">Verlauf</h3>
+      <div class="verlauf-c-legend">
+        <span><i style="background:var(--cat-strom)"></i>Strom</span>
+        <span><i style="background:var(--cat-heizung)"></i>Heizung/Warmwasser</span>
+        <span><i style="background:var(--cat-wasser)"></i>Wasser</span>
+      </div>
+      <div class="verlauf-c-wrap">
+        <div class="verlauf-c-col">
+          <h4>Wohnung 1</h4>
+          <div id="verlauf-c-w1"></div>
+        </div>
+        <div class="verlauf-c-col">
+          <h4>Wohnung 2</h4>
+          <div id="verlauf-c-w2"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div id="proto-switcher">
+  <button id="proto-prev" aria-label="Vorherige Variante">←</button>
+  <span id="proto-label">A</span>
+  <button id="proto-next" aria-label="Nächste Variante">→</button>
+</div>
+
+<script>
+  const VARIANTS = [
+    { key: 'A', name: 'Stacked: Formular über Dashboard' },
+    { key: 'B', name: 'Sidebar-Navigation (HA-Ingress-Stil)' },
+    { key: 'C', name: 'Wizard-Erfassung + Stat-Dashboard' },
+  ];
+
+  // Mock Ablesungs-Verlauf, neueste zuerst, generiert über 23 Monate
+  // (Nov 2026 zurück bis Jan 2025 - deckt ein komplettes Kalenderjahr 2025
+  // inkl. Dezember ab, damit der Jahreswert getriggert werden kann). Reale
+  // App würde das aus periods + live berechneten Kosten ziehen (Ticket #6).
+  function generateHistory() {
+    const heizungFactor = [1.35, 1.25, 1.05, 0.75, 0.50, 0.35, 0.30, 0.32, 0.55, 0.85, 1.05, 1.30]; // Jan..Dez
+    const stromFactor   = [1.08, 1.06, 1.02, 0.98, 0.95, 0.93, 0.94, 0.95, 0.98, 1.02, 1.05, 1.08];
+    const wasserFactor  = [0.95, 0.95, 0.97, 1.00, 1.03, 1.06, 1.08, 1.07, 1.03, 0.99, 0.97, 0.95];
+    const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+    // Basiswerte kalibriert so, dass November (Index 10) die bisherigen
+    // Referenzwerte des aktuellen Monats reproduziert.
+    const baseStromW1 = 41.80 / stromFactor[10];
+    const baseHeizungW1 = 112.40 / heizungFactor[10];
+    const baseWasserW1 = 165.70 / wasserFactor[10];
+    const rStromW2 = 67.20 / 41.80, rHeizungW2 = 84.10 / 112.40, rWasserW2 = 128.30 / 165.70;
+    const round2 = n => Math.round(n * 100) / 100;
+
+    const list = [];
+    let year = 2026, monthIdx = 10; // Nov 2026
+    for (let i = 0; i < 23; i++) {
+      const strom1 = baseStromW1 * stromFactor[monthIdx];
+      const heiz1 = baseHeizungW1 * heizungFactor[monthIdx];
+      const wass1 = baseWasserW1 * wasserFactor[monthIdx];
+      const strom2 = strom1 * rStromW2, heiz2 = heiz1 * rHeizungW2, wass2 = wass1 * rWasserW2;
+      list.push({
+        monat: `${monthNames[monthIdx]} ${year}`,
+        year, monthIdx,
+        current: i === 0,
+        w1: { strom: round2(strom1), heizung: round2(heiz1), wasser: round2(wass1), summe: round2(strom1 + heiz1 + wass1) },
+        w2: { strom: round2(strom2), heizung: round2(heiz2), wasser: round2(wass2), summe: round2(strom2 + heiz2 + wass2) },
+      });
+      monthIdx--;
+      if (monthIdx < 0) { monthIdx = 11; year--; }
+    }
+    return list;
+  }
+  const HISTORY = generateHistory();
+
+  function eur(n) {
+    return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  }
+
+  function renderVerlaufTable(el) {
+    if (!el) return;
+    const rowsData = HISTORY.slice(0, 6); // A/B zeigen nur die letzten 6 Monate
+    const max = Math.max(...rowsData.map(h => h.w1.summe + h.w2.summe));
+    const rows = rowsData.map(h => {
+      const total = h.w1.summe + h.w2.summe;
+      const pct = Math.round((total / max) * 100);
+      return `
+        <tr class="${h.current ? 'is-current' : ''}">
+          <td>${h.monat}${h.current ? ' <span class="badge">aktuell</span>' : ''}</td>
+          <td>${eur(h.w1.summe)}</td>
+          <td>${eur(h.w2.summe)}</td>
+          <td>${eur(total)}</td>
+          <td class="spark"><div class="mini-bar-track"><div class="mini-bar-fill" style="width:${pct}%; background:var(--accent)"></div></div></td>
+        </tr>`;
+    }).join('');
+    el.innerHTML = `
+      <thead><tr><th>Monat</th><th>Wohnung 1</th><th>Wohnung 2</th><th>Gesamt</th><th>Trend</th></tr></thead>
+      <tbody>${rows}</tbody>`;
+  }
+
+  // Variant C: ein Balken je Monat, gestaffelt nach Strom/Heizung/Wasser.
+  // Skala = Gesamtverbrauch des aktuellen Monats (100% Balkenbreite). Aeltere
+  // Monate mit höherem Verbrauch als aktuell laufen über den Rand hinaus
+  // (abgeschnitten) - das aktuelle Monat ist die Referenz, an der man sich
+  // messen/sparen soll. Nach jedem Dezember wird ein Jahreswert (Summe
+  // Jan-Dez des jeweiligen Jahres) als Trenner eingefügt.
+  function renderVerlaufColumn(el, key) {
+    if (!el) return;
+    const currentTotal = HISTORY.find(h => h.current)[key].summe;
+    const parts = [];
+    HISTORY.forEach(h => {
+      const d = h[key];
+      const segments = [
+        { color: 'var(--cat-strom)', val: d.strom, label: 'Strom' },
+        { color: 'var(--cat-heizung)', val: d.heizung, label: 'Heizung' },
+        { color: 'var(--cat-wasser)', val: d.wasser, label: 'Wasser' },
+      ];
+      // Dezember startet das (vollständige, ältere) Kalenderjahr - Trenner
+      // + Jahreswert stehen davor, damit Dezember eindeutig zu seinem
+      // eigenen Jahresblock gehört statt zwischen zwei Jahren zu hängen.
+      if (h.monthIdx === 11) {
+        const yearTotal = HISTORY.filter(x => x.year === h.year).reduce((sum, x) => sum + x[key].summe, 0);
+        parts.push(`
+          <div class="verlauf-c-year-sep"><span class="line"></span><span class="label">Jahr ${h.year}</span><span class="line"></span></div>
+          <div class="verlauf-c-year-row"><span>Jahreswert ${h.year}</span><span>${eur(yearTotal)}</span></div>`);
+      }
+
+      const bars = segments.map(s => {
+        const pct = (s.val / currentTotal * 100);
+        return `<div style="width:${pct.toFixed(1)}%; background:${s.color}" title="${s.label} ${eur(s.val)}"><span>${eur(s.val)}</span></div>`;
+      }).join('');
+      parts.push(`
+        <div class="verlauf-c-row ${h.current ? 'is-current' : ''}">
+          <span class="month-label">${h.monat}</span>
+          <div class="bar-track">${bars}</div>
+          <span class="value-label">${eur(d.summe)}</span>
+        </div>`);
+    });
+    el.innerHTML = parts.join('');
+  }
+
+  // Balkentext schrumpfen bzw. ausblenden, falls er im Segment nicht passt -
+  // je nach Bildschirmbreite/Zoom, daher nach jedem Render + Resize neu.
+  function fitBarSegmentText(root) {
+    root.querySelectorAll('.bar-track > div').forEach(seg => {
+      const span = seg.querySelector('span');
+      if (!span) return;
+      span.style.display = '';
+      let size = 11;
+      span.style.fontSize = size + 'px';
+      while (span.scrollWidth > seg.clientWidth - 4 && size > 7) {
+        size -= 1;
+        span.style.fontSize = size + 'px';
+      }
+      if (span.scrollWidth > seg.clientWidth - 4) {
+        span.style.display = 'none'; // passt selbst bei Mindestgröße nicht - Wert bleibt per title() abrufbar
+      }
+    });
+  }
+
+  function fitAllVerlaufC() {
+    document.querySelectorAll('#verlauf-c-w1, #verlauf-c-w2').forEach(fitBarSegmentText);
+  }
+
+  renderVerlaufTable(document.getElementById('verlauf-table-a'));
+  renderVerlaufTable(document.getElementById('verlauf-table-b'));
+  renderVerlaufColumn(document.getElementById('verlauf-c-w1'), 'w1');
+  renderVerlaufColumn(document.getElementById('verlauf-c-w2'), 'w2');
+  // Kein sofortiger fitAllVerlaufC()-Aufruf hier: Variante C ist beim Start
+  // idR nicht sichtbar (display:none -> clientWidth 0). setVariant() ruft
+  // fitAllVerlaufC() bereits selbst auf, sobald C aktiv wird.
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(fitAllVerlaufC, 100);
+  });
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  ['a-reading-date', 'c-reading-date'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = todayIso;
+  });
+
+  function currentVariantKey() {
+    const params = new URLSearchParams(location.search);
+    const v = params.get('variant');
+    return VARIANTS.some(x => x.key === v) ? v : 'A';
+  }
+
+  function setVariant(key, push) {
+    document.querySelectorAll('section[data-variant]').forEach(el => {
+      el.classList.toggle('active', el.dataset.variant === key);
+    });
+    const meta = VARIANTS.find(x => x.key === key);
+    document.getElementById('proto-label').textContent = `${key} — ${meta.name}`;
+    if (push) {
+      const params = new URLSearchParams(location.search);
+      params.set('variant', key);
+      history.replaceState(null, '', `${location.pathname}?${params.toString()}`);
+    }
+    // Balken-Segmente einer versteckten (display:none) Sektion haben
+    // clientWidth 0 - Fit erst messen, wenn C tatsächlich sichtbar ist.
+    if (key === 'C') fitAllVerlaufC();
+  }
+
+  function cycle(dir) {
+    const idx = VARIANTS.findIndex(x => x.key === currentVariantKey());
+    const next = VARIANTS[(idx + dir + VARIANTS.length) % VARIANTS.length];
+    setVariant(next.key, true);
+  }
+
+  document.getElementById('proto-prev').addEventListener('click', () => cycle(-1));
+  document.getElementById('proto-next').addEventListener('click', () => cycle(1));
+
+  document.addEventListener('keydown', (e) => {
+    const tag = document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable) return;
+    if (e.key === 'ArrowLeft') cycle(-1);
+    if (e.key === 'ArrowRight') cycle(1);
+  });
+
+  // Variant B: sidebar nav switching
+  document.querySelectorAll('.b-nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.b-nav-item').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.b-pane').forEach(x => x.classList.remove('active'));
+      item.classList.add('active');
+      document.querySelector(`.b-pane[data-pane="${item.dataset.pane}"]`).classList.add('active');
+    });
+  });
+
+  // Variant C: wizard step switching
+  document.querySelectorAll('.c-step-dot').forEach(dot => {
+    dot.addEventListener('click', () => {
+      document.querySelectorAll('.c-step-dot').forEach(x => x.classList.remove('active'));
+      document.querySelectorAll('.c-pane').forEach(x => x.classList.remove('active'));
+      dot.classList.add('active');
+      document.querySelector(`.c-pane[data-step="${dot.dataset.step}"]`).classList.add('active');
+    });
+  });
+
+  setVariant(currentVariantKey(), false);
+</script>
+
+</body>
+</html>
