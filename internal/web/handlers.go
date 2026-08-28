@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/larknafets/nebenkosten-energierechner/internal/calc"
 	"github.com/larknafets/nebenkosten-energierechner/internal/store"
 )
 
@@ -183,6 +184,18 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 			}
 		}
 
+		var strom *calc.StromErgebnis
+		var kostenNote string
+		if period != nil {
+			strom, err = calc.Strom(db, period.ID)
+			if err == store.ErrNoPreviousPeriod {
+				kostenNote = "Kosten können erst ab der zweiten Ablesung berechnet werden (Verbrauch braucht eine Vorperiode)."
+			} else if err != nil {
+				http.Error(w, "strom kosten: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
 		data := struct {
 			Period     *store.LatestPeriod
 			Apartments []store.Apartment
@@ -192,11 +205,15 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 				Value float64
 				Unit  string
 			}
+			Strom      *calc.StromErgebnis
+			KostenNote string
 		}{
 			Period:     period,
 			Apartments: apartments,
 			Personen:   personen,
 			Meters:     meters,
+			Strom:      strom,
+			KostenNote: kostenNote,
 		}
 
 		if err := letzteTemplate.ExecuteTemplate(w, "layout", data); err != nil {
