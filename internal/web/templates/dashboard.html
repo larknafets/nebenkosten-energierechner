@@ -13,14 +13,14 @@
   {{range .Cards}}
   <div class="panel stat-card">
     <div class="muted">{{.ApartmentName}} <span class="badge">{{de .QM}} m² · {{.Personen}} Pers.</span></div>
-    <div class="stat-value">{{de .Gesamtbetrag}} €</div>
+    <div class="stat-value">{{deEUR .Gesamtbetrag}} €</div>
     <div class="stat-bar-track">
       {{range .Kategorien}}
       <div class="stat-bar-seg cat-{{.Farbe}}" style="width:{{.ProzentGesamt}}%"></div>
       {{end}}
     </div>
     <div class="muted stat-kategorien">
-      {{range $i, $kat := .Kategorien}}{{if $i}} · {{end}}{{$kat.Label}} {{de $kat.Kosten}} € ({{de $kat.Verbrauch}} {{$kat.Einheit}}){{end}}
+      {{range $i, $kat := .Kategorien}}{{if $i}} · {{end}}{{$kat.Label}} {{deEUR $kat.Kosten}} € ({{de $kat.Verbrauch}} {{$kat.Einheit}}){{end}}
     </div>
   </div>
   {{end}}
@@ -46,19 +46,19 @@
       {{range .Eintraege}}
       {{if .Jahrestrenner}}
       <div class="verlauf-year-sep"><span class="line"></span><span class="label">Jahr {{.Jahrestrenner.Jahr}}</span><span class="line"></span></div>
-      <div class="verlauf-year-row"><span>Jahreswert {{.Jahrestrenner.Jahr}}</span><span>{{de .Jahrestrenner.Jahreswert}} €</span></div>
+      <div class="verlauf-year-row"><span>Jahreswert {{.Jahrestrenner.Jahr}}</span><span>{{deEUR .Jahrestrenner.Jahreswert}} €</span></div>
       {{else}}
       <div class="verlauf-row{{if .Monat.IsCurrent}} is-current{{end}}">
         <span class="month-label">{{.Monat.Label}}</span>
         <div class="bar-track">
           {{range .Monat.Segmente}}
-          <div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{de .Kosten}} €"><span>{{de .Kosten}} €</span></div>
+          <div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>
           {{end}}
         </div>
         <div class="verbrauch-liste">
           {{range $i, $seg := .Monat.Segmente}}{{if $i}} · {{end}}{{$seg.Label}} {{de $seg.Verbrauch}} {{$seg.Einheit}}{{end}}
         </div>
-        <span class="value-label">{{de .Monat.Gesamtbetrag}} €</span>
+        <span class="value-label">{{deEUR .Monat.Gesamtbetrag}} €</span>
       </div>
       {{end}}
       {{end}}

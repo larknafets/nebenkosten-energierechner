@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -75,12 +76,24 @@ func germanPeriodLabelShort(readingDate string) string {
 }
 
 // formatDecimalDE renders a float64 the way germanPeriodLabel renders a
-// date: German convention, decimal comma instead of point (Ticket #36).
-// Precision isn't forced to a fixed number of places - 'f'/-1 keeps
-// whatever precision the value already carries (e.g. "0,7", not "0,70"),
-// matching the un-localized {{.Field}} output it replaces.
+// date: German convention, decimal comma instead of point (Ticket #36),
+// rounded to at most 2 decimal places (Ticket #37 - raw calc.go values
+// like WWAnteil/WaermeMWh carry floating-point noise past 2 places, e.g.
+// "25,333333333333332"). Not padded - 'f'/-1 on the rounded value keeps
+// "0,7" as "0,7", not "0,70"; use formatEuroDE where padding to exactly 2
+// places is wanted (EUR amounts).
 func formatDecimalDE(x float64) string {
-	return strings.ReplaceAll(strconv.FormatFloat(x, 'f', -1, 64), ".", ",")
+	rounded := math.Round(x*100) / 100
+	return strings.ReplaceAll(strconv.FormatFloat(rounded, 'f', -1, 64), ".", ",")
+}
+
+// formatEuroDE renders a float64 as a German-formatted EUR amount, always
+// padded to exactly 2 decimal places (Ticket #40 - a currency amount reads
+// as "45,00", not "45"). EUR amounts are already Round2'd (kaufmännisch,
+// Issue #8) before reaching here, so the fixed 2-place formatting doesn't
+// change the value, only pads its display.
+func formatEuroDE(x float64) string {
+	return strings.ReplaceAll(strconv.FormatFloat(x, 'f', 2, 64), ".", ",")
 }
 
 // formatDatumDE renders a period's ReadingDate ("YYYY-MM-DD") in the German
@@ -96,6 +109,7 @@ func formatDatumDE(readingDate string) string {
 
 var templateFuncs = template.FuncMap{
 	"de":      formatDecimalDE,
+	"deEUR":   formatEuroDE,
 	"deDatum": formatDatumDE,
 }
 

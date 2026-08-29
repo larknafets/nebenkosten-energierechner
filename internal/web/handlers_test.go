@@ -294,10 +294,32 @@ func TestFormatDecimalDE(t *testing.T) {
 		{45.5, "45,5"},
 		{-3.14, "-3,14"},
 		{0, "0"},
+		// Ticket #37: max. 2 Nachkommastellen, aber nicht auffuellen.
+		{25.333333333333332, "25,33"},
+		{0.46999999999999975, "0,47"},
+		{1406.3333333333333, "1406,33"},
 	}
 	for _, c := range cases {
 		if got := formatDecimalDE(c.x); got != c.want {
 			t.Errorf("formatDecimalDE(%v) = %q, want %q", c.x, got, c.want)
+		}
+	}
+}
+
+func TestFormatEuroDE(t *testing.T) {
+	cases := []struct {
+		x    float64
+		want string
+	}{
+		{45, "45,00"},
+		{45.5, "45,50"},
+		{0.22, "0,22"},
+		{45.999, "46,00"},
+		{0, "0,00"},
+	}
+	for _, c := range cases {
+		if got := formatEuroDE(c.x); got != c.want {
+			t.Errorf("formatEuroDE(%v) = %q, want %q", c.x, got, c.want)
 		}
 	}
 }

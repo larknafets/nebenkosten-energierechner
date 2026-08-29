@@ -90,6 +90,25 @@ func TestCreatePeriod_GetLatestPeriod_AllPeriods_Roundtrip(t *testing.T) {
 	}
 }
 
+// TestSeed_ApartmentsQMStartsAtZero verifies Ticket #38: a fresh install
+// doesn't hardcode this household's real Wohnfläche as an app default -
+// qm starts at 0, like Strompreis/Personen have no seed default either.
+func TestSeed_ApartmentsQMStartsAtZero(t *testing.T) {
+	db := openTestDB(t)
+	apartments, err := Apartments(db)
+	if err != nil {
+		t.Fatalf("Apartments: %v", err)
+	}
+	if len(apartments) != 2 {
+		t.Fatalf("want 2 apartments, got %d", len(apartments))
+	}
+	for _, a := range apartments {
+		if a.QM != 0 {
+			t.Errorf("apartment %q QM = %v, want 0 (unset until first Ablesung)", a.Name, a.QM)
+		}
+	}
+}
+
 func TestGetLatestPeriod_NoPeriods(t *testing.T) {
 	db := openTestDB(t)
 	latest, err := GetLatestPeriod(db)

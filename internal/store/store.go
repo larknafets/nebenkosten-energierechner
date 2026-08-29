@@ -108,9 +108,14 @@ func apartmentID(id int64) *int64 { return &id }
 // they're not already present. Keyed on `apartments.id` / `meters.key` so
 // it's safe to run on every startup.
 func seed(db *sql.DB) error {
+	// qm starts at 0 (Ticket #38) - unlike the apartment id/name, Wohnfläche
+	// is user data, not app-fixed structure, so it isn't hardcoded here. It
+	// behaves like Strompreis/Personen: empty at the first Ablesung, then
+	// carried forward automatically (apartments.qm is a live column,
+	// overwritten by every CreatePeriod/UpdatePeriod).
 	apartments := []apartmentSeed{
-		{id: 1, name: "Wohnung 1", qm: 116.23},
-		{id: 2, name: "Wohnung 2", qm: 86},
+		{id: 1, name: "Wohnung 1", qm: 0},
+		{id: 2, name: "Wohnung 2", qm: 0},
 	}
 	for _, a := range apartments {
 		if _, err := db.Exec(
