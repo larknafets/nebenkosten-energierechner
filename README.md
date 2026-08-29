@@ -122,7 +122,7 @@ Berechnete Kosten werden nicht persistiert, sondern bei jedem Aufruf live aus de
 
 ## Tech-Stack
 
-Go, `modernc.org/sqlite` (kein ORM), server-rendered `html/template` + htmx, ein Docker-Container mit SQLite unter `/data`. Geplante Einbindung als Home Assistant Addon über `larknafets/ha-addons` (Ingress-Integration), analog `larknafets/gcs-connector-evcc`.
+Go, `modernc.org/sqlite` (kein ORM), server-rendered `html/template` mit Vanilla-JS für die Wizard-Interaktivität (kein htmx - ursprünglich in der Spec vorgesehen, aber nicht gebraucht), ein Docker-Container mit SQLite unter `/data`. Einbindung als Home Assistant Addon über `larknafets/ha-addons` (Ingress-Integration umgesetzt, siehe Issue #22), analog `larknafets/gcs-connector-evcc`.
 
 ## Umsetzung
 
