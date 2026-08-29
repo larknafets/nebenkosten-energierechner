@@ -71,12 +71,26 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		previous, err := store.GetLatestPeriod(db)
+		if err != nil {
+			http.Error(w, "latest period: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		data := struct {
-			ReadingDate string
-			Apartments  []store.Apartment
+			ReadingDate         string
+			Apartments          []store.Apartment
+			HasPrevious         bool
+			PreviousReadings    map[string]float64
+			PreviousReadingDate string
 		}{
 			ReadingDate: time.Now().Format("2006-01-02"),
 			Apartments:  apartments,
+		}
+		if previous != nil {
+			data.HasPrevious = true
+			data.PreviousReadings = previous.Readings
+			data.PreviousReadingDate = previous.ReadingDate
 		}
 
 		if err := wizardTemplate.ExecuteTemplate(w, "layout", data); err != nil {
