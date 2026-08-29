@@ -57,6 +57,20 @@
     </tbody>
   </table>
   {{end}}
+
+  <h3 style="margin-top:1.25rem">Heizungskosten (70/30-Split)</h3>
+  {{if .KostenNote}}
+  <p class="muted">{{.KostenNote}}</p>
+  {{else if .Heizung}}
+  <table class="letzte">
+    <thead><tr><th></th><th>Wohnung 1</th><th>Wohnung 2</th></tr></thead>
+    <tbody>
+      <tr><td>Wärmeverbrauch</td><td>{{.Heizung.WaermeW1MWh}} MWh</td><td>{{.Heizung.WaermeW2MWh}} MWh</td></tr>
+      <tr><td>Wohnfläche</td><td>{{.Heizung.QMW1}} m²</td><td>{{.Heizung.QMW2}} m²</td></tr>
+      <tr><td><strong>Kosten Heizung/Warmwasser</strong></td><td><strong>{{.Heizung.KostenHeizungW1}} EUR</strong></td><td><strong>{{.Heizung.KostenHeizungW2}} EUR</strong></td></tr>
+    </tbody>
+  </table>
+  {{end}}
 </div>
 
 <p style="margin-top:1rem"><a href="/ablesungen/neu">Neue Ablesung erfassen</a></p>

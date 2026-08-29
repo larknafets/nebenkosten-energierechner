@@ -6,6 +6,7 @@ package web
 import (
 	"database/sql"
 	"embed"
+	"errors"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -218,10 +219,11 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 
 		var strom *calc.StromErgebnis
 		var wasser *calc.WasserErgebnis
+		var heizung *calc.HeizungErgebnis
 		var kostenNote string
 		if period != nil {
 			strom, err = calc.Strom(db, period.ID)
-			if err == store.ErrNoPreviousPeriod {
+			if errors.Is(err, store.ErrNoPreviousPeriod) {
 				kostenNote = "Kosten können erst ab der zweiten Ablesung berechnet werden (Verbrauch braucht eine Vorperiode)."
 			} else if err != nil {
 				http.Error(w, "strom kosten: "+err.Error(), http.StatusInternalServerError)
@@ -230,6 +232,11 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 				wasser, err = calc.Wasser(db, period.ID)
 				if err != nil {
 					http.Error(w, "wasser kosten: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
+				heizung, err = calc.Heizung(db, period.ID)
+				if err != nil {
+					http.Error(w, "heizung kosten: "+err.Error(), http.StatusInternalServerError)
 					return
 				}
 			}
@@ -246,6 +253,7 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 			}
 			Strom      *calc.StromErgebnis
 			Wasser     *calc.WasserErgebnis
+			Heizung    *calc.HeizungErgebnis
 			KostenNote string
 		}{
 			Period:     period,
@@ -254,6 +262,7 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 			Meters:     meters,
 			Strom:      strom,
 			Wasser:     wasser,
+			Heizung:    heizung,
 			KostenNote: kostenNote,
 		}
 
