@@ -118,13 +118,16 @@ func TestVerlaufMonate(t *testing.T) {
 		Heizung: &calc.HeizungErgebnis{KostenHeizungW2: 20},
 	}
 	periods := []periodKosten{
-		{Label: "Nov 2026", K: neu},
-		{Label: "Okt 2026", K: alt},
+		{ReadingDate: "2026-11-15", K: neu},
+		{ReadingDate: "2026-10-01", K: alt},
 	}
 
 	monate := verlaufMonate(2, periods)
 	if len(monate) != 2 {
 		t.Fatalf("want 2 Monate, got %d", len(monate))
+	}
+	if monate[0].Label != "Nov 2026" || monate[1].Label != "Okt 2026" {
+		t.Errorf("Label = %q / %q, want \"Nov 2026\" / \"Okt 2026\"", monate[0].Label, monate[1].Label)
 	}
 	if !monate[0].IsCurrent || monate[1].IsCurrent {
 		t.Errorf("nur der erste (neueste) Monat soll IsCurrent sein, got %+v / %+v", monate[0], monate[1])
@@ -155,11 +158,72 @@ func TestVerlaufMonate(t *testing.T) {
 
 	t.Run("neuester Gesamtbetrag 0 erzeugt kein NaN", func(t *testing.T) {
 		zero := kosten{Strom: &calc.StromErgebnis{}, Wasser: &calc.WasserErgebnis{}, Heizung: &calc.HeizungErgebnis{}}
-		monate := verlaufMonate(2, []periodKosten{{Label: "Nov 2026", K: zero}})
+		monate := verlaufMonate(2, []periodKosten{{ReadingDate: "2026-11-15", K: zero}})
 		for _, seg := range monate[0].Segmente {
 			if seg.ProzentNeuestesGesamt != 0 {
 				t.Errorf("ProzentNeuestesGesamt = %v, want 0", seg.ProzentNeuestesGesamt)
 			}
+		}
+	})
+}
+
+func TestMitJahrestrennern(t *testing.T) {
+	leer := kosten{Strom: &calc.StromErgebnis{}, Wasser: &calc.WasserErgebnis{KostenFrischwasserW2: 10}, Heizung: &calc.HeizungErgebnis{}}
+
+	t.Run("Dezember-Eintrag bekommt davor einen Jahrestrenner mit Jahreswert", func(t *testing.T) {
+		periods := []periodKosten{
+			{ReadingDate: "2026-01-15", K: leer}, // 10
+			{ReadingDate: "2025-12-15", K: leer}, // 10 - Dezember 2025
+			{ReadingDate: "2025-11-15", K: leer}, // 10
+		}
+		monate := verlaufMonate(2, periods)
+		eintraege := mitJahrestrennern(monate, periods)
+
+		if len(eintraege) != 4 {
+			t.Fatalf("want 4 Eintraege (3 Monate + 1 Trenner), got %d: %+v", len(eintraege), eintraege)
+		}
+		if eintraege[0].Monat == nil || eintraege[0].Jahrestrenner != nil {
+			t.Errorf("Eintrag 0 soll Jan 2026 (Monat) sein, got %+v", eintraege[0])
+		}
+		if eintraege[1].Jahrestrenner == nil {
+			t.Fatalf("Eintrag 1 soll der Jahrestrenner vor Dezember 2025 sein, got %+v", eintraege[1])
+		}
+		if eintraege[1].Jahrestrenner.Jahr != 2025 {
+			t.Errorf("Jahrestrenner.Jahr = %d, want 2025", eintraege[1].Jahrestrenner.Jahr)
+		}
+		// Jahreswert 2025 = Dez (10) + Nov (10) = 20 - Januar 2026 gehoert
+		// nicht zu Kalenderjahr 2025.
+		if eintraege[1].Jahrestrenner.Jahreswert != 20 {
+			t.Errorf("Jahrestrenner.Jahreswert = %v, want 20", eintraege[1].Jahrestrenner.Jahreswert)
+		}
+		if eintraege[2].Monat == nil || eintraege[2].Monat.Label != "Dez 2025" {
+			t.Errorf("Eintrag 2 soll Dez 2025 (Monat) sein, got %+v", eintraege[2])
+		}
+		if eintraege[3].Monat == nil || eintraege[3].Monat.Label != "Nov 2025" {
+			t.Errorf("Eintrag 3 soll Nov 2025 (Monat) sein, got %+v", eintraege[3])
+		}
+	})
+
+	t.Run("kein Dezember im Jahr -> kein Trenner", func(t *testing.T) {
+		periods := []periodKosten{
+			{ReadingDate: "2026-02-15", K: leer},
+			{ReadingDate: "2026-01-15", K: leer},
+		}
+		monate := verlaufMonate(2, periods)
+		eintraege := mitJahrestrennern(monate, periods)
+		if len(eintraege) != 2 {
+			t.Fatalf("want 2 Eintraege, keine Trenner, got %d: %+v", len(eintraege), eintraege)
+		}
+		for _, e := range eintraege {
+			if e.Jahrestrenner != nil {
+				t.Errorf("kein Dezember vorhanden -> es sollte kein Jahrestrenner erscheinen, got %+v", e)
+			}
+		}
+	})
+
+	t.Run("leere Liste", func(t *testing.T) {
+		if got := mitJahrestrennern(nil, nil); got != nil {
+			t.Errorf("want nil, got %+v", got)
 		}
 	})
 }

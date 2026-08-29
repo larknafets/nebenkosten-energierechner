@@ -387,11 +387,13 @@ func kategorien(apartmentID int64, k kosten) []kategorie {
 	return list
 }
 
-// periodKosten is one period's already-computed kosten, labelled for the
-// Verlauf view (Ticket #19).
+// periodKosten is one period's already-computed kosten, for the Verlauf
+// view (Ticket #19). ReadingDate stays in its raw "YYYY-MM-DD" form (not
+// pre-formatted) because verlaufMonate needs it for the month label and
+// mitJahrestrennern needs it to detect calendar-year boundaries (#20).
 type periodKosten struct {
-	Label string
-	K     kosten
+	ReadingDate string
+	K           kosten
 }
 
 // verlaufSegment is one Verlauf bar's Strom/Heizung/Wasser slice, scaled
@@ -411,10 +413,25 @@ type verlaufMonat struct {
 	Segmente     []verlaufSegment
 }
 
-// verlaufColumn is one apartment's Verlauf column: its Monate, newest first.
+// verlaufJahrestrenner is the "Jahreswert" separator inserted right before
+// a calendar year's December row (Ticket #20).
+type verlaufJahrestrenner struct {
+	Jahr       int
+	Jahreswert float64
+}
+
+// verlaufEintrag is one row of a Verlauf column: either a Monat or (if
+// Jahrestrenner is set) a year separator. Exactly one of the two is set.
+type verlaufEintrag struct {
+	Monat         *verlaufMonat
+	Jahrestrenner *verlaufJahrestrenner
+}
+
+// verlaufColumn is one apartment's Verlauf column: its Eintraege, newest
+// first.
 type verlaufColumn struct {
 	ApartmentName string
-	Monate        []verlaufMonat
+	Eintraege     []verlaufEintrag
 }
 
 // verlaufMonate builds the given apartment's Verlauf rows, newest first
@@ -447,11 +464,41 @@ func verlaufMonate(apartmentID int64, periodenKosten []periodKosten) []verlaufMo
 			segmente = append(segmente, verlaufSegment{Farbe: kat.Farbe, Kosten: kat.Kosten, ProzentNeuestesGesamt: pct})
 		}
 		out = append(out, verlaufMonat{
-			Label:        pk.Label,
+			Label:        germanPeriodLabelShort(pk.ReadingDate),
 			IsCurrent:    i == 0,
 			Gesamtbetrag: calc.Round2(gesamtbetrag),
 			Segmente:     segmente,
 		})
+	}
+	return out
+}
+
+// mitJahrestrennern inserts a verlaufJahrestrenner right before each
+// calendar year's December row (Ticket #20): "sobald beim rückwärts
+// iterieren ein Dezember-Eintrag ansteht, wird davor ein Trenner +
+// Jahreswert eingefügt". A year with no recorded December period (e.g. the
+// current, still-running year) gets no separator at all - its Jahreswert
+// would be incomplete. monate and periodenKosten must be the same length
+// and in the same order (verlaufMonate's output paired with its input).
+func mitJahrestrennern(monate []verlaufMonat, periodenKosten []periodKosten) []verlaufEintrag {
+	if len(monate) == 0 {
+		return nil
+	}
+
+	out := make([]verlaufEintrag, 0, len(monate))
+	for i, pk := range periodenKosten {
+		t, err := time.Parse("2006-01-02", pk.ReadingDate)
+		if err == nil && t.Month() == time.December {
+			var jahreswert float64
+			for j, pk2 := range periodenKosten {
+				if t2, err2 := time.Parse("2006-01-02", pk2.ReadingDate); err2 == nil && t2.Year() == t.Year() {
+					jahreswert += monate[j].Gesamtbetrag
+				}
+			}
+			out = append(out, verlaufEintrag{Jahrestrenner: &verlaufJahrestrenner{Jahr: t.Year(), Jahreswert: calc.Round2(jahreswert)}})
+		}
+		m := monate[i]
+		out = append(out, verlaufEintrag{Monat: &m})
 	}
 	return out
 }
@@ -521,14 +568,14 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 			if pk.KostenNote != "" {
 				break
 			}
-			periodenKosten = append(periodenKosten, periodKosten{Label: germanPeriodLabelShort(p.ReadingDate), K: pk})
+			periodenKosten = append(periodenKosten, periodKosten{ReadingDate: p.ReadingDate, K: pk})
 		}
 
 		var verlaufSpalten []verlaufColumn
 		for _, a := range apartments {
 			verlaufSpalten = append(verlaufSpalten, verlaufColumn{
 				ApartmentName: a.Name,
-				Monate:        verlaufMonate(a.ID, periodenKosten),
+				Eintraege:     mitJahrestrennern(verlaufMonate(a.ID, periodenKosten), periodenKosten),
 			})
 		}
 
