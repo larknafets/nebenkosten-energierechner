@@ -29,4 +29,56 @@
 
 <p style="margin-top:1rem"><a href="/ablesungen/letzte">Alle Details</a></p>
 {{end}}
+
+{{if .HasVerlauf}}
+<h2 style="margin-top:1.5rem">Verlauf</h2>
+<div class="panel" style="margin-top:1rem">
+  <div class="verlauf-legend">
+    <span><i class="cat-strom"></i>Strom</span>
+    <span><i class="cat-heizung"></i>Heizung/Warmwasser</span>
+    <span><i class="cat-wasser"></i>Wasser</span>
+  </div>
+  <div class="verlauf-wrap">
+    {{range .VerlaufSpalten}}
+    <div class="verlauf-col">
+      <h4>{{.ApartmentName}}</h4>
+      {{range .Monate}}
+      <div class="verlauf-row{{if .IsCurrent}} is-current{{end}}">
+        <span class="month-label">{{.Label}}</span>
+        <div class="bar-track">
+          {{range .Segmente}}
+          <div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" title="{{.Kosten}} €"><span>{{.Kosten}} €</span></div>
+          {{end}}
+        </div>
+        <span class="value-label">{{.Gesamtbetrag}} €</span>
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+</div>
+<script>
+  // Balkentext schrumpfen bzw. ausblenden, falls er im Segment nicht passt
+  // (Ticket #19 AC3) - Segmentbreite haengt vom Viewport ab, daher nach
+  // Render + Resize neu berechnen statt serverseitig zu schaetzen.
+  function fitVerlaufBarText() {
+    document.querySelectorAll(".bar-track > div").forEach(function (seg) {
+      var span = seg.querySelector("span");
+      if (!span) return;
+      span.style.display = "";
+      var size = 11;
+      span.style.fontSize = size + "px";
+      while (span.scrollWidth > seg.clientWidth - 4 && size > 7) {
+        size -= 1;
+        span.style.fontSize = size + "px";
+      }
+      if (span.scrollWidth > seg.clientWidth - 4) {
+        span.style.display = "none";
+      }
+    });
+  }
+  window.addEventListener("load", fitVerlaufBarText);
+  window.addEventListener("resize", fitVerlaufBarText);
+</script>
+{{end}}
 {{end}}

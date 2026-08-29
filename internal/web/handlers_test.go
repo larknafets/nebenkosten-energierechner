@@ -87,6 +87,83 @@ func TestKategorien(t *testing.T) {
 	})
 }
 
+func TestGermanPeriodLabelShort(t *testing.T) {
+	cases := []struct {
+		readingDate string
+		want        string
+	}{
+		{"2026-11-15", "Nov 2026"},
+		{"2026-03-01", "Mär 2026"},
+		{"not-a-date", "not-a-date"},
+	}
+	for _, c := range cases {
+		if got := germanPeriodLabelShort(c.readingDate); got != c.want {
+			t.Errorf("germanPeriodLabelShort(%q) = %q, want %q", c.readingDate, got, c.want)
+		}
+	}
+}
+
+func TestVerlaufMonate(t *testing.T) {
+	// Neueste Periode (index 0) hat den kleineren Gesamtbetrag - eine
+	// aeltere, teurere Periode muss ueber 100% hinauslaufen (Ticket #19:
+	// Skala ist relativ zum neuesten Monat, nicht gestaucht).
+	neu := kosten{
+		Strom:   &calc.StromErgebnis{KostenW2: 20},
+		Wasser:  &calc.WasserErgebnis{KostenFrischwasserW2: 5, KostenAbwasserW2: 5},
+		Heizung: &calc.HeizungErgebnis{KostenHeizungW2: 10},
+	}
+	alt := kosten{
+		Strom:   &calc.StromErgebnis{KostenW2: 40},
+		Wasser:  &calc.WasserErgebnis{KostenFrischwasserW2: 10, KostenAbwasserW2: 10},
+		Heizung: &calc.HeizungErgebnis{KostenHeizungW2: 20},
+	}
+	periods := []periodKosten{
+		{Label: "Nov 2026", K: neu},
+		{Label: "Okt 2026", K: alt},
+	}
+
+	monate := verlaufMonate(2, periods)
+	if len(monate) != 2 {
+		t.Fatalf("want 2 Monate, got %d", len(monate))
+	}
+	if !monate[0].IsCurrent || monate[1].IsCurrent {
+		t.Errorf("nur der erste (neueste) Monat soll IsCurrent sein, got %+v / %+v", monate[0], monate[1])
+	}
+	if monate[0].Gesamtbetrag != 40 {
+		t.Errorf("neuester Gesamtbetrag = %v, want 40", monate[0].Gesamtbetrag)
+	}
+	if monate[1].Gesamtbetrag != 80 {
+		t.Errorf("aelterer Gesamtbetrag = %v, want 80", monate[1].Gesamtbetrag)
+	}
+
+	// Skala = neuester Gesamtbetrag (40). Der aeltere Monat kostet doppelt
+	// so viel -> jedes Segment soll auf 200% seines eigenen Kosten-Anteils
+	// an 40 EUR kommen, nicht auf 100% gestaucht werden.
+	var altSum float64
+	for _, seg := range monate[1].Segmente {
+		altSum += seg.ProzentNeuestesGesamt
+	}
+	if altSum < 199 || altSum > 201 {
+		t.Errorf("Summe der Prozentanteile des aelteren Monats = %v, want ~200 (laeuft ueber den Rand)", altSum)
+	}
+
+	t.Run("leere Periodenliste", func(t *testing.T) {
+		if got := verlaufMonate(2, nil); got != nil {
+			t.Errorf("want nil for empty input, got %+v", got)
+		}
+	})
+
+	t.Run("neuester Gesamtbetrag 0 erzeugt kein NaN", func(t *testing.T) {
+		zero := kosten{Strom: &calc.StromErgebnis{}, Wasser: &calc.WasserErgebnis{}, Heizung: &calc.HeizungErgebnis{}}
+		monate := verlaufMonate(2, []periodKosten{{Label: "Nov 2026", K: zero}})
+		for _, seg := range monate[0].Segmente {
+			if seg.ProzentNeuestesGesamt != 0 {
+				t.Errorf("ProzentNeuestesGesamt = %v, want 0", seg.ProzentNeuestesGesamt)
+			}
+		}
+	})
+}
+
 func TestGermanPeriodLabel(t *testing.T) {
 	cases := []struct {
 		readingDate string

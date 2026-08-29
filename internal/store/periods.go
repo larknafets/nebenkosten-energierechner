@@ -173,6 +173,32 @@ func RecentPeriodReadings(db *sql.DB, limit int) ([]PeriodReadings, error) {
 	return out, nil
 }
 
+// PeriodSummary identifies one period without its readings, for views that
+// only need to iterate periods (e.g. the Dashboard Verlauf, Ticket #19).
+type PeriodSummary struct {
+	ID          int64
+	ReadingDate string
+}
+
+// AllPeriods returns every period (newest first), without readings.
+func AllPeriods(db *sql.DB) ([]PeriodSummary, error) {
+	rows, err := db.Query(`SELECT id, reading_date FROM periods ORDER BY reading_date DESC, id DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("query periods: %w", err)
+	}
+	defer rows.Close()
+
+	var out []PeriodSummary
+	for rows.Next() {
+		var p PeriodSummary
+		if err := rows.Scan(&p.ID, &p.ReadingDate); err != nil {
+			return nil, fmt.Errorf("scan period: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 // GetLatestPeriod returns the most recently dated period, or nil if none
 // exist yet.
 func GetLatestPeriod(db *sql.DB) (*LatestPeriod, error) {

@@ -55,6 +55,22 @@ func germanPeriodLabel(readingDate string) string {
 	return fmt.Sprintf("%s %d", germanMonths[t.Month()-1], t.Year())
 }
 
+var germanMonthsShort = [...]string{
+	"Jan", "Feb", "Mär", "Apr", "Mai", "Jun",
+	"Jul", "Aug", "Sep", "Okt", "Nov", "Dez",
+}
+
+// germanPeriodLabelShort is germanPeriodLabel's abbreviated form (e.g. "Nov
+// 2026"), for the Verlauf month labels (Ticket #19) where every row needs
+// to fit next to a bar.
+func germanPeriodLabelShort(readingDate string) string {
+	t, err := time.Parse("2006-01-02", readingDate)
+	if err != nil {
+		return readingDate
+	}
+	return fmt.Sprintf("%s %d", germanMonthsShort[t.Month()-1], t.Year())
+}
+
 var meterDisplays = []meterDisplay{
 	{"strom_gesamt", "Strom Gesamt (Netzbezug)", "kWh"},
 	{"strom_wohnung2", "Strom Wohnung 2", "kWh"},
@@ -371,6 +387,75 @@ func kategorien(apartmentID int64, k kosten) []kategorie {
 	return list
 }
 
+// periodKosten is one period's already-computed kosten, labelled for the
+// Verlauf view (Ticket #19).
+type periodKosten struct {
+	Label string
+	K     kosten
+}
+
+// verlaufSegment is one Verlauf bar's Strom/Heizung/Wasser slice, scaled
+// against the newest period's Gesamtbetrag rather than its own (see
+// verlaufMonate).
+type verlaufSegment struct {
+	Farbe                 string
+	Kosten                float64
+	ProzentNeuestesGesamt float64
+}
+
+// verlaufMonat is one row of the Verlauf bar-per-month view.
+type verlaufMonat struct {
+	Label        string
+	IsCurrent    bool
+	Gesamtbetrag float64
+	Segmente     []verlaufSegment
+}
+
+// verlaufColumn is one apartment's Verlauf column: its Monate, newest first.
+type verlaufColumn struct {
+	ApartmentName string
+	Monate        []verlaufMonat
+}
+
+// verlaufMonate builds the given apartment's Verlauf rows, newest first
+// (periodenKosten is assumed already in that order - its first entry is
+// "current"). Every bar is scaled against the *newest* period's
+// Gesamtbetrag, not its own: an older, more expensive month's segments then
+// add up past 100% instead of the scale compressing to fit it (Ticket #19 -
+// the newest month is the reference to measure/save against).
+func verlaufMonate(apartmentID int64, periodenKosten []periodKosten) []verlaufMonat {
+	if len(periodenKosten) == 0 {
+		return nil
+	}
+
+	var neuestesGesamt float64
+	for _, kat := range kategorien(apartmentID, periodenKosten[0].K) {
+		neuestesGesamt += kat.Kosten
+	}
+
+	out := make([]verlaufMonat, 0, len(periodenKosten))
+	for i, pk := range periodenKosten {
+		kats := kategorien(apartmentID, pk.K)
+		segmente := make([]verlaufSegment, 0, len(kats))
+		var gesamtbetrag float64
+		for _, kat := range kats {
+			gesamtbetrag += kat.Kosten
+			var pct float64
+			if neuestesGesamt > 0 {
+				pct = kat.Kosten / neuestesGesamt * 100
+			}
+			segmente = append(segmente, verlaufSegment{Farbe: kat.Farbe, Kosten: kat.Kosten, ProzentNeuestesGesamt: pct})
+		}
+		out = append(out, verlaufMonat{
+			Label:        pk.Label,
+			IsCurrent:    i == 0,
+			Gesamtbetrag: calc.Round2(gesamtbetrag),
+			Segmente:     segmente,
+		})
+	}
+	return out
+}
+
 func handleDashboard(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		period, err := store.GetLatestPeriod(db)
@@ -416,16 +501,51 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 			}
 		}
 
+		allPeriods, err := store.AllPeriods(db)
+		if err != nil {
+			http.Error(w, "all periods: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Verlauf (Ticket #19) walks newest -> oldest and stops at the first
+		// period without a Vorperiode - that's always the very first period
+		// ever recorded (every later one has an earlier neighbour to diff
+		// against), so it's the natural end of the available history.
+		var periodenKosten []periodKosten
+		for _, p := range allPeriods {
+			pk, err := berechneKosten(db, p.ID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if pk.KostenNote != "" {
+				break
+			}
+			periodenKosten = append(periodenKosten, periodKosten{Label: germanPeriodLabelShort(p.ReadingDate), K: pk})
+		}
+
+		var verlaufSpalten []verlaufColumn
+		for _, a := range apartments {
+			verlaufSpalten = append(verlaufSpalten, verlaufColumn{
+				ApartmentName: a.Name,
+				Monate:        verlaufMonate(a.ID, periodenKosten),
+			})
+		}
+
 		data := struct {
-			Period      *store.LatestPeriod
-			PeriodLabel string
-			Cards       []dashboardCard
-			KostenNote  string
+			Period         *store.LatestPeriod
+			PeriodLabel    string
+			Cards          []dashboardCard
+			KostenNote     string
+			HasVerlauf     bool
+			VerlaufSpalten []verlaufColumn
 		}{
-			Period:      period,
-			PeriodLabel: periodLabel,
-			Cards:       cards,
-			KostenNote:  kostenNote,
+			Period:         period,
+			PeriodLabel:    periodLabel,
+			Cards:          cards,
+			KostenNote:     kostenNote,
+			HasVerlauf:     len(periodenKosten) > 0,
+			VerlaufSpalten: verlaufSpalten,
 		}
 
 		if err := dashboardTemplate.ExecuteTemplate(w, "layout", data); err != nil {

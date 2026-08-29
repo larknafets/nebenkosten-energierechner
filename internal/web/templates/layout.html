@@ -38,16 +38,34 @@
   .stat-card .stat-value { font-size: 1.5rem; font-weight: 700; margin-top: .3rem; }
   .stat-bar-track { display: flex; height: .5rem; border-radius: 999px; overflow: hidden; background: var(--border); margin-top: .5rem; }
   .stat-bar-seg { height: 100%; }
-  .stat-bar-seg.cat-strom { background: var(--cat-strom); }
-  .stat-bar-seg.cat-heizung { background: var(--cat-heizung); }
-  .stat-bar-seg.cat-wasser { background: var(--cat-wasser); }
+  .cat-strom { background: var(--cat-strom); }
+  .cat-heizung { background: var(--cat-heizung); }
+  .cat-wasser { background: var(--cat-wasser); }
   .stat-kategorien { margin-top: .4rem; white-space: normal; overflow-wrap: break-word; }
+
+  .verlauf-legend { display: flex; gap: 1.25rem; font-size: .75rem; color: var(--muted); margin-bottom: .9rem; flex-wrap: wrap; }
+  .verlauf-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .35rem; vertical-align: middle; }
+  .verlauf-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .verlauf-col h4 { font-size: .8rem; color: var(--muted); margin: 0 0 .5rem; }
+  .verlauf-row { display: flex; align-items: center; gap: .5rem; padding: .3rem 0; }
+  .verlauf-row.is-current .month-label { font-weight: 700; color: var(--text); }
+  .month-label { width: 60px; font-size: .72rem; color: var(--muted); flex-shrink: 0; }
+  .value-label { width: 60px; text-align: right; font-size: .78rem; font-weight: 600; flex-shrink: 0; }
+  .bar-track { flex: 1; min-width: 0; height: 20px; border-radius: 4px; background: var(--border); display: flex; overflow: hidden; }
+  .bar-track > div { height: 100%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .bar-track > div span { color: #fff; font-size: .68rem; font-weight: 600; white-space: nowrap; padding: 0 .2rem; text-shadow: 0 1px 1px rgba(0,0,0,.25); }
+  .verlauf-row.is-current .bar-track { box-shadow: 0 0 0 2px var(--accent); }
 
   @media (max-width: 480px) {
     .app { padding: 1rem 1rem 3rem; }
     .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
     .c-steps { flex-wrap: wrap; }
     .c-step-dot { flex: 1 1 45%; font-size: .75rem; }
+    .verlauf-wrap { grid-template-columns: 1fr; }
+    .verlauf-row { flex-wrap: wrap; row-gap: .2rem; }
+    .month-label { order: 1; }
+    .value-label { order: 2; margin-left: auto; }
+    .bar-track { order: 3; flex-basis: 100%; }
   }
 </style>
 </head>
