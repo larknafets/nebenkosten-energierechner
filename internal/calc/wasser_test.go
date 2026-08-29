@@ -62,7 +62,7 @@ func TestWasser_PersonenanteilUndKosten(t *testing.T) {
 	}
 }
 
-func TestWasser_KeinePersonen_KeineDivisionDurchNull(t *testing.T) {
+func TestWasser_KeinePersonen_FaelltAufHaelftigeVerteilungZurueck(t *testing.T) {
 	db := openTestDB(t)
 	mustCreatePeriod(t, db, "2026-10-01", 0.22, baseReadings(nil))
 
@@ -87,8 +87,13 @@ func TestWasser_KeinePersonen_KeineDivisionDurchNull(t *testing.T) {
 	if err != nil {
 		t.Fatalf("calc.Wasser: %v", err)
 	}
-	if got.WWAnteilW1 != 0 || got.WWAnteilW2 != 0 {
-		t.Errorf("bei 0 Personen sollte WWAnteil 0 sein statt NaN, got W1=%v W2=%v", got.WWAnteilW1, got.WWAnteilW2)
+	// Issue #26: bei 0 Personen (leere Felder, Leerstand) darf der
+	// Warmwasseraufbereitung-Anteil nicht auf 0/0 fallen - das würde das
+	// komplette WW-Volumen (und dessen Kosten) stillschweigend aus beiden
+	// Abrechnungen verschwinden lassen. Fallback ist eine hälftige
+	// Verteilung statt NaN oder Kostenverlust.
+	if got.WWAnteilW1 != 10 || got.WWAnteilW2 != 10 {
+		t.Errorf("bei 0 Personen sollte WWAnteil hälftig verteilt werden (10/10 von 20m³), got W1=%v W2=%v", got.WWAnteilW1, got.WWAnteilW2)
 	}
 }
 

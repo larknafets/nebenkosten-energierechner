@@ -58,11 +58,7 @@ func Heizung(db *sql.DB, periodID int64) (*HeizungErgebnis, error) {
 	waermeW1 := verbrauch["waerme_wohnung1"]
 	waermeW2 := verbrauch["waerme_wohnung2"]
 
-	var ratioWaermeW1, ratioWaermeW2 float64
-	if total := waermeW1 + waermeW2; total > 0 {
-		ratioWaermeW1 = waermeW1 / total
-		ratioWaermeW2 = waermeW2 / total
-	}
+	ratioWaermeW1, ratioWaermeW2 := Ratio2(waermeW1, waermeW2)
 
 	var ratioFlaecheW1, ratioFlaecheW2 float64
 	if total := qmW1 + qmW2; total > 0 {

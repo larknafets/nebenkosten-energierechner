@@ -1,6 +1,7 @@
 package calc_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/larknafets/nebenkosten-energierechner/internal/calc"
@@ -53,7 +54,7 @@ func TestHeizung_70_30_Verteilung(t *testing.T) {
 	}
 }
 
-func TestHeizung_KeinWaermeVerbrauch_KeineDivisionDurchNull(t *testing.T) {
+func TestHeizung_KeinWaermeVerbrauch_FaelltAufHaelftigeVerteilungZurueck(t *testing.T) {
 	db := openTestDB(t)
 	mustCreatePeriod(t, db, "2026-10-01", 0.22, baseReadings(nil))
 
@@ -77,8 +78,16 @@ func TestHeizung_KeinWaermeVerbrauch_KeineDivisionDurchNull(t *testing.T) {
 	if err != nil {
 		t.Fatalf("calc.Heizung: %v", err)
 	}
-	if got.RatioWaermeW1 != 0 || got.RatioWaermeW2 != 0 {
-		t.Errorf("bei 0 Wärmeverbrauch sollte RatioWaerme 0 sein statt NaN, got W1=%v W2=%v", got.RatioWaermeW1, got.RatioWaermeW2)
+	// Issue #26: bei 0 Wärmeverbrauch (z.B. Sommer, Wärmepumpe lief nur für
+	// Warmwasser) darf der 70%-Wärmeanteil nicht auf 0/0 fallen - das würde
+	// 70% der Wärmepumpen-Stromkosten stillschweigend aus beiden
+	// Abrechnungen verschwinden lassen. Fallback ist eine hälftige
+	// Verteilung statt NaN oder Kostenverlust.
+	if got.RatioWaermeW1 != 0.5 || got.RatioWaermeW2 != 0.5 {
+		t.Errorf("bei 0 Wärmeverbrauch sollte RatioWaerme 0.5/0.5 sein, got W1=%v W2=%v", got.RatioWaermeW1, got.RatioWaermeW2)
+	}
+	if sum := got.KostenHeizungW1 + got.KostenHeizungW2; math.Abs(sum-got.TotalHeizungskostenUnrounded) > 0.02 {
+		t.Errorf("Summe der Heizungskosten = %v, want ~%v (voller WP-Kostenanteil muss verteilt werden, nicht verschwinden)", sum, got.TotalHeizungskostenUnrounded)
 	}
 }
 

@@ -52,11 +52,9 @@ func Wasser(db *sql.DB, periodID int64) (*WasserErgebnis, error) {
 	p1, p2 := personen[1], personen[2]
 
 	wwGesamt := verbrauch["wasser_warmwasseraufbereitung"]
-	var wwAnteilW1, wwAnteilW2 float64
-	if total := p1 + p2; total > 0 {
-		wwAnteilW1 = wwGesamt * float64(p1) / float64(total)
-		wwAnteilW2 = wwGesamt * float64(p2) / float64(total)
-	}
+	ratioP1, ratioP2 := Ratio2(float64(p1), float64(p2))
+	wwAnteilW1 := wwGesamt * ratioP1
+	wwAnteilW2 := wwGesamt * ratioP2
 
 	frischwasserW2 := verbrauch["wasser_wohnung2"] + wwAnteilW2
 	frischwasserW1 := (verbrauch["wasser_gesamt"] - verbrauch["wasser_wohnung2"] - wwGesamt) + wwAnteilW1
