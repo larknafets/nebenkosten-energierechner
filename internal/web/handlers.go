@@ -29,6 +29,8 @@ var (
 	wizardTemplate    = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/wizard.html"))
 	letzteTemplate    = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/letzte.html"))
 	dashboardTemplate = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/dashboard.html"))
+
+	berechnungslogikTemplate = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/berechnungslogik.html"))
 )
 
 // meterDisplay describes how one meter's reading is labelled on the
@@ -92,6 +94,7 @@ func NewMux(db *sql.DB) *http.ServeMux {
 	mux.HandleFunc("POST /ablesungen", handleCreateAblesung(db))
 	mux.HandleFunc("GET /ablesungen/letzte", handleLetzteAblesung(db))
 	mux.HandleFunc("GET /dashboard", handleDashboard(db))
+	mux.HandleFunc("GET /berechnungslogik", handleBerechnungslogik())
 	return mux
 }
 
@@ -667,6 +670,18 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 		}
 
 		if err := dashboardTemplate.ExecuteTemplate(w, "layout", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+// handleBerechnungslogik serves a static, informational explanation of the
+// cost formulas (Ticket #33) - no DB access, the content never depends on
+// any period's data.
+func handleBerechnungslogik() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data := struct{ Base string }{Base: requestBase(r)}
+		if err := berechnungslogikTemplate.ExecuteTemplate(w, "layout", data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}

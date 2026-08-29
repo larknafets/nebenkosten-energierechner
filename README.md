@@ -58,9 +58,9 @@ Kosten_WP_gesamt      = WP_Anteil_kWh * Strompreis   (Basis für Heizungskosten,
 
 Bei PV-Überschuss (`Netzbezug_Gesamt = 0`) sind beide Kosten 0. Alle Anteile über `min()` gedeckelt, nie negativ.
 
-### Heizung/Warmwasser (70/30-Split)
+### Heizung/Warmwasser (konfigurierbarer Split, Default 70/30)
 
-Die Wärmepumpen-Stromkosten (siehe oben) werden zu 70% nach Wärmemengenzähler-Verhältnis und zu 30% nach Wohnflächen-Verhältnis auf die beiden Wohnungen verteilt.
+Die Wärmepumpen-Stromkosten (siehe oben) werden nach Wärmemengenzähler-Verhältnis und Wohnflächen-Verhältnis auf die beiden Wohnungen verteilt. Die Gewichtung wird pro Periode im Wizard gewählt (70/30, 60/40 oder 50/50 - kein Freitext, siehe Issue #27) und ab dann für diese Periode eingefroren.
 
 ```
 Ratio_Waerme_W1  = Verbrauch(waerme_wohnung1) / (Verbrauch(waerme_wohnung1) + Verbrauch(waerme_wohnung2))
@@ -68,8 +68,8 @@ Ratio_Waerme_W2  = Verbrauch(waerme_wohnung2) / (Verbrauch(waerme_wohnung1) + Ve
 Ratio_Flaeche_W1 = qm_W1 / (qm_W1 + qm_W2)
 Ratio_Flaeche_W2 = qm_W2 / (qm_W1 + qm_W2)
 
-Kosten_Heizung_W1 = Kosten_WP_gesamt * (0.7 * Ratio_Waerme_W1 + 0.3 * Ratio_Flaeche_W1)
-Kosten_Heizung_W2 = Kosten_WP_gesamt * (0.7 * Ratio_Waerme_W2 + 0.3 * Ratio_Flaeche_W2)
+Kosten_Heizung_W1 = Kosten_WP_gesamt * (Gewichtung_Waerme * Ratio_Waerme_W1 + Gewichtung_Flaeche * Ratio_Flaeche_W1)
+Kosten_Heizung_W2 = Kosten_WP_gesamt * (Gewichtung_Waerme * Ratio_Waerme_W2 + Gewichtung_Flaeche * Ratio_Flaeche_W2)
 ```
 
 ### Wasser (Frischwasser + Abwasser)
