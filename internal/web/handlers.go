@@ -26,11 +26,11 @@ var templateFS embed.FS
 // parsing them together into one shared template set would let the last
 // one silently overwrite the others.
 var (
-	wizardTemplate    = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/wizard.html"))
-	letzteTemplate    = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/letzte.html"))
-	dashboardTemplate = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/dashboard.html"))
+	wizardTemplate    = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/wizard.html"))
+	letzteTemplate    = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/letzte.html"))
+	dashboardTemplate = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/dashboard.html"))
 
-	berechnungslogikTemplate = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/berechnungslogik.html"))
+	berechnungslogikTemplate = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/berechnungslogik.html"))
 )
 
 // meterDisplay describes how one meter's reading is labelled on the
@@ -74,6 +74,31 @@ func germanPeriodLabelShort(readingDate string) string {
 	return fmt.Sprintf("%s %d", germanMonthsShort[t.Month()-1], t.Year())
 }
 
+// formatDecimalDE renders a float64 the way germanPeriodLabel renders a
+// date: German convention, decimal comma instead of point (Ticket #36).
+// Precision isn't forced to a fixed number of places - 'f'/-1 keeps
+// whatever precision the value already carries (e.g. "0,7", not "0,70"),
+// matching the un-localized {{.Field}} output it replaces.
+func formatDecimalDE(x float64) string {
+	return strings.ReplaceAll(strconv.FormatFloat(x, 'f', -1, 64), ".", ",")
+}
+
+// formatDatumDE renders a period's ReadingDate ("YYYY-MM-DD") in the German
+// DD.MM.YYYY form (Ticket #36). Falls back to the raw string if it isn't a
+// parseable date, same convention as germanPeriodLabel.
+func formatDatumDE(readingDate string) string {
+	t, err := time.Parse("2006-01-02", readingDate)
+	if err != nil {
+		return readingDate
+	}
+	return t.Format("02.01.2006")
+}
+
+var templateFuncs = template.FuncMap{
+	"de":      formatDecimalDE,
+	"deDatum": formatDatumDE,
+}
+
 var meterDisplays = []meterDisplay{
 	{"strom_gesamt", "Strom Gesamt (Netzbezug)", "kWh"},
 	{"strom_wohnung2", "Strom Wohnung 2", "kWh"},
@@ -93,6 +118,8 @@ func NewMux(db *sql.DB) *http.ServeMux {
 	mux.HandleFunc("GET /ablesungen/neu", handleWizardForm(db))
 	mux.HandleFunc("POST /ablesungen", handleCreateAblesung(db))
 	mux.HandleFunc("GET /ablesungen/letzte", handleLetzteAblesung(db))
+	mux.HandleFunc("GET /ablesungen/letzte/bearbeiten", handleEditWizardForm(db))
+	mux.HandleFunc("POST /ablesungen/{id}", handleUpdateAblesung(db))
 	mux.HandleFunc("GET /dashboard", handleDashboard(db))
 	mux.HandleFunc("GET /berechnungslogik", handleBerechnungslogik())
 	return mux
@@ -116,6 +143,64 @@ func handleIndex(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, requestBase(r)+"/ablesungen/letzte", http.StatusFound)
 	}
+}
+
+// wizardData is the Ablesung form's template data - shared by "erfassen"
+// (a fresh Ablesung, prefilled from the previous period as a convenience)
+// and "korrigieren" (Ticket #34: editing the latest Ablesung in place,
+// prefilled with its own current values). HasPrevious/PreviousReadings/
+// PreviousReadingDate/OutlierAvg always describe the genuine previous
+// period - the negative-Verbrauch/Ausreißer-Warnung baseline the new
+// values are checked against - never the Ablesung being edited itself.
+type wizardData struct {
+	Base                string
+	FormAction          string
+	IsEdit              bool
+	ReadingDate         string
+	Apartments          []store.Apartment
+	HasPrevious         bool
+	PreviousReadings    map[string]float64
+	PreviousReadingDate string
+	HasOutlierBaseline  bool
+	OutlierAvg          map[string]float64
+
+	// EditReadings prefills the meter inputs' value= in edit mode with the
+	// Ablesung's own current Zählerstände - distinct from PreviousReadings
+	// above, which stays the actual previous period for the warning
+	// comparison.
+	EditReadings map[string]float64
+
+	// Prefill for the "Preise & Personen" step (Ticket #28): the previous
+	// period's values in create mode, or (Ticket #34) the Ablesung's own
+	// current values in edit mode - either way just an editable starting
+	// value, not a data-prev warning target like the meter readings above.
+	PreviousStrompreis        float64
+	PreviousFrischwasserPreis float64
+	PreviousAbwasserPreis     float64
+	PreviousPersonen          map[int64]int64
+	// PreviousHeizungGewichtung always has a valid value (defaulting to
+	// 0.7, Ticket #27's default) since the radio group needs exactly one
+	// option checked - unlike the blank-when-absent price fields above,
+	// this can't just be left empty.
+	PreviousHeizungGewichtung float64
+}
+
+// outlierAvg computes the Ausreißer-Warnung baseline (Ticket #13) from up
+// to 4 recent periods (newest first): the average of the 3 consumption
+// diffs between them. ok is false if fewer than 4 are available.
+func outlierAvg(recent []store.PeriodReadings) (avg map[string]float64, ok bool) {
+	if len(recent) < 4 {
+		return nil, false
+	}
+	avg = make(map[string]float64, len(store.MeterKeys))
+	for _, key := range store.MeterKeys {
+		sum := 0.0
+		for i := 0; i < 3; i++ {
+			sum += recent[i].Readings[key] - recent[i+1].Readings[key]
+		}
+		avg[key] = sum / 3
+	}
+	return avg, true
 }
 
 func handleWizardForm(db *sql.DB) http.HandlerFunc {
@@ -142,31 +227,9 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		data := struct {
-			Base                string
-			ReadingDate         string
-			Apartments          []store.Apartment
-			HasPrevious         bool
-			PreviousReadings    map[string]float64
-			PreviousReadingDate string
-			HasOutlierBaseline  bool
-			OutlierAvg          map[string]float64
-
-			// Prefill for the "Preise & Personen" step (Ticket #28) - not a
-			// data-prev warning target like the meter readings above, just an
-			// editable starting value, so these are absent (zero-value/nil)
-			// rather than warned-about when there's no previous period.
-			PreviousStrompreis        float64
-			PreviousFrischwasserPreis float64
-			PreviousAbwasserPreis     float64
-			PreviousPersonen          map[int64]int64
-			// PreviousHeizungGewichtung always has a valid value (defaulting
-			// to 0.7, Ticket #27's default) since the radio group needs
-			// exactly one option checked - unlike the blank-when-absent price
-			// fields above, this can't just be left empty.
-			PreviousHeizungGewichtung float64
-		}{
+		data := wizardData{
 			Base:                      requestBase(r),
+			FormAction:                requestBase(r) + "/ablesungen",
 			ReadingDate:               time.Now().Format("2006-01-02"),
 			Apartments:                apartments,
 			PreviousHeizungGewichtung: 0.7,
@@ -183,18 +246,68 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			data.PreviousPersonen = previousPeriod.PersonenByApartment
 			data.PreviousHeizungGewichtung = previousPeriod.HeizungWaermeGewichtung
 		}
-		if len(recent) >= 4 {
-			avg := make(map[string]float64, len(store.MeterKeys))
-			for _, key := range store.MeterKeys {
-				sum := 0.0
-				for i := 0; i < 3; i++ {
-					sum += recent[i].Readings[key] - recent[i+1].Readings[key]
-				}
-				avg[key] = sum / 3
-			}
-			data.HasOutlierBaseline = true
-			data.OutlierAvg = avg
+		data.OutlierAvg, data.HasOutlierBaseline = outlierAvg(recent)
+
+		if err := wizardTemplate.ExecuteTemplate(w, "layout", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	}
+}
+
+// handleEditWizardForm serves the "korrigieren" form for the latest
+// Ablesung (Ticket #34), prefilled with its own current values. The
+// negative-Verbrauch/Ausreißer-Warnung baseline still compares against the
+// genuine previous period (the one before the Ablesung being edited), so
+// it's excluded from the "recent" periods used to build that baseline.
+func handleEditWizardForm(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		apartments, err := store.Apartments(db)
+		if err != nil {
+			http.Error(w, "apartments: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		latest, err := store.GetLatestPeriod(db)
+		if err != nil {
+			http.Error(w, "latest period: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if latest == nil {
+			http.Error(w, "keine Ablesung zum Korrigieren vorhanden", http.StatusNotFound)
+			return
+		}
+
+		// +1 to also fetch the Ablesung being edited, so it can be dropped
+		// below - the baseline needs the periods *before* it, same count
+		// as handleWizardForm's create-mode baseline.
+		recent, err := store.RecentPeriodReadings(db, 5)
+		if err != nil {
+			http.Error(w, "recent periods: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if len(recent) > 0 && recent[0].ID == latest.ID {
+			recent = recent[1:]
+		}
+
+		data := wizardData{
+			Base:                      requestBase(r),
+			FormAction:                fmt.Sprintf("%s/ablesungen/%d", requestBase(r), latest.ID),
+			IsEdit:                    true,
+			ReadingDate:               latest.ReadingDate,
+			Apartments:                apartments,
+			EditReadings:              latest.Readings,
+			PreviousStrompreis:        latest.Strompreis,
+			PreviousFrischwasserPreis: latest.FrischwasserPreis,
+			PreviousAbwasserPreis:     latest.AbwasserPreis,
+			PreviousPersonen:          latest.PersonenByApartment,
+			PreviousHeizungGewichtung: latest.HeizungWaermeGewichtung,
+		}
+		if len(recent) > 0 {
+			data.HasPrevious = true
+			data.PreviousReadings = recent[0].Readings
+			data.PreviousReadingDate = recent[0].ReadingDate
+		}
+		data.OutlierAvg, data.HasOutlierBaseline = outlierAvg(recent)
 
 		if err := wizardTemplate.ExecuteTemplate(w, "layout", data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -217,6 +330,60 @@ func parseHeizungGewichtung(raw string) (float64, error) {
 	return v, nil
 }
 
+// parsePeriodInput parses an Ablesung form (shared by handleCreateAblesung
+// and handleUpdateAblesung - Ticket #34, same fields either way, only what
+// happens with the result differs).
+func parsePeriodInput(r *http.Request, apartments []store.Apartment) (store.PeriodInput, error) {
+	readings := make(map[string]float64, len(store.MeterKeys))
+	for _, key := range store.MeterKeys {
+		v, err := strconv.ParseFloat(r.FormValue(key), 64)
+		if err != nil {
+			return store.PeriodInput{}, fmt.Errorf("invalid value for %s", key)
+		}
+		readings[key] = v
+	}
+
+	strompreis, err1 := strconv.ParseFloat(r.FormValue("strompreis"), 64)
+	frischwasserPreis, err2 := strconv.ParseFloat(r.FormValue("frischwasser_preis"), 64)
+	abwasserPreis, err3 := strconv.ParseFloat(r.FormValue("abwasser_preis"), 64)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return store.PeriodInput{}, fmt.Errorf("invalid price value")
+	}
+
+	heizungGewichtung, err := parseHeizungGewichtung(r.FormValue("heizung_gewichtung"))
+	if err != nil {
+		return store.PeriodInput{}, err
+	}
+
+	personen := make(map[int64]int64, len(apartments))
+	qm := make(map[int64]float64, len(apartments))
+	for _, a := range apartments {
+		idStr := strconv.FormatInt(a.ID, 10)
+		p, err := strconv.ParseInt(r.FormValue("personen_"+idStr), 10, 64)
+		if err != nil {
+			return store.PeriodInput{}, fmt.Errorf("invalid Personenzahl for apartment %s", idStr)
+		}
+		personen[a.ID] = p
+
+		q, err := strconv.ParseFloat(r.FormValue("qm_"+idStr), 64)
+		if err != nil {
+			return store.PeriodInput{}, fmt.Errorf("invalid Wohnfläche for apartment %s", idStr)
+		}
+		qm[a.ID] = q
+	}
+
+	return store.PeriodInput{
+		ReadingDate:             r.FormValue("reading_date"),
+		Strompreis:              strompreis,
+		FrischwasserPreis:       frischwasserPreis,
+		AbwasserPreis:           abwasserPreis,
+		HeizungWaermeGewichtung: heizungGewichtung,
+		Readings:                readings,
+		Personen:                personen,
+		QM:                      qm,
+	}, nil
+}
+
 func handleCreateAblesung(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
@@ -230,60 +397,62 @@ func handleCreateAblesung(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		readings := make(map[string]float64, len(store.MeterKeys))
-		for _, key := range store.MeterKeys {
-			v, err := strconv.ParseFloat(r.FormValue(key), 64)
-			if err != nil {
-				http.Error(w, "invalid value for "+key, http.StatusBadRequest)
-				return
-			}
-			readings[key] = v
-		}
-
-		strompreis, err1 := strconv.ParseFloat(r.FormValue("strompreis"), 64)
-		frischwasserPreis, err2 := strconv.ParseFloat(r.FormValue("frischwasser_preis"), 64)
-		abwasserPreis, err3 := strconv.ParseFloat(r.FormValue("abwasser_preis"), 64)
-		if err1 != nil || err2 != nil || err3 != nil {
-			http.Error(w, "invalid price value", http.StatusBadRequest)
-			return
-		}
-
-		heizungGewichtung, err := parseHeizungGewichtung(r.FormValue("heizung_gewichtung"))
+		in, err := parsePeriodInput(r, apartments)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		personen := make(map[int64]int64, len(apartments))
-		qm := make(map[int64]float64, len(apartments))
-		for _, a := range apartments {
-			idStr := strconv.FormatInt(a.ID, 10)
-			p, err := strconv.ParseInt(r.FormValue("personen_"+idStr), 10, 64)
-			if err != nil {
-				http.Error(w, "invalid Personenzahl for apartment "+idStr, http.StatusBadRequest)
-				return
-			}
-			personen[a.ID] = p
-
-			q, err := strconv.ParseFloat(r.FormValue("qm_"+idStr), 64)
-			if err != nil {
-				http.Error(w, "invalid Wohnfläche for apartment "+idStr, http.StatusBadRequest)
-				return
-			}
-			qm[a.ID] = q
+		if _, err := store.CreatePeriod(db, in); err != nil {
+			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 
-		_, err = store.CreatePeriod(db, store.PeriodInput{
-			ReadingDate:             r.FormValue("reading_date"),
-			Strompreis:              strompreis,
-			FrischwasserPreis:       frischwasserPreis,
-			AbwasserPreis:           abwasserPreis,
-			HeizungWaermeGewichtung: heizungGewichtung,
-			Readings:                readings,
-			Personen:                personen,
-			QM:                      qm,
-		})
+		http.Redirect(w, r, requestBase(r)+"/ablesungen/letzte", http.StatusFound)
+	}
+}
+
+// handleUpdateAblesung corrects the latest Ablesung in place (Ticket #34).
+// Only the latest period is ever editable - the guard against the id in
+// the URL having fallen behind (a newer Ablesung was created since the
+// edit form was loaded) keeps a stale edit from silently rewriting the
+// wrong period.
+func handleUpdateAblesung(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		periodID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
+			http.Error(w, "invalid period id", http.StatusBadRequest)
+			return
+		}
+
+		latest, err := store.GetLatestPeriod(db)
+		if err != nil {
+			http.Error(w, "latest period: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if latest == nil || latest.ID != periodID {
+			http.Error(w, "nur die letzte Ablesung kann korrigiert werden", http.StatusConflict)
+			return
+		}
+
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid form: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		apartments, err := store.Apartments(db)
+		if err != nil {
+			http.Error(w, "apartments: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		in, err := parsePeriodInput(r, apartments)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if err := store.UpdatePeriod(db, periodID, in); err != nil {
 			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 			return
 		}

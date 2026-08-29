@@ -6,14 +6,14 @@
 <p class="muted">Noch keine Ablesung erfasst. <a href="{{.Base}}/ablesungen/neu">Jetzt erfassen</a>.</p>
 {{else}}
 <div class="panel">
-  <p><strong>Ablesedatum:</strong> {{.Period.ReadingDate}}</p>
-  <p><strong>Preise:</strong> Strom {{.Period.Strompreis}} EUR/kWh · Frischwasser {{.Period.FrischwasserPreis}} EUR/m³ · Abwasser {{.Period.AbwasserPreis}} EUR/m³</p>
+  <p><strong>Ablesedatum:</strong> {{deDatum .Period.ReadingDate}}</p>
+  <p><strong>Preise:</strong> Strom {{de .Period.Strompreis}} EUR/kWh · Frischwasser {{de .Period.FrischwasserPreis}} EUR/m³ · Abwasser {{de .Period.AbwasserPreis}} EUR/m³</p>
 
   <table class="letzte">
     <thead><tr><th>Zähler</th><th>Stand</th></tr></thead>
     <tbody>
       {{range .Meters}}
-      <tr><td>{{.Label}}</td><td>{{.Value}} {{.Unit}}</td></tr>
+      <tr><td>{{.Label}}</td><td>{{de .Value}} {{.Unit}}</td></tr>
       {{end}}
     </tbody>
   </table>
@@ -22,7 +22,7 @@
     <thead><tr><th>Wohnung</th><th>Personen</th><th>Wohnfläche</th></tr></thead>
     <tbody>
       {{range .Apartments}}
-      <tr><td>{{.Name}}</td><td>{{index $.Personen .ID}}</td><td>{{.QM}} m²</td></tr>
+      <tr><td>{{.Name}}</td><td>{{index $.Personen .ID}}</td><td>{{de .QM}} m²</td></tr>
       {{end}}
     </tbody>
   </table>
@@ -33,11 +33,11 @@
   {{else if .Strom}}
   <table class="letzte">
     <tbody>
-      <tr><td>Netzbezug Gesamt</td><td>{{.Strom.NetzbezugGesamtKWh}} kWh</td></tr>
-      <tr><td>Wohnung 2 Anteil</td><td>{{.Strom.W2AnteilKWh}} kWh</td></tr>
-      <tr><td><strong>Kosten Wohnung 2</strong></td><td><strong>{{.Strom.KostenW2}} EUR</strong></td></tr>
-      <tr><td>Wärmepumpe Anteil</td><td>{{.Strom.WPAnteilKWh}} kWh</td></tr>
-      <tr><td>Kosten Wärmepumpe gesamt (Basis Heizungskosten)</td><td>{{.Strom.KostenWPGesamtUnrounded}} EUR</td></tr>
+      <tr><td>Netzbezug Gesamt</td><td>{{de .Strom.NetzbezugGesamtKWh}} kWh</td></tr>
+      <tr><td>Wohnung 2 Anteil</td><td>{{de .Strom.W2AnteilKWh}} kWh</td></tr>
+      <tr><td><strong>Kosten Wohnung 2</strong></td><td><strong>{{de .Strom.KostenW2}} EUR</strong></td></tr>
+      <tr><td>Wärmepumpe Anteil</td><td>{{de .Strom.WPAnteilKWh}} kWh</td></tr>
+      <tr><td>Kosten Wärmepumpe gesamt (Basis Heizungskosten)</td><td>{{de .Strom.KostenWPGesamtUnrounded}} EUR</td></tr>
     </tbody>
   </table>
   {{end}}
@@ -50,11 +50,11 @@
     <thead><tr><th></th><th>Wohnung 1</th><th>Wohnung 2</th></tr></thead>
     <tbody>
       <tr><td>Personen</td><td>{{.Wasser.PersonenW1}}</td><td>{{.Wasser.PersonenW2}}</td></tr>
-      <tr><td>Warmwasseraufbereitung-Anteil</td><td>{{.Wasser.WWAnteilW1}} m³</td><td>{{.Wasser.WWAnteilW2}} m³</td></tr>
-      <tr><td>Frischwasser</td><td>{{.Wasser.FrischwasserW1}} m³</td><td>{{.Wasser.FrischwasserW2}} m³</td></tr>
-      <tr><td>Abwasser</td><td>{{.Wasser.AbwasserW1}} m³</td><td>{{.Wasser.AbwasserW2}} m³</td></tr>
-      <tr><td><strong>Kosten Frischwasser</strong></td><td><strong>{{.Wasser.KostenFrischwasserW1}} EUR</strong></td><td><strong>{{.Wasser.KostenFrischwasserW2}} EUR</strong></td></tr>
-      <tr><td><strong>Kosten Abwasser</strong></td><td><strong>{{.Wasser.KostenAbwasserW1}} EUR</strong></td><td><strong>{{.Wasser.KostenAbwasserW2}} EUR</strong></td></tr>
+      <tr><td>Warmwasseraufbereitung-Anteil</td><td>{{de .Wasser.WWAnteilW1}} m³</td><td>{{de .Wasser.WWAnteilW2}} m³</td></tr>
+      <tr><td>Frischwasser</td><td>{{de .Wasser.FrischwasserW1}} m³</td><td>{{de .Wasser.FrischwasserW2}} m³</td></tr>
+      <tr><td>Abwasser</td><td>{{de .Wasser.AbwasserW1}} m³</td><td>{{de .Wasser.AbwasserW2}} m³</td></tr>
+      <tr><td><strong>Kosten Frischwasser</strong></td><td><strong>{{de .Wasser.KostenFrischwasserW1}} EUR</strong></td><td><strong>{{de .Wasser.KostenFrischwasserW2}} EUR</strong></td></tr>
+      <tr><td><strong>Kosten Abwasser</strong></td><td><strong>{{de .Wasser.KostenAbwasserW1}} EUR</strong></td><td><strong>{{de .Wasser.KostenAbwasserW2}} EUR</strong></td></tr>
     </tbody>
   </table>
   {{end}}
@@ -66,14 +66,14 @@
   <table class="letzte">
     <thead><tr><th></th><th>Wohnung 1</th><th>Wohnung 2</th></tr></thead>
     <tbody>
-      <tr><td>Wärmeverbrauch</td><td>{{.Heizung.WaermeW1MWh}} MWh</td><td>{{.Heizung.WaermeW2MWh}} MWh</td></tr>
-      <tr><td>Wohnfläche</td><td>{{.Heizung.QMW1}} m²</td><td>{{.Heizung.QMW2}} m²</td></tr>
-      <tr><td><strong>Kosten Heizung/Warmwasser</strong></td><td><strong>{{.Heizung.KostenHeizungW1}} EUR</strong></td><td><strong>{{.Heizung.KostenHeizungW2}} EUR</strong></td></tr>
+      <tr><td>Wärmeverbrauch</td><td>{{de .Heizung.WaermeW1MWh}} MWh</td><td>{{de .Heizung.WaermeW2MWh}} MWh</td></tr>
+      <tr><td>Wohnfläche</td><td>{{de .Heizung.QMW1}} m²</td><td>{{de .Heizung.QMW2}} m²</td></tr>
+      <tr><td><strong>Kosten Heizung/Warmwasser</strong></td><td><strong>{{de .Heizung.KostenHeizungW1}} EUR</strong></td><td><strong>{{de .Heizung.KostenHeizungW2}} EUR</strong></td></tr>
     </tbody>
   </table>
   {{end}}
 </div>
 
-<p style="margin-top:1rem"><a href="{{.Base}}/ablesungen/neu">Neue Ablesung erfassen</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></p>
+<p style="margin-top:1rem"><a href="{{.Base}}/ablesungen/neu">Neue Ablesung erfassen</a> · <a href="{{.Base}}/ablesungen/letzte/bearbeiten">Diese Ablesung korrigieren</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></p>
 {{end}}
 {{end}}

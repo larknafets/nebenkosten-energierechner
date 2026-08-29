@@ -276,6 +276,41 @@ func TestIngressBase(t *testing.T) {
 	}
 }
 
+func TestFormatDecimalDE(t *testing.T) {
+	cases := []struct {
+		x    float64
+		want string
+	}{
+		{0.22, "0,22"},
+		{0.7, "0,7"},
+		{200, "200"},
+		{45.5, "45,5"},
+		{-3.14, "-3,14"},
+		{0, "0"},
+	}
+	for _, c := range cases {
+		if got := formatDecimalDE(c.x); got != c.want {
+			t.Errorf("formatDecimalDE(%v) = %q, want %q", c.x, got, c.want)
+		}
+	}
+}
+
+func TestFormatDatumDE(t *testing.T) {
+	cases := []struct {
+		readingDate string
+		want        string
+	}{
+		{"2026-11-15", "15.11.2026"},
+		{"2026-01-01", "01.01.2026"},
+		{"not-a-date", "not-a-date"},
+	}
+	for _, c := range cases {
+		if got := formatDatumDE(c.readingDate); got != c.want {
+			t.Errorf("formatDatumDE(%q) = %q, want %q", c.readingDate, got, c.want)
+		}
+	}
+}
+
 func TestGermanPeriodLabel(t *testing.T) {
 	cases := []struct {
 		readingDate string

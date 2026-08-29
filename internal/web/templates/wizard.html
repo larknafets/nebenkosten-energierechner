@@ -1,7 +1,7 @@
 {{define "content"}}
-<h1>Ablesung erfassen</h1>
+<h1>{{if .IsEdit}}Ablesung korrigieren{{else}}Ablesung erfassen{{end}}</h1>
 
-<form method="post" action="{{.Base}}/ablesungen" class="panel">
+<form method="post" action="{{.FormAction}}" class="panel">
   <div class="field" style="max-width:220px">
     <label>Ablesedatum</label>
     <input type="date" name="reading_date" value="{{.ReadingDate}}" required {{if .HasPrevious}}data-prev-date="{{.PreviousReadingDate}}"{{end}}>
@@ -17,18 +17,18 @@
 
   <div class="c-pane active" data-step="1">
     <div class="grid grid-2">
-      <div class="field"><label>Gesamt (Netzbezug) kWh</label><input type="number" step="0.01" name="strom_gesamt" required {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_gesamt"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_gesamt"}}"{{end}}><div class="warning" id="warn-strom_gesamt"></div></div>
-      <div class="field"><label>Wohnung 2 kWh</label><input type="number" step="0.01" name="strom_wohnung2" required {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_wohnung2"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_wohnung2"}}"{{end}}><div class="warning" id="warn-strom_wohnung2"></div></div>
-      <div class="field"><label>Wärmepumpe kWh</label><input type="number" step="0.01" name="strom_waermepumpe" required {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_waermepumpe"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_waermepumpe"}}"{{end}}><div class="warning" id="warn-strom_waermepumpe"></div></div>
-      <div class="field"><label>Wallboxen kWh</label><input type="number" step="0.01" name="strom_wallbox" required {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_wallbox"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_wallbox"}}"{{end}}><div class="warning" id="warn-strom_wallbox"></div></div>
+      <div class="field"><label>Gesamt (Netzbezug) kWh</label><input type="number" step="0.01" name="strom_gesamt" required {{if $.IsEdit}}value="{{index $.EditReadings "strom_gesamt"}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_gesamt"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_gesamt"}}"{{end}}><div class="warning" id="warn-strom_gesamt"></div></div>
+      <div class="field"><label>Wohnung 2 kWh</label><input type="number" step="0.01" name="strom_wohnung2" required {{if $.IsEdit}}value="{{index $.EditReadings "strom_wohnung2"}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_wohnung2"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_wohnung2"}}"{{end}}><div class="warning" id="warn-strom_wohnung2"></div></div>
+      <div class="field"><label>Wärmepumpe kWh</label><input type="number" step="0.01" name="strom_waermepumpe" required {{if $.IsEdit}}value="{{index $.EditReadings "strom_waermepumpe"}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_waermepumpe"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_waermepumpe"}}"{{end}}><div class="warning" id="warn-strom_waermepumpe"></div></div>
+      <div class="field"><label>Wallboxen kWh</label><input type="number" step="0.01" name="strom_wallbox" required {{if $.IsEdit}}value="{{index $.EditReadings "strom_wallbox"}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_wallbox"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_wallbox"}}"{{end}}><div class="warning" id="warn-strom_wallbox"></div></div>
     </div>
   </div>
 
   <div class="c-pane" data-step="2">
     <div class="grid grid-3">
-      <div class="field"><label>Gesamt m³</label><input type="number" step="0.01" name="wasser_gesamt" required {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "wasser_gesamt"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "wasser_gesamt"}}"{{end}}><div class="warning" id="warn-wasser_gesamt"></div></div>
-      <div class="field"><label>Wohnung 2 m³</label><input type="number" step="0.01" name="wasser_wohnung2" required {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "wasser_wohnung2"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "wasser_wohnung2"}}"{{end}}><div class="warning" id="warn-wasser_wohnung2"></div></div>
-      <div class="field"><label>Warmwasseraufbereitung m³</label><input type="number" step="0.01" name="wasser_warmwasseraufbereitung" required {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "wasser_warmwasseraufbereitung"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "wasser_warmwasseraufbereitung"}}"{{end}}><div class="warning" id="warn-wasser_warmwasseraufbereitung"></div></div>
+      <div class="field"><label>Gesamt m³</label><input type="number" step="0.01" name="wasser_gesamt" required {{if $.IsEdit}}value="{{index $.EditReadings "wasser_gesamt"}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "wasser_gesamt"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "wasser_gesamt"}}"{{end}}><div class="warning" id="warn-wasser_gesamt"></div></div>
+      <div class="field"><label>Wohnung 2 m³</label><input type="number" step="0.01" name="wasser_wohnung2" required {{if $.IsEdit}}value="{{index $.EditReadings "wasser_wohnung2"}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "wasser_wohnung2"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "wasser_wohnung2"}}"{{end}}><div class="warning" id="warn-wasser_wohnung2"></div></div>
+      <div class="field"><label>Warmwasseraufbereitung m³</label><input type="number" step="0.01" name="wasser_warmwasseraufbereitung" required {{if $.IsEdit}}value="{{index $.EditReadings "wasser_warmwasseraufbereitung"}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "wasser_warmwasseraufbereitung"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "wasser_warmwasseraufbereitung"}}"{{end}}><div class="warning" id="warn-wasser_warmwasseraufbereitung"></div></div>
     </div>
   </div>
 
@@ -36,7 +36,7 @@
     <div class="grid grid-2">
       {{range .Apartments}}
       {{$key := printf "waerme_wohnung%d" .ID}}
-      <div class="field"><label>{{.Name}} MWh</label><input type="number" step="0.01" name="{{$key}}" required {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings $key}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg $key}}"{{end}}><div class="warning" id="warn-{{$key}}"></div></div>
+      <div class="field"><label>{{.Name}} MWh</label><input type="number" step="0.01" name="{{$key}}" required {{if $.IsEdit}}value="{{index $.EditReadings $key}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings $key}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg $key}}"{{end}}><div class="warning" id="warn-{{$key}}"></div></div>
       {{end}}
     </div>
   </div>

@@ -115,6 +115,68 @@ func CreatePeriod(db *sql.DB, in PeriodInput) (periodID int64, err error) {
 	return periodID, nil
 }
 
+// UpdatePeriod overwrites an existing period's fields, readings, and
+// occupancy in place - no new row, no history of the previous values
+// (Ticket #34: only the latest period is ever editable, in-place, no
+// audit log). Costs aren't stored anywhere (berechneKosten/Verbrauch read
+// live from the DB on every request), so overwriting here is all that's
+// needed for the change to show up - nothing to invalidate.
+func UpdatePeriod(db *sql.DB, periodID int64, in PeriodInput) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(
+		`UPDATE periods SET reading_date = ?, strompreis = ?, frischwasser_preis = ?, abwasser_preis = ?, heizung_waerme_gewichtung = ?
+		 WHERE id = ?`,
+		in.ReadingDate, in.Strompreis, in.FrischwasserPreis, in.AbwasserPreis, in.HeizungWaermeGewichtung, periodID,
+	)
+	if err != nil {
+		return fmt.Errorf("update period: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return fmt.Errorf("update period rows affected: %w", err)
+	} else if n == 0 {
+		return fmt.Errorf("period %d not found", periodID)
+	}
+
+	for _, key := range MeterKeys {
+		value, ok := in.Readings[key]
+		if !ok {
+			return fmt.Errorf("missing reading for meter %q", key)
+		}
+		if _, err := tx.Exec(
+			`UPDATE meter_readings SET zaehlerstand = ?
+			 WHERE period_id = ? AND meter_id = (SELECT id FROM meters WHERE key = ?)`,
+			value, periodID, key,
+		); err != nil {
+			return fmt.Errorf("update reading for %q: %w", key, err)
+		}
+	}
+
+	for apartmentID, personen := range in.Personen {
+		if _, err := tx.Exec(
+			`UPDATE period_occupancy SET personen = ? WHERE period_id = ? AND apartment_id = ?`,
+			personen, periodID, apartmentID,
+		); err != nil {
+			return fmt.Errorf("update occupancy for apartment %d: %w", apartmentID, err)
+		}
+	}
+
+	for apartmentID, qm := range in.QM {
+		if _, err := tx.Exec(`UPDATE apartments SET qm = ? WHERE id = ?`, qm, apartmentID); err != nil {
+			return fmt.Errorf("update qm for apartment %d: %w", apartmentID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
 // LatestPeriod is a period together with its readings and occupancy, as
 // shown on the "letzte Ablesung" view.
 type LatestPeriod struct {

@@ -143,6 +143,69 @@ func TestVerbrauch_UeberLuecke(t *testing.T) {
 	}
 }
 
+func TestUpdatePeriod_Roundtrip(t *testing.T) {
+	db := openTestDB(t)
+	mustCreatePeriod(t, db, "2026-09-01", baseReadings(map[string]float64{"strom_gesamt": 100}))
+	p2 := mustCreatePeriod(t, db, "2026-10-01", baseReadings(map[string]float64{"strom_gesamt": 200}))
+
+	err := UpdatePeriod(db, p2, PeriodInput{
+		ReadingDate:             "2026-10-02",
+		Strompreis:              0.25,
+		FrischwasserPreis:       1.50,
+		AbwasserPreis:           5.00,
+		HeizungWaermeGewichtung: 0.6,
+		Readings:                baseReadings(map[string]float64{"strom_gesamt": 210}),
+		Personen:                map[int64]int64{1: 3, 2: 1},
+		QM:                      map[int64]float64{1: 116.23, 2: 86},
+	})
+	if err != nil {
+		t.Fatalf("UpdatePeriod: %v", err)
+	}
+
+	latest, err := GetLatestPeriod(db)
+	if err != nil {
+		t.Fatalf("GetLatestPeriod: %v", err)
+	}
+	if latest.ID != p2 {
+		t.Fatalf("GetLatestPeriod.ID = %d, want %d (UpdatePeriod must not create a new row)", latest.ID, p2)
+	}
+	if latest.ReadingDate != "2026-10-02" {
+		t.Errorf("ReadingDate = %q, want 2026-10-02", latest.ReadingDate)
+	}
+	if latest.Strompreis != 0.25 || latest.FrischwasserPreis != 1.50 || latest.AbwasserPreis != 5.00 {
+		t.Errorf("prices = %v/%v/%v, want 0.25/1.50/5.00", latest.Strompreis, latest.FrischwasserPreis, latest.AbwasserPreis)
+	}
+	if latest.HeizungWaermeGewichtung != 0.6 {
+		t.Errorf("HeizungWaermeGewichtung = %v, want 0.6", latest.HeizungWaermeGewichtung)
+	}
+	if latest.Readings["strom_gesamt"] != 210 {
+		t.Errorf("Readings[strom_gesamt] = %v, want 210", latest.Readings["strom_gesamt"])
+	}
+	if latest.PersonenByApartment[1] != 3 {
+		t.Errorf("PersonenByApartment[1] = %v, want 3", latest.PersonenByApartment[1])
+	}
+
+	v, err := Verbrauch(db, p2)
+	if err != nil {
+		t.Fatalf("Verbrauch: %v", err)
+	}
+	if v["strom_gesamt"] != 110 {
+		t.Errorf("Verbrauch[strom_gesamt] after update = %v, want 110 (210-100, recomputed live)", v["strom_gesamt"])
+	}
+}
+
+func TestUpdatePeriod_UnknownID(t *testing.T) {
+	db := openTestDB(t)
+	err := UpdatePeriod(db, 999, PeriodInput{
+		ReadingDate:             "2026-10-01",
+		HeizungWaermeGewichtung: 0.7,
+		Readings:                baseReadings(nil),
+	})
+	if err == nil {
+		t.Fatal("UpdatePeriod on unknown id: want error, got nil")
+	}
+}
+
 func TestEnsurePeriodsHeizungGewichtungColumn(t *testing.T) {
 	t.Run("fuegt Spalte zu einer alten Tabelle ohne sie hinzu, mit Default 0.7", func(t *testing.T) {
 		db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "old.db"))

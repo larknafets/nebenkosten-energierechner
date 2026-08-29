@@ -12,22 +12,22 @@
 <div class="grid grid-2">
   {{range .Cards}}
   <div class="panel stat-card">
-    <div class="muted">{{.ApartmentName}} <span class="badge">{{.QM}} m² · {{.Personen}} Pers.</span></div>
-    <div class="stat-value">{{.Gesamtbetrag}} €</div>
+    <div class="muted">{{.ApartmentName}} <span class="badge">{{de .QM}} m² · {{.Personen}} Pers.</span></div>
+    <div class="stat-value">{{de .Gesamtbetrag}} €</div>
     <div class="stat-bar-track">
       {{range .Kategorien}}
       <div class="stat-bar-seg cat-{{.Farbe}}" style="width:{{.ProzentGesamt}}%"></div>
       {{end}}
     </div>
     <div class="muted stat-kategorien">
-      {{range $i, $kat := .Kategorien}}{{if $i}} · {{end}}{{$kat.Label}} {{$kat.Kosten}} € ({{$kat.Verbrauch}} {{$kat.Einheit}}){{end}}
+      {{range $i, $kat := .Kategorien}}{{if $i}} · {{end}}{{$kat.Label}} {{de $kat.Kosten}} € ({{de $kat.Verbrauch}} {{$kat.Einheit}}){{end}}
     </div>
   </div>
   {{end}}
 </div>
 {{end}}
 
-<p style="margin-top:1rem"><a href="{{.Base}}/ablesungen/letzte">Alle Details</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></p>
+<p style="margin-top:1rem"><a href="{{.Base}}/ablesungen/neu">Neue Ablesung erfassen</a> · <a href="{{.Base}}/ablesungen/letzte">Alle Details</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></p>
 {{end}}
 
 {{if .HasVerlauf}}
@@ -45,16 +45,16 @@
       {{range .Eintraege}}
       {{if .Jahrestrenner}}
       <div class="verlauf-year-sep"><span class="line"></span><span class="label">Jahr {{.Jahrestrenner.Jahr}}</span><span class="line"></span></div>
-      <div class="verlauf-year-row"><span>Jahreswert {{.Jahrestrenner.Jahr}}</span><span>{{.Jahrestrenner.Jahreswert}} €</span></div>
+      <div class="verlauf-year-row"><span>Jahreswert {{.Jahrestrenner.Jahr}}</span><span>{{de .Jahrestrenner.Jahreswert}} €</span></div>
       {{else}}
       <div class="verlauf-row{{if .Monat.IsCurrent}} is-current{{end}}">
         <span class="month-label">{{.Monat.Label}}</span>
         <div class="bar-track">
           {{range .Monat.Segmente}}
-          <div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" title="{{.Kosten}} €"><span>{{.Kosten}} €</span></div>
+          <div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" title="{{de .Kosten}} €"><span>{{de .Kosten}} €</span></div>
           {{end}}
         </div>
-        <span class="value-label">{{.Monat.Gesamtbetrag}} €</span>
+        <span class="value-label">{{de .Monat.Gesamtbetrag}} €</span>
       </div>
       {{end}}
       {{end}}
