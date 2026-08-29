@@ -65,3 +65,45 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  hassio:
+    name: Update HA Add-on
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ha-addons
+        uses: actions/checkout@v4
+        with:
+          repository: larknafets/ha-addons
+          token: ${{ secrets.HASSIO_DEPLOY_TOKEN }}
+          path: ./hassio
+
+      - name: Update version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sed -i -e "s/^version:.*/version: \"${version}\"/" ./hassio/nebenkosten-energierechner/config.yaml
+
+      - name: Generate changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/larknafets/nebenkosten-energierechner/releases --paginate | jq -s '
+            [.[][] | select(.draft == false and .prerelease == false)]
+            | sort_by(.published_at)
+            | reverse
+            | .[]
+            | "## [\(.tag_name)] - \(.published_at | split("T")[0])\n\n\((.body // "No release notes.")
+            | gsub("(?m)^\\* [0-9a-f]{40} "; "* "))\n"
+          ' -r > /tmp/changelog_entries.md
+
+          printf '%s\n\n' 'Full release details: https://github.com/larknafets/nebenkosten-energierechner/releases' > ./hassio/nebenkosten-energierechner/CHANGELOG.md
+          cat /tmp/changelog_entries.md >> ./hassio/nebenkosten-energierechner/CHANGELOG.md
+
+      - name: Push
+        run: |
+          cd ./hassio
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add nebenkosten-energierechner/config.yaml nebenkosten-energierechner/CHANGELOG.md
+          git commit -m "Mirror nebenkosten-energierechner release ${GITHUB_REF_NAME}"
+          git push
