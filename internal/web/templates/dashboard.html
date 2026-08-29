@@ -1,0 +1,24 @@
+{{define "content"}}
+<h1>Nebenkosten-Energierechner</h1>
+
+{{if not .Period}}
+<p class="muted">Noch keine Ablesung erfasst. <a href="/ablesungen/neu">Jetzt erfassen</a>.</p>
+{{else}}
+<h2>{{.PeriodLabel}}</h2>
+
+{{if .KostenNote}}
+<p class="muted">{{.KostenNote}}</p>
+{{else}}
+<div class="grid grid-2">
+  {{range .Cards}}
+  <div class="panel stat-card">
+    <div class="muted">{{.ApartmentName}} <span class="badge">{{.QM}} m² · {{.Personen}} Pers.</span></div>
+    <div class="stat-value">{{.Gesamtbetrag}} €</div>
+  </div>
+  {{end}}
+</div>
+{{end}}
+
+<p style="margin-top:1rem"><a href="/ablesungen/letzte">Alle Details</a></p>
+{{end}}
+{{end}}

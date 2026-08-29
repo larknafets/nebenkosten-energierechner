@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"embed"
 	"errors"
+	"fmt"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -24,8 +25,9 @@ var templateFS embed.FS
 // parsing them together into one shared template set would let the last
 // one silently overwrite the others.
 var (
-	wizardTemplate = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/wizard.html"))
-	letzteTemplate = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/letzte.html"))
+	wizardTemplate    = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/wizard.html"))
+	letzteTemplate    = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/letzte.html"))
+	dashboardTemplate = template.Must(template.ParseFS(templateFS, "templates/layout.html", "templates/dashboard.html"))
 )
 
 // meterDisplay describes how one meter's reading is labelled on the
@@ -34,6 +36,23 @@ type meterDisplay struct {
 	Key   string
 	Label string
 	Unit  string
+}
+
+var germanMonths = [...]string{
+	"Januar", "Februar", "März", "April", "Mai", "Juni",
+	"Juli", "August", "September", "Oktober", "November", "Dezember",
+}
+
+// germanPeriodLabel renders a period's ReadingDate ("YYYY-MM-DD") as its
+// German month name and year (e.g. "November 2026"), for the Dashboard
+// heading (Ticket #17 Nachtrag - no "Dashboard -" prefix). Falls back to the
+// raw string if it isn't a parseable date.
+func germanPeriodLabel(readingDate string) string {
+	t, err := time.Parse("2006-01-02", readingDate)
+	if err != nil {
+		return readingDate
+	}
+	return fmt.Sprintf("%s %d", germanMonths[t.Month()-1], t.Year())
 }
 
 var meterDisplays = []meterDisplay{
@@ -55,6 +74,7 @@ func NewMux(db *sql.DB) *http.ServeMux {
 	mux.HandleFunc("GET /ablesungen/neu", handleWizardForm(db))
 	mux.HandleFunc("POST /ablesungen", handleCreateAblesung(db))
 	mux.HandleFunc("GET /ablesungen/letzte", handleLetzteAblesung(db))
+	mux.HandleFunc("GET /dashboard", handleDashboard(db))
 	return mux
 }
 
@@ -186,6 +206,37 @@ func handleCreateAblesung(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// kosten bundles the 3 cost calculations for one period, together with a
+// user-facing note for the "no previous period yet" case both the "letzte
+// Ablesung" and Dashboard views need to show identically.
+type kosten struct {
+	Strom      *calc.StromErgebnis
+	Wasser     *calc.WasserErgebnis
+	Heizung    *calc.HeizungErgebnis
+	KostenNote string
+}
+
+func berechneKosten(db *sql.DB, periodID int64) (kosten, error) {
+	strom, err := calc.Strom(db, periodID)
+	if errors.Is(err, store.ErrNoPreviousPeriod) {
+		return kosten{KostenNote: "Kosten können erst ab der zweiten Ablesung berechnet werden (Verbrauch braucht eine Vorperiode)."}, nil
+	} else if err != nil {
+		return kosten{}, fmt.Errorf("strom kosten: %w", err)
+	}
+
+	wasser, err := calc.Wasser(db, periodID)
+	if err != nil {
+		return kosten{}, fmt.Errorf("wasser kosten: %w", err)
+	}
+
+	heizung, err := calc.Heizung(db, periodID)
+	if err != nil {
+		return kosten{}, fmt.Errorf("heizung kosten: %w", err)
+	}
+
+	return kosten{Strom: strom, Wasser: wasser, Heizung: heizung}, nil
+}
+
 func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		period, err := store.GetLatestPeriod(db)
@@ -217,28 +268,12 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 			}
 		}
 
-		var strom *calc.StromErgebnis
-		var wasser *calc.WasserErgebnis
-		var heizung *calc.HeizungErgebnis
-		var kostenNote string
+		var k kosten
 		if period != nil {
-			strom, err = calc.Strom(db, period.ID)
-			if errors.Is(err, store.ErrNoPreviousPeriod) {
-				kostenNote = "Kosten können erst ab der zweiten Ablesung berechnet werden (Verbrauch braucht eine Vorperiode)."
-			} else if err != nil {
-				http.Error(w, "strom kosten: "+err.Error(), http.StatusInternalServerError)
+			k, err = berechneKosten(db, period.ID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
-			} else {
-				wasser, err = calc.Wasser(db, period.ID)
-				if err != nil {
-					http.Error(w, "wasser kosten: "+err.Error(), http.StatusInternalServerError)
-					return
-				}
-				heizung, err = calc.Heizung(db, period.ID)
-				if err != nil {
-					http.Error(w, "heizung kosten: "+err.Error(), http.StatusInternalServerError)
-					return
-				}
 			}
 		}
 
@@ -260,13 +295,91 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 			Apartments: apartments,
 			Personen:   personen,
 			Meters:     meters,
-			Strom:      strom,
-			Wasser:     wasser,
-			Heizung:    heizung,
-			KostenNote: kostenNote,
+			Strom:      k.Strom,
+			Wasser:     k.Wasser,
+			Heizung:    k.Heizung,
+			KostenNote: k.KostenNote,
 		}
 
 		if err := letzteTemplate.ExecuteTemplate(w, "layout", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+// dashboardCard is one apartment's stat card on the Dashboard Grundansicht
+// (Ticket #17): its Gesamtbetrag for the period and the badge showing that
+// period's Wohnfläche + Personenzahl.
+type dashboardCard struct {
+	ApartmentName string
+	QM            float64
+	Personen      int64
+	Gesamtbetrag  float64
+}
+
+// gesamtbetrag sums every cost position billed to the given apartment for
+// the period. Wohnung 1's Strom has no own cost position - its Netzbezug
+// stays implicit (see calc.Strom) - so only Wohnung 2 has a Strom position.
+func gesamtbetrag(apartmentID int64, k kosten) float64 {
+	total := k.Heizung.KostenHeizungW1 + k.Wasser.KostenFrischwasserW1 + k.Wasser.KostenAbwasserW1
+	if apartmentID == 2 {
+		total = k.Strom.KostenW2 + k.Heizung.KostenHeizungW2 + k.Wasser.KostenFrischwasserW2 + k.Wasser.KostenAbwasserW2
+	}
+	return calc.Round2(total)
+}
+
+func handleDashboard(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		period, err := store.GetLatestPeriod(db)
+		if err != nil {
+			http.Error(w, "latest period: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		apartments, err := store.Apartments(db)
+		if err != nil {
+			http.Error(w, "apartments: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		var periodLabel string
+		var cards []dashboardCard
+		var kostenNote string
+		if period != nil {
+			periodLabel = germanPeriodLabel(period.ReadingDate)
+
+			k, err := berechneKosten(db, period.ID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			kostenNote = k.KostenNote
+
+			if k.KostenNote == "" {
+				for _, a := range apartments {
+					cards = append(cards, dashboardCard{
+						ApartmentName: a.Name,
+						QM:            a.QM,
+						Personen:      period.PersonenByApartment[a.ID],
+						Gesamtbetrag:  gesamtbetrag(a.ID, k),
+					})
+				}
+			}
+		}
+
+		data := struct {
+			Period      *store.LatestPeriod
+			PeriodLabel string
+			Cards       []dashboardCard
+			KostenNote  string
+		}{
+			Period:      period,
+			PeriodLabel: periodLabel,
+			Cards:       cards,
+			KostenNote:  kostenNote,
+		}
+
+		if err := dashboardTemplate.ExecuteTemplate(w, "layout", data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
