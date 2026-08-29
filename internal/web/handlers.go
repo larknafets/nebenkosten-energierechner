@@ -639,10 +639,16 @@ type periodKosten struct {
 
 // verlaufSegment is one Verlauf bar's Strom/Heizung/Wasser slice, scaled
 // against the newest period's Gesamtbetrag rather than its own (see
-// verlaufMonate).
+// verlaufMonate). Label/Verbrauch/Einheit carry the same category's raw
+// consumption (Ticket #39's Verbrauchs-Ansicht) alongside Kosten - the bar
+// itself always stays EUR-scaled (ProzentNeuestesGesamt), since kWh/MWh/m³
+// can't be stacked into one meaningful width.
 type verlaufSegment struct {
 	Farbe                 string
+	Label                 string
 	Kosten                float64
+	Verbrauch             float64
+	Einheit               string
 	ProzentNeuestesGesamt float64
 }
 
@@ -702,7 +708,14 @@ func verlaufMonate(apartmentID int64, periodenKosten []periodKosten) []verlaufMo
 			if neuestesGesamt > 0 {
 				pct = kat.Kosten / neuestesGesamt * 100
 			}
-			segmente = append(segmente, verlaufSegment{Farbe: kat.Farbe, Kosten: kat.Kosten, ProzentNeuestesGesamt: pct})
+			segmente = append(segmente, verlaufSegment{
+				Farbe:                 kat.Farbe,
+				Label:                 kat.Label,
+				Kosten:                kat.Kosten,
+				Verbrauch:             kat.Verbrauch,
+				Einheit:               kat.Einheit,
+				ProzentNeuestesGesamt: pct,
+			})
 		}
 		out = append(out, verlaufMonat{
 			Label:        germanPeriodLabelShort(pk.ReadingDate),

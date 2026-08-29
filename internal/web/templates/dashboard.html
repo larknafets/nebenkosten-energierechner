@@ -32,11 +32,12 @@
 
 {{if .HasVerlauf}}
 <h2 style="margin-top:1.5rem">Verlauf</h2>
-<div class="panel" style="margin-top:1rem">
+<div class="panel verlauf-panel" id="verlauf-panel" style="margin-top:1rem">
   <div class="verlauf-legend">
     <span><i class="cat-strom"></i>Strom</span>
     <span><i class="cat-heizung"></i>Heizung/Warmwasser</span>
     <span><i class="cat-wasser"></i>Wasser</span>
+    <button type="button" class="secondary verlauf-modus-toggle" id="verlauf-modus-toggle">Verbrauch anzeigen</button>
   </div>
   <div class="verlauf-wrap">
     {{range .VerlaufSpalten}}
@@ -53,6 +54,9 @@
           {{range .Monat.Segmente}}
           <div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" title="{{de .Kosten}} €"><span>{{de .Kosten}} €</span></div>
           {{end}}
+        </div>
+        <div class="verbrauch-liste">
+          {{range $i, $seg := .Monat.Segmente}}{{if $i}} · {{end}}{{$seg.Label}} {{de $seg.Verbrauch}} {{$seg.Einheit}}{{end}}
         </div>
         <span class="value-label">{{de .Monat.Gesamtbetrag}} €</span>
       </div>
@@ -84,6 +88,34 @@
   }
   window.addEventListener("load", fitVerlaufBarText);
   window.addEventListener("resize", fitVerlaufBarText);
+
+  // EUR/Verbrauch-Umschalter (Ticket #39) - Wahl wird im Browser gemerkt,
+  // damit sie bei erneutem Besuch erhalten bleibt.
+  (function () {
+    var STORAGE_KEY = "verlaufModus";
+    var panel = document.getElementById("verlauf-panel");
+    var btn = document.getElementById("verlauf-modus-toggle");
+    if (!panel || !btn) return;
+
+    function apply(modus) {
+      panel.classList.toggle("modus-verbrauch", modus === "verbrauch");
+      btn.textContent = modus === "verbrauch" ? "EUR anzeigen" : "Verbrauch anzeigen";
+    }
+
+    var gespeichert = "eur";
+    try {
+      gespeichert = localStorage.getItem(STORAGE_KEY) || "eur";
+    } catch (e) {}
+    apply(gespeichert);
+
+    btn.addEventListener("click", function () {
+      var neu = panel.classList.contains("modus-verbrauch") ? "eur" : "verbrauch";
+      apply(neu);
+      try {
+        localStorage.setItem(STORAGE_KEY, neu);
+      } catch (e) {}
+    });
+  })();
 </script>
 {{end}}
 {{end}}

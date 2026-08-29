@@ -47,8 +47,12 @@
   .cat-wasser { background: var(--cat-wasser); }
   .stat-kategorien { margin-top: .4rem; white-space: normal; overflow-wrap: break-word; }
 
-  .verlauf-legend { display: flex; gap: 1.25rem; font-size: .75rem; color: var(--muted); margin-bottom: .9rem; flex-wrap: wrap; }
+  .verlauf-legend { display: flex; align-items: center; gap: 1.25rem; font-size: .75rem; color: var(--muted); margin-bottom: .9rem; flex-wrap: wrap; }
   .verlauf-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .35rem; vertical-align: middle; }
+  .verlauf-modus-toggle { margin-left: auto; padding: .3rem .7rem; font-size: .75rem; }
+  .verbrauch-liste { display: none; font-size: .72rem; color: var(--muted); }
+  .verlauf-panel.modus-verbrauch .bar-track { display: none; }
+  .verlauf-panel.modus-verbrauch .verbrauch-liste { display: block; }
   .verlauf-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
   .verlauf-col h4 { font-size: .8rem; color: var(--muted); margin: 0 0 .5rem; }
   .verlauf-row { display: flex; align-items: center; gap: .5rem; padding: .3rem 0; }
@@ -74,6 +78,7 @@
     .month-label { order: 1; }
     .value-label { order: 2; margin-left: auto; }
     .bar-track { order: 3; flex-basis: 100%; }
+    .verbrauch-liste { order: 3; flex-basis: 100%; }
   }
 </style>
 </head>

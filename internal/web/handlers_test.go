@@ -108,7 +108,7 @@ func TestVerlaufMonate(t *testing.T) {
 	// aeltere, teurere Periode muss ueber 100% hinauslaufen (Ticket #19:
 	// Skala ist relativ zum neuesten Monat, nicht gestaucht).
 	neu := kosten{
-		Strom:   &calc.StromErgebnis{KostenW2: 20},
+		Strom:   &calc.StromErgebnis{KostenW2: 20, W2AnteilKWh: 123},
 		Wasser:  &calc.WasserErgebnis{KostenFrischwasserW2: 5, KostenAbwasserW2: 5},
 		Heizung: &calc.HeizungErgebnis{KostenHeizungW2: 10},
 	}
@@ -137,6 +137,13 @@ func TestVerlaufMonate(t *testing.T) {
 	}
 	if monate[1].Gesamtbetrag != 80 {
 		t.Errorf("aelterer Gesamtbetrag = %v, want 80", monate[1].Gesamtbetrag)
+	}
+
+	// Segmente tragen Label/Verbrauch/Einheit fuer die Verbrauchs-Ansicht
+	// (Ticket #39) - Strom ist bei Wohnung 2 immer das erste Segment.
+	strom := monate[0].Segmente[0]
+	if strom.Label != "Strom" || strom.Verbrauch != 123 || strom.Einheit != "kWh" {
+		t.Errorf("Strom-Segment = %+v, want Label=Strom Verbrauch=123 Einheit=kWh", strom)
 	}
 
 	// Skala = neuester Gesamtbetrag (40). Der aeltere Monat kostet doppelt
