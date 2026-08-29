@@ -71,9 +71,13 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		previous, err := store.GetLatestPeriod(db)
+		// 4 periods give the 3 consumption diffs the Ausreißer-Warnung
+		// baseline averages over (Ticket #13); the newest of them also
+		// doubles as "previous" for the negative-Verbrauch/gap checks
+		// (Ticket #12).
+		recent, err := store.RecentPeriodReadings(db, 4)
 		if err != nil {
-			http.Error(w, "latest period: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "recent periods: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
@@ -83,14 +87,28 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			HasPrevious         bool
 			PreviousReadings    map[string]float64
 			PreviousReadingDate string
+			HasOutlierBaseline  bool
+			OutlierAvg          map[string]float64
 		}{
 			ReadingDate: time.Now().Format("2006-01-02"),
 			Apartments:  apartments,
 		}
-		if previous != nil {
+		if len(recent) > 0 {
 			data.HasPrevious = true
-			data.PreviousReadings = previous.Readings
-			data.PreviousReadingDate = previous.ReadingDate
+			data.PreviousReadings = recent[0].Readings
+			data.PreviousReadingDate = recent[0].ReadingDate
+		}
+		if len(recent) >= 4 {
+			avg := make(map[string]float64, len(store.MeterKeys))
+			for _, key := range store.MeterKeys {
+				sum := 0.0
+				for i := 0; i < 3; i++ {
+					sum += recent[i].Readings[key] - recent[i+1].Readings[key]
+				}
+				avg[key] = sum / 3
+			}
+			data.HasOutlierBaseline = true
+			data.OutlierAvg = avg
 		}
 
 		if err := wizardTemplate.ExecuteTemplate(w, "layout", data); err != nil {

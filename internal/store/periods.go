@@ -126,6 +126,53 @@ type LatestPeriod struct {
 	PersonenByApartment map[int64]int64
 }
 
+// PeriodReadings is one period's per-meter Zählerstand, as used for the
+// Ausreißer-Warnung baseline (Ticket #13).
+type PeriodReadings struct {
+	ID          int64
+	ReadingDate string
+	Readings    map[string]float64
+}
+
+// RecentPeriodReadings returns the most recent `limit` periods (newest
+// first) together with their per-meter Zählerstand.
+func RecentPeriodReadings(db *sql.DB, limit int) ([]PeriodReadings, error) {
+	rows, err := db.Query(
+		`SELECT id, reading_date FROM periods ORDER BY reading_date DESC, id DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query recent periods: %w", err)
+	}
+	defer rows.Close()
+
+	type idDate struct {
+		id   int64
+		date string
+	}
+	var ids []idDate
+	for rows.Next() {
+		var d idDate
+		if err := rows.Scan(&d.id, &d.date); err != nil {
+			return nil, fmt.Errorf("scan period: %w", err)
+		}
+		ids = append(ids, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make([]PeriodReadings, 0, len(ids))
+	for _, d := range ids {
+		readings, err := readingsByMeterKey(db, d.id)
+		if err != nil {
+			return nil, fmt.Errorf("readings for period %d: %w", d.id, err)
+		}
+		out = append(out, PeriodReadings{ID: d.id, ReadingDate: d.date, Readings: readings})
+	}
+	return out, nil
+}
+
 // GetLatestPeriod returns the most recently dated period, or nil if none
 // exist yet.
 func GetLatestPeriod(db *sql.DB) (*LatestPeriod, error) {
