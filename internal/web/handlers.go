@@ -307,25 +307,68 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// dashboardCard is one apartment's stat card on the Dashboard Grundansicht
-// (Ticket #17): its Gesamtbetrag for the period and the badge showing that
-// period's Wohnfläche + Personenzahl.
+// dashboardCard is one apartment's stat card on the Dashboard (Grundansicht
+// #17 + Detailanzeige #18): its Gesamtbetrag and the badge showing that
+// period's Wohnfläche + Personenzahl, plus the Strom/Heizung/Wasser
+// breakdown the bar and per-category text are rendered from.
 type dashboardCard struct {
 	ApartmentName string
 	QM            float64
 	Personen      int64
 	Gesamtbetrag  float64
+	Kategorien    []kategorie
 }
 
-// gesamtbetrag sums every cost position billed to the given apartment for
-// the period. Wohnung 1's Strom has no own cost position - its Netzbezug
-// stays implicit (see calc.Strom) - so only Wohnung 2 has a Strom position.
-func gesamtbetrag(apartmentID int64, k kosten) float64 {
-	total := k.Heizung.KostenHeizungW1 + k.Wasser.KostenFrischwasserW1 + k.Wasser.KostenAbwasserW1
+// kategorie is one cost position (Strom, Heizung, or Wasser) on a
+// dashboardCard's bar, together with its share of that apartment's
+// Gesamtbetrag (ProzentGesamt, the bar segment's width) and the raw
+// consumption shown in brackets next to the EUR amount (Ticket #18).
+type kategorie struct {
+	Label     string
+	Kosten    float64
+	Verbrauch float64
+	Einheit   string
+	// Farbe is a bare CSS class suffix (e.g. "strom" -> class "cat-strom"),
+	// not interpolated into a style attribute - html/template's CSS
+	// sanitizer can't statically verify a dynamic var(...) argument there
+	// and replaces it with the ZgotmplZ sentinel instead of rendering it.
+	Farbe string
+
+	ProzentGesamt float64
+}
+
+// kategorien builds the given apartment's cost breakdown for the period.
+// Wohnung 1's Strom has no own cost position - its Netzbezug stays implicit
+// (see calc.Strom) - so only Wohnung 2 gets a Strom-Kategorie. Frischwasser
+// and Abwasser are combined into a single Wasser-Kategorie since they share
+// one raw m³ consumption (no separate Abwasserzähler, see calc.Wasser).
+func kategorien(apartmentID int64, k kosten) []kategorie {
+	var list []kategorie
 	if apartmentID == 2 {
-		total = k.Strom.KostenW2 + k.Heizung.KostenHeizungW2 + k.Wasser.KostenFrischwasserW2 + k.Wasser.KostenAbwasserW2
+		list = append(list, kategorie{"Strom", k.Strom.KostenW2, k.Strom.W2AnteilKWh, "kWh", "strom", 0})
 	}
-	return calc.Round2(total)
+
+	heizungKosten, waermeMWh := k.Heizung.KostenHeizungW1, k.Heizung.WaermeW1MWh
+	frischwasserKosten, abwasserKosten, wasserM3 := k.Wasser.KostenFrischwasserW1, k.Wasser.KostenAbwasserW1, k.Wasser.FrischwasserW1
+	if apartmentID == 2 {
+		heizungKosten, waermeMWh = k.Heizung.KostenHeizungW2, k.Heizung.WaermeW2MWh
+		frischwasserKosten, abwasserKosten, wasserM3 = k.Wasser.KostenFrischwasserW2, k.Wasser.KostenAbwasserW2, k.Wasser.FrischwasserW2
+	}
+	list = append(list,
+		kategorie{"Heizung", heizungKosten, waermeMWh, "MWh", "heizung", 0},
+		kategorie{"Wasser", calc.Round2(frischwasserKosten + abwasserKosten), wasserM3, "m³", "wasser", 0},
+	)
+
+	var total float64
+	for _, kat := range list {
+		total += kat.Kosten
+	}
+	if total > 0 {
+		for i := range list {
+			list[i].ProzentGesamt = list[i].Kosten / total * 100
+		}
+	}
+	return list
 }
 
 func handleDashboard(db *sql.DB) http.HandlerFunc {
@@ -357,11 +400,17 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 
 			if k.KostenNote == "" {
 				for _, a := range apartments {
+					kats := kategorien(a.ID, k)
+					var total float64
+					for _, kat := range kats {
+						total += kat.Kosten
+					}
 					cards = append(cards, dashboardCard{
 						ApartmentName: a.Name,
 						QM:            a.QM,
 						Personen:      period.PersonenByApartment[a.ID],
-						Gesamtbetrag:  gesamtbetrag(a.ID, k),
+						Gesamtbetrag:  calc.Round2(total),
+						Kategorien:    kats,
 					})
 				}
 			}

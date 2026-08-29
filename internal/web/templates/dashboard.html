@@ -14,6 +14,14 @@
   <div class="panel stat-card">
     <div class="muted">{{.ApartmentName}} <span class="badge">{{.QM}} m² · {{.Personen}} Pers.</span></div>
     <div class="stat-value">{{.Gesamtbetrag}} €</div>
+    <div class="stat-bar-track">
+      {{range .Kategorien}}
+      <div class="stat-bar-seg cat-{{.Farbe}}" style="width:{{.ProzentGesamt}}%"></div>
+      {{end}}
+    </div>
+    <div class="muted stat-kategorien">
+      {{range $i, $kat := .Kategorien}}{{if $i}} · {{end}}{{$kat.Label}} {{$kat.Kosten}} € ({{$kat.Verbrauch}} {{$kat.Einheit}}){{end}}
+    </div>
   </div>
   {{end}}
 </div>
