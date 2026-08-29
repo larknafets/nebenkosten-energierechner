@@ -52,7 +52,7 @@
         <span class="month-label">{{.Monat.Label}}</span>
         <div class="bar-track">
           {{range .Monat.Segmente}}
-          <div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" title="{{de .Kosten}} €"><span>{{de .Kosten}} €</span></div>
+          <div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{de .Kosten}} €"><span>{{de .Kosten}} €</span></div>
           {{end}}
         </div>
         <div class="verbrauch-liste">
@@ -69,12 +69,16 @@
 <script>
   // Balkentext schrumpfen bzw. ausblenden, falls er im Segment nicht passt
   // (Ticket #19 AC3) - Segmentbreite haengt vom Viewport ab, daher nach
-  // Render + Resize neu berechnen statt serverseitig zu schaetzen.
+  // Render + Resize neu berechnen statt serverseitig zu schaetzen. Passt
+  // der Text auch verkleinert nicht, wird das Segment als "text-hidden"
+  // markiert - der EUR-Betrag ist dann per Hover/Long-Press abrufbar
+  // (siehe Tooltip-IIFE unten).
   function fitVerlaufBarText() {
     document.querySelectorAll(".bar-track > div").forEach(function (seg) {
       var span = seg.querySelector("span");
       if (!span) return;
       span.style.display = "";
+      seg.classList.remove("text-hidden");
       var size = 11;
       span.style.fontSize = size + "px";
       while (span.scrollWidth > seg.clientWidth - 4 && size > 7) {
@@ -83,11 +87,59 @@
       }
       if (span.scrollWidth > seg.clientWidth - 4) {
         span.style.display = "none";
+        seg.classList.add("text-hidden");
       }
     });
   }
   window.addEventListener("load", fitVerlaufBarText);
   window.addEventListener("resize", fitVerlaufBarText);
+
+  // Tooltip fuer zu schmale Balkensegmente (Ticket #19 AC3 Nachtrag): der
+  // EUR-Betrag erscheint bei Hover oder Long-Press ausserhalb des
+  // "overflow:hidden"-Balkens, daher als eigenes, fixed-positioniertes
+  // Element statt als Kind des Segments.
+  (function () {
+    var tooltip = document.createElement("div");
+    tooltip.className = "verlauf-tooltip";
+    document.body.appendChild(tooltip);
+
+    function showTooltip(seg) {
+      var eur = seg.getAttribute("data-eur");
+      if (!eur) return;
+      tooltip.textContent = eur;
+      tooltip.style.display = "block";
+      var rect = seg.getBoundingClientRect();
+      var top = rect.top - tooltip.offsetHeight - 6;
+      var left = rect.left + rect.width / 2 - tooltip.offsetWidth / 2;
+      left = Math.max(4, Math.min(left, window.innerWidth - tooltip.offsetWidth - 4));
+      tooltip.style.top = top + "px";
+      tooltip.style.left = left + "px";
+    }
+    function hideTooltip() {
+      tooltip.style.display = "none";
+    }
+
+    var longPressTimer = null;
+    document.querySelectorAll(".bar-track > div").forEach(function (seg) {
+      seg.addEventListener("mouseenter", function () {
+        if (seg.classList.contains("text-hidden")) showTooltip(seg);
+      });
+      seg.addEventListener("mouseleave", hideTooltip);
+      seg.addEventListener("touchstart", function () {
+        longPressTimer = setTimeout(function () {
+          if (seg.classList.contains("text-hidden")) showTooltip(seg);
+        }, 500);
+      }, { passive: true });
+      seg.addEventListener("touchend", function () {
+        clearTimeout(longPressTimer);
+        hideTooltip();
+      });
+      seg.addEventListener("touchcancel", function () {
+        clearTimeout(longPressTimer);
+        hideTooltip();
+      });
+    });
+  })();
 
   // EUR/Verbrauch-Umschalter (Ticket #39) - Wahl wird im Browser gemerkt,
   // damit sie bei erneutem Besuch erhalten bleibt.
