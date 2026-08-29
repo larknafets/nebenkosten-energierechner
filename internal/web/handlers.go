@@ -118,6 +118,12 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		previousPeriod, err := store.GetLatestPeriod(db)
+		if err != nil {
+			http.Error(w, "latest period: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		data := struct {
 			ReadingDate         string
 			Apartments          []store.Apartment
@@ -126,14 +132,36 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			PreviousReadingDate string
 			HasOutlierBaseline  bool
 			OutlierAvg          map[string]float64
+
+			// Prefill for the "Preise & Personen" step (Ticket #28) - not a
+			// data-prev warning target like the meter readings above, just an
+			// editable starting value, so these are absent (zero-value/nil)
+			// rather than warned-about when there's no previous period.
+			PreviousStrompreis        float64
+			PreviousFrischwasserPreis float64
+			PreviousAbwasserPreis     float64
+			PreviousPersonen          map[int64]int64
+			// PreviousHeizungGewichtung always has a valid value (defaulting
+			// to 0.7, Ticket #27's default) since the radio group needs
+			// exactly one option checked - unlike the blank-when-absent price
+			// fields above, this can't just be left empty.
+			PreviousHeizungGewichtung float64
 		}{
-			ReadingDate: time.Now().Format("2006-01-02"),
-			Apartments:  apartments,
+			ReadingDate:               time.Now().Format("2006-01-02"),
+			Apartments:                apartments,
+			PreviousHeizungGewichtung: 0.7,
 		}
 		if len(recent) > 0 {
 			data.HasPrevious = true
 			data.PreviousReadings = recent[0].Readings
 			data.PreviousReadingDate = recent[0].ReadingDate
+		}
+		if previousPeriod != nil {
+			data.PreviousStrompreis = previousPeriod.Strompreis
+			data.PreviousFrischwasserPreis = previousPeriod.FrischwasserPreis
+			data.PreviousAbwasserPreis = previousPeriod.AbwasserPreis
+			data.PreviousPersonen = previousPeriod.PersonenByApartment
+			data.PreviousHeizungGewichtung = previousPeriod.HeizungWaermeGewichtung
 		}
 		if len(recent) >= 4 {
 			avg := make(map[string]float64, len(store.MeterKeys))

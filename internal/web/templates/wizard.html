@@ -43,13 +43,13 @@
 
   <div class="c-pane" data-step="4">
     <div class="grid grid-3">
-      <div class="field"><label>Strompreis (EUR/kWh)</label><input type="number" step="0.01" name="strompreis" required></div>
-      <div class="field"><label>Frischwasser (EUR/m³)</label><input type="number" step="0.01" name="frischwasser_preis" required></div>
-      <div class="field"><label>Abwasser (EUR/m³)</label><input type="number" step="0.01" name="abwasser_preis" required></div>
+      <div class="field"><label>Strompreis (EUR/kWh)</label><input type="number" step="0.01" name="strompreis" {{if .HasPrevious}}value="{{.PreviousStrompreis}}"{{end}} required></div>
+      <div class="field"><label>Frischwasser (EUR/m³)</label><input type="number" step="0.01" name="frischwasser_preis" {{if .HasPrevious}}value="{{.PreviousFrischwasserPreis}}"{{end}} required></div>
+      <div class="field"><label>Abwasser (EUR/m³)</label><input type="number" step="0.01" name="abwasser_preis" {{if .HasPrevious}}value="{{.PreviousAbwasserPreis}}"{{end}} required></div>
     </div>
     <div class="grid grid-2">
       {{range .Apartments}}
-      <div class="field"><label>Personen {{.Name}}</label><input type="number" name="personen_{{.ID}}" required></div>
+      <div class="field"><label>Personen {{.Name}}</label><input type="number" name="personen_{{.ID}}" {{if $.HasPrevious}}value="{{index $.PreviousPersonen .ID}}"{{end}} required></div>
       {{end}}
     </div>
     <div class="grid grid-2">
@@ -60,9 +60,9 @@
     <div class="field">
       <label>Heizung/Warmwasser-Gewichtung (Wärmeverbrauch / Wohnfläche)</label>
       <div class="radio-options">
-        <label class="radio-option"><input type="radio" name="heizung_gewichtung" value="0.7" checked> 70% / 30%</label>
-        <label class="radio-option"><input type="radio" name="heizung_gewichtung" value="0.6"> 60% / 40%</label>
-        <label class="radio-option"><input type="radio" name="heizung_gewichtung" value="0.5"> 50% / 50%</label>
+        <label class="radio-option"><input type="radio" name="heizung_gewichtung" value="0.7" {{if eq .PreviousHeizungGewichtung 0.7}}checked{{end}}> 70% / 30%</label>
+        <label class="radio-option"><input type="radio" name="heizung_gewichtung" value="0.6" {{if eq .PreviousHeizungGewichtung 0.6}}checked{{end}}> 60% / 40%</label>
+        <label class="radio-option"><input type="radio" name="heizung_gewichtung" value="0.5" {{if eq .PreviousHeizungGewichtung 0.5}}checked{{end}}> 50% / 50%</label>
       </div>
     </div>
   </div>
