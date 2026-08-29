@@ -259,6 +259,23 @@ func TestParseHeizungGewichtung(t *testing.T) {
 	}
 }
 
+func TestIngressBase(t *testing.T) {
+	cases := []struct {
+		header string
+		want   string
+	}{
+		{"", ""},
+		{"/", ""},
+		{"/api/hassio_ingress/xyz/", "/api/hassio_ingress/xyz"},
+		{"/api/hassio_ingress/xyz", "/api/hassio_ingress/xyz"},
+	}
+	for _, c := range cases {
+		if got := ingressBase(c.header); got != c.want {
+			t.Errorf("ingressBase(%q) = %q, want %q", c.header, got, c.want)
+		}
+	}
+}
+
 func TestGermanPeriodLabel(t *testing.T) {
 	cases := []struct {
 		readingDate string

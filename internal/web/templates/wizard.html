@@ -1,7 +1,7 @@
 {{define "content"}}
 <h1>Ablesung erfassen</h1>
 
-<form method="post" action="/ablesungen" class="panel">
+<form method="post" action="{{.Base}}/ablesungen" class="panel">
   <div class="field" style="max-width:220px">
     <label>Ablesedatum</label>
     <input type="date" name="reading_date" value="{{.ReadingDate}}" required {{if .HasPrevious}}data-prev-date="{{.PreviousReadingDate}}"{{end}}>

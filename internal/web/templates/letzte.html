@@ -1,9 +1,9 @@
 {{define "content"}}
 <h1>Letzte Ablesung</h1>
-<p class="muted"><a href="/dashboard">Zum Dashboard</a></p>
+<p class="muted"><a href="{{.Base}}/dashboard">Zum Dashboard</a></p>
 
 {{if not .Period}}
-<p class="muted">Noch keine Ablesung erfasst. <a href="/ablesungen/neu">Jetzt erfassen</a>.</p>
+<p class="muted">Noch keine Ablesung erfasst. <a href="{{.Base}}/ablesungen/neu">Jetzt erfassen</a>.</p>
 {{else}}
 <div class="panel">
   <p><strong>Ablesedatum:</strong> {{.Period.ReadingDate}}</p>
@@ -74,6 +74,6 @@
   {{end}}
 </div>
 
-<p style="margin-top:1rem"><a href="/ablesungen/neu">Neue Ablesung erfassen</a></p>
+<p style="margin-top:1rem"><a href="{{.Base}}/ablesungen/neu">Neue Ablesung erfassen</a></p>
 {{end}}
 {{end}}

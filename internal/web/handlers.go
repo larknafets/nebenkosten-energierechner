@@ -11,6 +11,7 @@ import (
 	"html/template"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/larknafets/nebenkosten-energierechner/internal/calc"
@@ -94,9 +95,23 @@ func NewMux(db *sql.DB) *http.ServeMux {
 	return mux
 }
 
+// ingressBase turns Home Assistant's X-Ingress-Path header (the path
+// prefix its Supervisor proxy strips before forwarding the request here -
+// see Ticket #22) into a base to prepend onto every generated link, form
+// action, and redirect, so they still resolve through the proxy. Empty for
+// direct access (no header) - trailing slash trimmed so callers can always
+// just concatenate "<base>/some/path" without a double slash.
+func ingressBase(header string) string {
+	return strings.TrimSuffix(header, "/")
+}
+
+func requestBase(r *http.Request) string {
+	return ingressBase(r.Header.Get("X-Ingress-Path"))
+}
+
 func handleIndex(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/ablesungen/letzte", http.StatusFound)
+		http.Redirect(w, r, requestBase(r)+"/ablesungen/letzte", http.StatusFound)
 	}
 }
 
@@ -125,6 +140,7 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 		}
 
 		data := struct {
+			Base                string
 			ReadingDate         string
 			Apartments          []store.Apartment
 			HasPrevious         bool
@@ -147,6 +163,7 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			// fields above, this can't just be left empty.
 			PreviousHeizungGewichtung float64
 		}{
+			Base:                      requestBase(r),
 			ReadingDate:               time.Now().Format("2006-01-02"),
 			Apartments:                apartments,
 			PreviousHeizungGewichtung: 0.7,
@@ -268,7 +285,7 @@ func handleCreateAblesung(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		http.Redirect(w, r, "/ablesungen/letzte", http.StatusFound)
+		http.Redirect(w, r, requestBase(r)+"/ablesungen/letzte", http.StatusFound)
 	}
 }
 
@@ -344,6 +361,7 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 		}
 
 		data := struct {
+			Base       string
 			Period     *store.LatestPeriod
 			Apartments []store.Apartment
 			Personen   map[int64]int64
@@ -357,6 +375,7 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 			Heizung    *calc.HeizungErgebnis
 			KostenNote string
 		}{
+			Base:       requestBase(r),
 			Period:     period,
 			Apartments: apartments,
 			Personen:   personen,
@@ -630,6 +649,7 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 		}
 
 		data := struct {
+			Base           string
 			Period         *store.LatestPeriod
 			PeriodLabel    string
 			Cards          []dashboardCard
@@ -637,6 +657,7 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 			HasVerlauf     bool
 			VerlaufSpalten []verlaufColumn
 		}{
+			Base:           requestBase(r),
 			Period:         period,
 			PeriodLabel:    periodLabel,
 			Cards:          cards,

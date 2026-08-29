@@ -2,7 +2,7 @@
 <h1>Nebenkosten-Energierechner</h1>
 
 {{if not .Period}}
-<p class="muted">Noch keine Ablesung erfasst. <a href="/ablesungen/neu">Jetzt erfassen</a>.</p>
+<p class="muted">Noch keine Ablesung erfasst. <a href="{{.Base}}/ablesungen/neu">Jetzt erfassen</a>.</p>
 {{else}}
 <h2>{{.PeriodLabel}}</h2>
 
@@ -27,7 +27,7 @@
 </div>
 {{end}}
 
-<p style="margin-top:1rem"><a href="/ablesungen/letzte">Alle Details</a></p>
+<p style="margin-top:1rem"><a href="{{.Base}}/ablesungen/letzte">Alle Details</a></p>
 {{end}}
 
 {{if .HasVerlauf}}
