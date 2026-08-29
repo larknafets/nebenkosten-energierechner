@@ -213,24 +213,33 @@ func GetLatestPeriod(db *sql.DB) (*LatestPeriod, error) {
 		return nil, err
 	}
 
-	occRows, err := db.Query(
-		`SELECT apartment_id, personen FROM period_occupancy WHERE period_id = ?`,
-		p.ID,
-	)
+	p.PersonenByApartment, err = PersonenByApartment(db, p.ID)
 	if err != nil {
-		return nil, fmt.Errorf("query occupancy: %w", err)
-	}
-	defer occRows.Close()
-	for occRows.Next() {
-		var apartmentID, personen int64
-		if err := occRows.Scan(&apartmentID, &personen); err != nil {
-			return nil, fmt.Errorf("scan occupancy: %w", err)
-		}
-		p.PersonenByApartment[apartmentID] = personen
-	}
-	if err := occRows.Err(); err != nil {
 		return nil, err
 	}
 
 	return &p, nil
+}
+
+// PersonenByApartment returns the given period's occupancy (apartment id ->
+// Personenzahl), as recorded at that period's Ablesung.
+func PersonenByApartment(db *sql.DB, periodID int64) (map[int64]int64, error) {
+	rows, err := db.Query(
+		`SELECT apartment_id, personen FROM period_occupancy WHERE period_id = ?`,
+		periodID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query occupancy: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[int64]int64{}
+	for rows.Next() {
+		var apartmentID, personen int64
+		if err := rows.Scan(&apartmentID, &personen); err != nil {
+			return nil, fmt.Errorf("scan occupancy: %w", err)
+		}
+		out[apartmentID] = personen
+	}
+	return out, rows.Err()
 }

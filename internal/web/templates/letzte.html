@@ -40,6 +40,23 @@
     </tbody>
   </table>
   {{end}}
+
+  <h3 style="margin-top:1.25rem">Wasserkosten</h3>
+  {{if .KostenNote}}
+  <p class="muted">{{.KostenNote}}</p>
+  {{else if .Wasser}}
+  <table class="letzte">
+    <thead><tr><th></th><th>Wohnung 1</th><th>Wohnung 2</th></tr></thead>
+    <tbody>
+      <tr><td>Personen</td><td>{{.Wasser.PersonenW1}}</td><td>{{.Wasser.PersonenW2}}</td></tr>
+      <tr><td>Warmwasseraufbereitung-Anteil</td><td>{{.Wasser.WWAnteilW1}} m³</td><td>{{.Wasser.WWAnteilW2}} m³</td></tr>
+      <tr><td>Frischwasser</td><td>{{.Wasser.FrischwasserW1}} m³</td><td>{{.Wasser.FrischwasserW2}} m³</td></tr>
+      <tr><td>Abwasser</td><td>{{.Wasser.AbwasserW1}} m³</td><td>{{.Wasser.AbwasserW2}} m³</td></tr>
+      <tr><td><strong>Kosten Frischwasser</strong></td><td><strong>{{.Wasser.KostenFrischwasserW1}} EUR</strong></td><td><strong>{{.Wasser.KostenFrischwasserW2}} EUR</strong></td></tr>
+      <tr><td><strong>Kosten Abwasser</strong></td><td><strong>{{.Wasser.KostenAbwasserW1}} EUR</strong></td><td><strong>{{.Wasser.KostenAbwasserW2}} EUR</strong></td></tr>
+    </tbody>
+  </table>
+  {{end}}
 </div>
 
 <p style="margin-top:1rem"><a href="/ablesungen/neu">Neue Ablesung erfassen</a></p>

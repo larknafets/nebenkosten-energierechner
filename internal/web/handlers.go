@@ -217,6 +217,7 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 		}
 
 		var strom *calc.StromErgebnis
+		var wasser *calc.WasserErgebnis
 		var kostenNote string
 		if period != nil {
 			strom, err = calc.Strom(db, period.ID)
@@ -225,6 +226,12 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 			} else if err != nil {
 				http.Error(w, "strom kosten: "+err.Error(), http.StatusInternalServerError)
 				return
+			} else {
+				wasser, err = calc.Wasser(db, period.ID)
+				if err != nil {
+					http.Error(w, "wasser kosten: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
 			}
 		}
 
@@ -238,6 +245,7 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 				Unit  string
 			}
 			Strom      *calc.StromErgebnis
+			Wasser     *calc.WasserErgebnis
 			KostenNote string
 		}{
 			Period:     period,
@@ -245,6 +253,7 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 			Personen:   personen,
 			Meters:     meters,
 			Strom:      strom,
+			Wasser:     wasser,
 			KostenNote: kostenNote,
 		}
 
