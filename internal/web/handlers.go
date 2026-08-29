@@ -154,6 +154,21 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// heizungGewichtungOptions are the only allowed Heizungs-Split-Gewichtungen
+// (Ticket #27) - a fixed choice, not a free-text field, so an invalid or
+// out-of-range value can't silently skew every apartment's Heizungskosten.
+var heizungGewichtungOptions = map[string]float64{"0.7": 0.7, "0.6": 0.6, "0.5": 0.5}
+
+// parseHeizungGewichtung validates the Wizard's Heizung-Gewichtung form
+// value against heizungGewichtungOptions.
+func parseHeizungGewichtung(raw string) (float64, error) {
+	v, ok := heizungGewichtungOptions[raw]
+	if !ok {
+		return 0, fmt.Errorf("invalid Heizung-Gewichtung %q (muss 0.7, 0.6 oder 0.5 sein)", raw)
+	}
+	return v, nil
+}
+
 func handleCreateAblesung(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
@@ -185,6 +200,12 @@ func handleCreateAblesung(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		heizungGewichtung, err := parseHeizungGewichtung(r.FormValue("heizung_gewichtung"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		personen := make(map[int64]int64, len(apartments))
 		qm := make(map[int64]float64, len(apartments))
 		for _, a := range apartments {
@@ -205,13 +226,14 @@ func handleCreateAblesung(db *sql.DB) http.HandlerFunc {
 		}
 
 		_, err = store.CreatePeriod(db, store.PeriodInput{
-			ReadingDate:       r.FormValue("reading_date"),
-			Strompreis:        strompreis,
-			FrischwasserPreis: frischwasserPreis,
-			AbwasserPreis:     abwasserPreis,
-			Readings:          readings,
-			Personen:          personen,
-			QM:                qm,
+			ReadingDate:             r.FormValue("reading_date"),
+			Strompreis:              strompreis,
+			FrischwasserPreis:       frischwasserPreis,
+			AbwasserPreis:           abwasserPreis,
+			HeizungWaermeGewichtung: heizungGewichtung,
+			Readings:                readings,
+			Personen:                personen,
+			QM:                      qm,
 		})
 		if err != nil {
 			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)

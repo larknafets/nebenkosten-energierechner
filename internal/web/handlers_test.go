@@ -228,6 +228,37 @@ func TestMitJahrestrennern(t *testing.T) {
 	})
 }
 
+func TestParseHeizungGewichtung(t *testing.T) {
+	cases := []struct {
+		raw     string
+		want    float64
+		wantErr bool
+	}{
+		{"0.7", 0.7, false},
+		{"0.6", 0.6, false},
+		{"0.5", 0.5, false},
+		{"0.8", 0, true},
+		{"70", 0, true},
+		{"", 0, true},
+		{"abc", 0, true},
+	}
+	for _, c := range cases {
+		got, err := parseHeizungGewichtung(c.raw)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("parseHeizungGewichtung(%q) = %v, want error", c.raw, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("parseHeizungGewichtung(%q) unexpected error: %v", c.raw, err)
+		}
+		if got != c.want {
+			t.Errorf("parseHeizungGewichtung(%q) = %v, want %v", c.raw, got, c.want)
+		}
+	}
+}
+
 func TestGermanPeriodLabel(t *testing.T) {
 	cases := []struct {
 		readingDate string

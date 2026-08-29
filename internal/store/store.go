@@ -41,12 +41,50 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 
+	// CREATE TABLE IF NOT EXISTS above only creates periods on a brand-new
+	// database - a pre-existing one (from before Issue #27) needs this
+	// column added explicitly. SQLite has no "ADD COLUMN IF NOT EXISTS", so
+	// check first.
+	if err := ensurePeriodsHeizungGewichtungColumn(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate heizung_waerme_gewichtung column: %w", err)
+	}
+
 	if err := seed(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("seed master data: %w", err)
 	}
 
 	return db, nil
+}
+
+// ensurePeriodsHeizungGewichtungColumn adds the heizung_waerme_gewichtung
+// column to an existing periods table that predates it (Issue #27),
+// defaulting existing rows to 0.7 (the previously hardcoded 70/30 split).
+func ensurePeriodsHeizungGewichtungColumn(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(periods)`)
+	if err != nil {
+		return fmt.Errorf("inspect periods columns: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scan periods column: %w", err)
+		}
+		if name == "heizung_waerme_gewichtung" {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`ALTER TABLE periods ADD COLUMN heizung_waerme_gewichtung REAL NOT NULL DEFAULT 0.7`)
+	return err
 }
 
 type apartmentSeed struct {

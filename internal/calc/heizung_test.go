@@ -13,10 +13,11 @@ func TestHeizung_70_30_Verteilung(t *testing.T) {
 	mustCreatePeriod(t, db, "2026-10-01", 0.22, baseReadings(nil))
 
 	id, err := store.CreatePeriod(db, store.PeriodInput{
-		ReadingDate:       "2026-11-01",
-		Strompreis:        0.22,
-		FrischwasserPreis: 1.46,
-		AbwasserPreis:     4.87,
+		ReadingDate:             "2026-11-01",
+		Strompreis:              0.22,
+		FrischwasserPreis:       1.46,
+		AbwasserPreis:           4.87,
+		HeizungWaermeGewichtung: 0.7,
 		Readings: baseReadings(map[string]float64{
 			"strom_gesamt":      18420,
 			"strom_wohnung2":    6120,
@@ -59,10 +60,11 @@ func TestHeizung_KeinWaermeVerbrauch_FaelltAufHaelftigeVerteilungZurueck(t *test
 	mustCreatePeriod(t, db, "2026-10-01", 0.22, baseReadings(nil))
 
 	id, err := store.CreatePeriod(db, store.PeriodInput{
-		ReadingDate:       "2026-11-01",
-		Strompreis:        0.22,
-		FrischwasserPreis: 1.46,
-		AbwasserPreis:     4.87,
+		ReadingDate:             "2026-11-01",
+		Strompreis:              0.22,
+		FrischwasserPreis:       1.46,
+		AbwasserPreis:           4.87,
+		HeizungWaermeGewichtung: 0.7,
 		Readings: baseReadings(map[string]float64{
 			"strom_gesamt":      1000,
 			"strom_waermepumpe": 500,

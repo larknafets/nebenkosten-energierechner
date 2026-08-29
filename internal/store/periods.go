@@ -46,13 +46,14 @@ func Apartments(db *sql.DB) ([]Apartment, error) {
 
 // PeriodInput is one monthly reading, ready to be persisted.
 type PeriodInput struct {
-	ReadingDate       string // YYYY-MM-DD
-	Strompreis        float64
-	FrischwasserPreis float64
-	AbwasserPreis     float64
-	Readings          map[string]float64 // meter key -> Zählerstand, must cover all of MeterKeys
-	Personen          map[int64]int64    // apartment id -> Personenzahl
-	QM                map[int64]float64  // apartment id -> Wohnfläche (writes through to apartments.qm)
+	ReadingDate             string // YYYY-MM-DD
+	Strompreis              float64
+	FrischwasserPreis       float64
+	AbwasserPreis           float64
+	HeizungWaermeGewichtung float64            // Heizungs-Split-Gewichtung (0.7/0.6/0.5), Ticket #27
+	Readings                map[string]float64 // meter key -> Zählerstand, must cover all of MeterKeys
+	Personen                map[int64]int64    // apartment id -> Personenzahl
+	QM                      map[int64]float64  // apartment id -> Wohnfläche (writes through to apartments.qm)
 }
 
 // CreatePeriod inserts a new period with its meter readings and occupancy in
@@ -67,9 +68,9 @@ func CreatePeriod(db *sql.DB, in PeriodInput) (periodID int64, err error) {
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`INSERT INTO periods (reading_date, strompreis, frischwasser_preis, abwasser_preis)
-		 VALUES (?, ?, ?, ?)`,
-		in.ReadingDate, in.Strompreis, in.FrischwasserPreis, in.AbwasserPreis,
+		`INSERT INTO periods (reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung)
+		 VALUES (?, ?, ?, ?, ?)`,
+		in.ReadingDate, in.Strompreis, in.FrischwasserPreis, in.AbwasserPreis, in.HeizungWaermeGewichtung,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert period: %w", err)
@@ -117,13 +118,14 @@ func CreatePeriod(db *sql.DB, in PeriodInput) (periodID int64, err error) {
 // LatestPeriod is a period together with its readings and occupancy, as
 // shown on the "letzte Ablesung" view.
 type LatestPeriod struct {
-	ID                  int64
-	ReadingDate         string
-	Strompreis          float64
-	FrischwasserPreis   float64
-	AbwasserPreis       float64
-	Readings            map[string]float64
-	PersonenByApartment map[int64]int64
+	ID                      int64
+	ReadingDate             string
+	Strompreis              float64
+	FrischwasserPreis       float64
+	AbwasserPreis           float64
+	HeizungWaermeGewichtung float64
+	Readings                map[string]float64
+	PersonenByApartment     map[int64]int64
 }
 
 // PeriodReadings is one period's per-meter Zählerstand, as used for the
@@ -203,14 +205,14 @@ func AllPeriods(db *sql.DB) ([]PeriodSummary, error) {
 // exist yet.
 func GetLatestPeriod(db *sql.DB) (*LatestPeriod, error) {
 	row := db.QueryRow(
-		`SELECT id, reading_date, strompreis, frischwasser_preis, abwasser_preis
+		`SELECT id, reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung
 		 FROM periods ORDER BY reading_date DESC, id DESC LIMIT 1`,
 	)
 	p := LatestPeriod{
 		Readings:            map[string]float64{},
 		PersonenByApartment: map[int64]int64{},
 	}
-	if err := row.Scan(&p.ID, &p.ReadingDate, &p.Strompreis, &p.FrischwasserPreis, &p.AbwasserPreis); err != nil {
+	if err := row.Scan(&p.ID, &p.ReadingDate, &p.Strompreis, &p.FrischwasserPreis, &p.AbwasserPreis, &p.HeizungWaermeGewichtung); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}

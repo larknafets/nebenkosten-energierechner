@@ -10,7 +10,9 @@ import (
 // HeizungErgebnis is the Heizung/Warmwasser-Kostenverteilung result for one
 // period. See https://github.com/larknafets/nebenkosten-energierechner/issues/16:
 // die Wärmepumpen-Stromkosten (aus der Strom-Kostenberechnung, #14) werden
-// 70/30 nach Wärmeverbrauch und Wohnfläche auf beide Wohnungen verteilt.
+// nach Wärmeverbrauch und Wohnfläche auf beide Wohnungen verteilt, gewichtet
+// mit der Periode-eigenen HeizungWaermeGewichtung (0.7/0.6/0.5, Default 0.7
+// - Issue #27; früher fix 70/30).
 type HeizungErgebnis struct {
 	TotalHeizungskostenUnrounded float64
 
@@ -35,6 +37,13 @@ func Heizung(db *sql.DB, periodID int64) (*HeizungErgebnis, error) {
 	if err != nil {
 		return nil, fmt.Errorf("strom: %w", err)
 	}
+
+	period, err := store.GetPeriodByID(db, periodID)
+	if err != nil {
+		return nil, fmt.Errorf("period: %w", err)
+	}
+	gewichtungWaerme := period.HeizungWaermeGewichtung
+	gewichtungFlaeche := 1 - gewichtungWaerme
 
 	verbrauch, err := store.Verbrauch(db, periodID)
 	if err != nil {
@@ -81,7 +90,7 @@ func Heizung(db *sql.DB, periodID int64) (*HeizungErgebnis, error) {
 		RatioFlaecheW1: ratioFlaecheW1,
 		RatioFlaecheW2: ratioFlaecheW2,
 
-		KostenHeizungW1: Round2(total * (0.7*ratioWaermeW1 + 0.3*ratioFlaecheW1)),
-		KostenHeizungW2: Round2(total * (0.7*ratioWaermeW2 + 0.3*ratioFlaecheW2)),
+		KostenHeizungW1: Round2(total * (gewichtungWaerme*ratioWaermeW1 + gewichtungFlaeche*ratioFlaecheW1)),
+		KostenHeizungW2: Round2(total * (gewichtungWaerme*ratioWaermeW2 + gewichtungFlaeche*ratioFlaecheW2)),
 	}, nil
 }
