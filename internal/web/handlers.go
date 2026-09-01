@@ -124,6 +124,7 @@ var meterDisplays = []meterDisplay{
 	{"wasser_warmwasseraufbereitung", "Wasser Warmwasseraufbereitung", "m³"},
 	{"waerme_wohnung1", "Wärme Wohnung 1", "MWh"},
 	{"waerme_wohnung2", "Wärme Wohnung 2", "MWh"},
+	{"strom_einspeisung", "Einspeisung (PV)", "kWh"},
 }
 
 // NewMux wires up the wizard and read routes.
@@ -194,6 +195,7 @@ type wizardData struct {
 	PreviousStrompreis        float64
 	PreviousFrischwasserPreis float64
 	PreviousAbwasserPreis     float64
+	PreviousEinspeisungPreis  float64
 	PreviousPersonen          map[int64]int64
 	// PreviousHeizungGewichtung always has a valid value (defaulting to
 	// 0.7, Ticket #27's default) since the radio group needs exactly one
@@ -260,6 +262,7 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			data.PreviousStrompreis = previousPeriod.Strompreis
 			data.PreviousFrischwasserPreis = previousPeriod.FrischwasserPreis
 			data.PreviousAbwasserPreis = previousPeriod.AbwasserPreis
+			data.PreviousEinspeisungPreis = previousPeriod.EinspeisungPreis
 			data.PreviousPersonen = previousPeriod.PersonenByApartment
 			data.PreviousHeizungGewichtung = previousPeriod.HeizungWaermeGewichtung
 		}
@@ -317,6 +320,7 @@ func handleEditWizardForm(db *sql.DB) http.HandlerFunc {
 			PreviousStrompreis:        target.Strompreis,
 			PreviousFrischwasserPreis: target.FrischwasserPreis,
 			PreviousAbwasserPreis:     target.AbwasserPreis,
+			PreviousEinspeisungPreis:  target.EinspeisungPreis,
 			PreviousPersonen:          target.PersonenByApartment,
 			PreviousHeizungGewichtung: target.HeizungWaermeGewichtung,
 		}
@@ -364,7 +368,8 @@ func parsePeriodInput(r *http.Request, apartments []store.Apartment) (store.Peri
 	strompreis, err1 := strconv.ParseFloat(r.FormValue("strompreis"), 64)
 	frischwasserPreis, err2 := strconv.ParseFloat(r.FormValue("frischwasser_preis"), 64)
 	abwasserPreis, err3 := strconv.ParseFloat(r.FormValue("abwasser_preis"), 64)
-	if err1 != nil || err2 != nil || err3 != nil {
+	einspeisungPreis, err4 := strconv.ParseFloat(r.FormValue("einspeisung_preis"), 64)
+	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		return store.PeriodInput{}, fmt.Errorf("invalid price value")
 	}
 
@@ -396,6 +401,7 @@ func parsePeriodInput(r *http.Request, apartments []store.Apartment) (store.Peri
 		FrischwasserPreis:       frischwasserPreis,
 		AbwasserPreis:           abwasserPreis,
 		HeizungWaermeGewichtung: heizungGewichtung,
+		EinspeisungPreis:        einspeisungPreis,
 		Readings:                readings,
 		Personen:                personen,
 		QM:                      qm,
@@ -543,10 +549,11 @@ func handleDeleteAblesung(db *sql.DB) http.HandlerFunc {
 // user-facing note for the "no previous period yet" case both the "letzte
 // Ablesung" and Dashboard views need to show identically.
 type kosten struct {
-	Strom      *calc.StromErgebnis
-	Wasser     *calc.WasserErgebnis
-	Heizung    *calc.HeizungErgebnis
-	KostenNote string
+	Strom       *calc.StromErgebnis
+	Wasser      *calc.WasserErgebnis
+	Heizung     *calc.HeizungErgebnis
+	Einspeisung *calc.EinspeisungErgebnis
+	KostenNote  string
 }
 
 func berechneKosten(db *sql.DB, periodID int64) (kosten, error) {
@@ -567,7 +574,12 @@ func berechneKosten(db *sql.DB, periodID int64) (kosten, error) {
 		return kosten{}, fmt.Errorf("heizung kosten: %w", err)
 	}
 
-	return kosten{Strom: strom, Wasser: wasser, Heizung: heizung}, nil
+	einspeisung, err := calc.Einspeisung(db, periodID)
+	if err != nil {
+		return kosten{}, fmt.Errorf("einspeisung: %w", err)
+	}
+
+	return kosten{Strom: strom, Wasser: wasser, Heizung: heizung, Einspeisung: einspeisung}, nil
 }
 
 // handleAblesungenListe lists every recorded period (Ticket #43), newest
@@ -672,10 +684,11 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 				Value float64
 				Unit  string
 			}
-			Strom      *calc.StromErgebnis
-			Wasser     *calc.WasserErgebnis
-			Heizung    *calc.HeizungErgebnis
-			KostenNote string
+			Strom       *calc.StromErgebnis
+			Wasser      *calc.WasserErgebnis
+			Heizung     *calc.HeizungErgebnis
+			Einspeisung *calc.EinspeisungErgebnis
+			KostenNote  string
 		}{
 			Base:          requestBase(r),
 			Period:        period,
@@ -687,6 +700,7 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 			Strom:         k.Strom,
 			Wasser:        k.Wasser,
 			Heizung:       k.Heizung,
+			Einspeisung:   k.Einspeisung,
 			KostenNote:    k.KostenNote,
 		}
 

@@ -367,3 +367,120 @@ func TestEnsurePeriodsHeizungGewichtungColumn(t *testing.T) {
 		}
 	})
 }
+
+func TestEnsurePeriodsEinspeisungPreisColumn(t *testing.T) {
+	t.Run("fuegt Spalte zu einer alten Tabelle ohne sie hinzu, mit Default 0", func(t *testing.T) {
+		db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "old.db"))
+		if err != nil {
+			t.Fatalf("open sqlite: %v", err)
+		}
+		t.Cleanup(func() { db.Close() })
+
+		// Pre-#47-Schema: periods ohne einspeisung_preis.
+		if _, err := db.Exec(`CREATE TABLE periods (
+			id                        INTEGER PRIMARY KEY,
+			reading_date              TEXT NOT NULL,
+			strompreis                REAL NOT NULL,
+			frischwasser_preis        REAL NOT NULL,
+			abwasser_preis            REAL NOT NULL,
+			heizung_waerme_gewichtung REAL NOT NULL DEFAULT 0.7
+		)`); err != nil {
+			t.Fatalf("create old-shape periods table: %v", err)
+		}
+		if _, err := db.Exec(
+			`INSERT INTO periods (reading_date, strompreis, frischwasser_preis, abwasser_preis) VALUES (?, ?, ?, ?)`,
+			"2026-01-01", 0.22, 1.46, 4.87,
+		); err != nil {
+			t.Fatalf("insert pre-existing row: %v", err)
+		}
+
+		if err := ensurePeriodsEinspeisungPreisColumn(db); err != nil {
+			t.Fatalf("ensurePeriodsEinspeisungPreisColumn: %v", err)
+		}
+
+		var preis float64
+		if err := db.QueryRow(`SELECT einspeisung_preis FROM periods WHERE reading_date = '2026-01-01'`).Scan(&preis); err != nil {
+			t.Fatalf("query migrated column: %v", err)
+		}
+		if preis != 0 {
+			t.Errorf("pre-existing row's einspeisung_preis = %v, want 0 (backfilled default)", preis)
+		}
+
+		// Idempotent: ein zweiter Aufruf darf nicht mit "duplicate column" fehlschlagen.
+		if err := ensurePeriodsEinspeisungPreisColumn(db); err != nil {
+			t.Fatalf("second ensurePeriodsEinspeisungPreisColumn call: %v", err)
+		}
+	})
+
+	t.Run("neue Tabelle hat die Spalte bereits - no-op", func(t *testing.T) {
+		db := openTestDB(t)
+		if err := ensurePeriodsEinspeisungPreisColumn(db); err != nil {
+			t.Fatalf("ensurePeriodsEinspeisungPreisColumn on an already-current schema: %v", err)
+		}
+	})
+}
+
+// TestSeed_AddsNewMeterToExistingDB verifies Ticket #47: seed() runs on
+// every Open() and is additive via ON CONFLICT DO NOTHING, so a meter added
+// after a database was first created (like strom_einspeisung) still gets
+// backfilled into an existing installation without a dedicated migration.
+func TestSeed_AddsNewMeterToExistingDB(t *testing.T) {
+	db := openTestDB(t)
+
+	if _, err := db.Exec(`DELETE FROM meters WHERE key = 'strom_einspeisung'`); err != nil {
+		t.Fatalf("simulate pre-Ticket-#47 db: %v", err)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM meters WHERE key = 'strom_einspeisung'`).Scan(&count); err != nil {
+		t.Fatalf("count meters: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("setup: strom_einspeisung still present after DELETE")
+	}
+
+	if err := seed(db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if err := db.QueryRow(`SELECT count(*) FROM meters WHERE key = 'strom_einspeisung'`).Scan(&count); err != nil {
+		t.Fatalf("count meters after seed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("strom_einspeisung meters count after seed = %d, want 1 (backfilled)", count)
+	}
+}
+
+func TestEinspeisungPreis_Roundtrip(t *testing.T) {
+	db := openTestDB(t)
+	p1 := mustCreatePeriod(t, db, "2026-09-01", baseReadings(nil))
+
+	if err := UpdatePeriod(db, p1, PeriodInput{
+		ReadingDate:             "2026-09-01",
+		Strompreis:              0.22,
+		FrischwasserPreis:       1.46,
+		AbwasserPreis:           4.87,
+		HeizungWaermeGewichtung: 0.7,
+		EinspeisungPreis:        0.082,
+		Readings:                baseReadings(nil),
+		Personen:                map[int64]int64{1: 2, 2: 1},
+		QM:                      map[int64]float64{1: 116.23, 2: 86},
+	}); err != nil {
+		t.Fatalf("UpdatePeriod: %v", err)
+	}
+
+	got, err := GetPeriodDetails(db, p1)
+	if err != nil {
+		t.Fatalf("GetPeriodDetails: %v", err)
+	}
+	if got.EinspeisungPreis != 0.082 {
+		t.Errorf("EinspeisungPreis = %v, want 0.082", got.EinspeisungPreis)
+	}
+
+	byID, err := GetPeriodByID(db, p1)
+	if err != nil {
+		t.Fatalf("GetPeriodByID: %v", err)
+	}
+	if byID.EinspeisungPreis != 0.082 {
+		t.Errorf("GetPeriodByID.EinspeisungPreis = %v, want 0.082", byID.EinspeisungPreis)
+	}
+}

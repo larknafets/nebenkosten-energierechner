@@ -21,16 +21,17 @@ type Period struct {
 	FrischwasserPreis       float64
 	AbwasserPreis           float64
 	HeizungWaermeGewichtung float64
+	EinspeisungPreis        float64
 }
 
 // GetPeriodByID fetches a single period by id.
 func GetPeriodByID(db *sql.DB, id int64) (*Period, error) {
 	var p Period
 	err := db.QueryRow(
-		`SELECT id, reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung
+		`SELECT id, reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis
 		 FROM periods WHERE id = ?`,
 		id,
-	).Scan(&p.ID, &p.ReadingDate, &p.Strompreis, &p.FrischwasserPreis, &p.AbwasserPreis, &p.HeizungWaermeGewichtung)
+	).Scan(&p.ID, &p.ReadingDate, &p.Strompreis, &p.FrischwasserPreis, &p.AbwasserPreis, &p.HeizungWaermeGewichtung, &p.EinspeisungPreis)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("period %d not found", id)

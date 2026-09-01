@@ -14,7 +14,7 @@
 <div class="panel">
   <p><strong>Ablesedatum:</strong> {{deDatum .Period.ReadingDate}}</p>
   <p><strong>Zeitraum:</strong> {{if .ZeitraumStart}}{{deDatum .ZeitraumStart}} – {{deDatum .Period.ReadingDate}}{{else}}bis {{deDatum .Period.ReadingDate}} (keine Vorperiode){{end}}</p>
-  <p><strong>Preise:</strong> Strom {{deEUR .Period.Strompreis}} EUR/kWh · Frischwasser {{deEUR .Period.FrischwasserPreis}} EUR/m³ · Abwasser {{deEUR .Period.AbwasserPreis}} EUR/m³</p>
+  <p><strong>Preise:</strong> Strom {{deEUR .Period.Strompreis}} EUR/kWh · Frischwasser {{deEUR .Period.FrischwasserPreis}} EUR/m³ · Abwasser {{deEUR .Period.AbwasserPreis}} EUR/m³ · Einspeisung {{deEUR .Period.EinspeisungPreis}} EUR/kWh</p>
 
   <table class="letzte">
     <thead><tr><th>Zähler</th><th>Stand</th></tr></thead>
@@ -76,6 +76,18 @@
       <tr><td>Wärmeverbrauch</td><td>{{de .Heizung.WaermeW1MWh}} MWh</td><td>{{de .Heizung.WaermeW2MWh}} MWh</td></tr>
       <tr><td>Wohnfläche</td><td>{{de .Heizung.QMW1}} m²</td><td>{{de .Heizung.QMW2}} m²</td></tr>
       <tr><td><strong>Kosten Heizung/Warmwasser</strong></td><td><strong>{{deEUR .Heizung.KostenHeizungW1}} EUR</strong></td><td><strong>{{deEUR .Heizung.KostenHeizungW2}} EUR</strong></td></tr>
+    </tbody>
+  </table>
+  {{end}}
+
+  <h3 style="margin-top:1.25rem">Einspeisevergütung (PV)</h3>
+  {{if .KostenNote}}
+  <p class="muted">{{.KostenNote}}</p>
+  {{else if .Einspeisung}}
+  <table class="letzte">
+    <tbody>
+      <tr><td>Einspeisung</td><td>{{de .Einspeisung.EinspeisungKWh}} kWh</td></tr>
+      <tr><td><strong>Ertrag</strong></td><td><strong>{{deEUR .Einspeisung.Ertrag}} EUR</strong></td></tr>
     </tbody>
   </table>
   {{end}}

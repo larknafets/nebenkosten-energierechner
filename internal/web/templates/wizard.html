@@ -22,6 +22,7 @@
       <div class="field"><label>Wohnung 2 kWh</label><input type="number" step="any" name="strom_wohnung2" required {{if $.IsEdit}}value="{{index $.EditReadings "strom_wohnung2"}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_wohnung2"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_wohnung2"}}"{{end}}><div class="warning" id="warn-strom_wohnung2"></div></div>
       <div class="field"><label>Wärmepumpe kWh</label><input type="number" step="any" name="strom_waermepumpe" required {{if $.IsEdit}}value="{{index $.EditReadings "strom_waermepumpe"}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_waermepumpe"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_waermepumpe"}}"{{end}}><div class="warning" id="warn-strom_waermepumpe"></div></div>
       <div class="field"><label>Wallboxen kWh</label><input type="number" step="any" name="strom_wallbox" required {{if $.IsEdit}}value="{{index $.EditReadings "strom_wallbox"}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_wallbox"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_wallbox"}}"{{end}}><div class="warning" id="warn-strom_wallbox"></div></div>
+      <div class="field"><label>Einspeisung (PV) kWh</label><input type="number" step="any" name="strom_einspeisung" required {{if $.IsEdit}}value="{{index $.EditReadings "strom_einspeisung"}}"{{end}} {{if $.HasPrevious}}data-prev="{{index $.PreviousReadings "strom_einspeisung"}}"{{end}} {{if $.HasOutlierBaseline}}data-outlier-avg="{{index $.OutlierAvg "strom_einspeisung"}}"{{end}}><div class="warning" id="warn-strom_einspeisung"></div></div>
     </div>
   </div>
 
@@ -43,14 +44,15 @@
   </div>
 
   <div class="c-pane" data-step="4">
-    <div class="grid grid-3">
-      <div class="field"><label>Strompreis (EUR/kWh)</label><input type="number" step="any" name="strompreis" {{if .HasPrevious}}value="{{.PreviousStrompreis}}"{{end}} required></div>
-      <div class="field"><label>Frischwasser (EUR/m³)</label><input type="number" step="any" name="frischwasser_preis" {{if .HasPrevious}}value="{{.PreviousFrischwasserPreis}}"{{end}} required></div>
-      <div class="field"><label>Abwasser (EUR/m³)</label><input type="number" step="any" name="abwasser_preis" {{if .HasPrevious}}value="{{.PreviousAbwasserPreis}}"{{end}} required></div>
+    <div class="grid grid-4">
+      <div class="field"><label>Strompreis (EUR/kWh)</label><input type="number" step="any" name="strompreis" {{if or .IsEdit .HasPrevious}}value="{{.PreviousStrompreis}}"{{end}} required></div>
+      <div class="field"><label>Frischwasser (EUR/m³)</label><input type="number" step="any" name="frischwasser_preis" {{if or .IsEdit .HasPrevious}}value="{{.PreviousFrischwasserPreis}}"{{end}} required></div>
+      <div class="field"><label>Abwasser (EUR/m³)</label><input type="number" step="any" name="abwasser_preis" {{if or .IsEdit .HasPrevious}}value="{{.PreviousAbwasserPreis}}"{{end}} required></div>
+      <div class="field"><label>Einspeisung (EUR/kWh)</label><input type="number" step="any" name="einspeisung_preis" {{if or .IsEdit .HasPrevious}}value="{{.PreviousEinspeisungPreis}}"{{end}} required></div>
     </div>
     <div class="grid grid-2">
       {{range .Apartments}}
-      <div class="field"><label>Personen {{.Name}}</label><input type="number" name="personen_{{.ID}}" {{if $.HasPrevious}}value="{{index $.PreviousPersonen .ID}}"{{end}} required></div>
+      <div class="field"><label>Personen {{.Name}}</label><input type="number" name="personen_{{.ID}}" {{if or $.IsEdit $.HasPrevious}}value="{{index $.PreviousPersonen .ID}}"{{end}} required></div>
       {{end}}
     </div>
     <div class="grid grid-2">

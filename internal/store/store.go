@@ -50,6 +50,11 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate heizung_waerme_gewichtung column: %w", err)
 	}
 
+	if err := ensurePeriodsEinspeisungPreisColumn(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate einspeisung_preis column: %w", err)
+	}
+
 	if err := seed(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("seed master data: %w", err)
@@ -84,6 +89,36 @@ func ensurePeriodsHeizungGewichtungColumn(db *sql.DB) error {
 	}
 
 	_, err = db.Exec(`ALTER TABLE periods ADD COLUMN heizung_waerme_gewichtung REAL NOT NULL DEFAULT 0.7`)
+	return err
+}
+
+// ensurePeriodsEinspeisungPreisColumn adds the einspeisung_preis column to
+// an existing periods table that predates it (Issue #47), defaulting
+// existing rows to 0 - historical periods simply show no Einspeisevergütung
+// until corrected.
+func ensurePeriodsEinspeisungPreisColumn(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(periods)`)
+	if err != nil {
+		return fmt.Errorf("inspect periods columns: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scan periods column: %w", err)
+		}
+		if name == "einspeisung_preis" {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`ALTER TABLE periods ADD COLUMN einspeisung_preis REAL NOT NULL DEFAULT 0`)
 	return err
 }
 
@@ -137,6 +172,7 @@ func seed(db *sql.DB) error {
 		{id: 7, key: "wasser_warmwasseraufbereitung", meterType: "wasser", unit: "m3", apartmentID: nil, label: "Zwischenwasserzähler Warmwasseraufbereitung"},
 		{id: 8, key: "waerme_wohnung1", meterType: "waerme", unit: "MWh", apartmentID: apartmentID(1), label: "Wärmemengenzähler Wohnung 1"},
 		{id: 9, key: "waerme_wohnung2", meterType: "waerme", unit: "MWh", apartmentID: apartmentID(2), label: "Wärmemengenzähler Wohnung 2"},
+		{id: 10, key: "strom_einspeisung", meterType: "strom", unit: "kWh", apartmentID: nil, label: "Einspeisezähler (PV)"},
 	}
 	for _, m := range meters {
 		if _, err := db.Exec(

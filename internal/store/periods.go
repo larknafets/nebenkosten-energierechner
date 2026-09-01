@@ -6,8 +6,8 @@ import (
 	"fmt"
 )
 
-// MeterKeys is the stable, ordered list of the 9 meter keys every period
-// must have a reading for. See Issue #6 / seed() for the full definitions.
+// MeterKeys is the stable, ordered list of the meter keys every period must
+// have a reading for. See Issue #6 / seed() for the full definitions.
 var MeterKeys = []string{
 	"strom_gesamt",
 	"strom_wohnung2",
@@ -18,6 +18,7 @@ var MeterKeys = []string{
 	"wasser_warmwasseraufbereitung",
 	"waerme_wohnung1",
 	"waerme_wohnung2",
+	"strom_einspeisung",
 }
 
 type Apartment struct {
@@ -52,6 +53,7 @@ type PeriodInput struct {
 	FrischwasserPreis       float64
 	AbwasserPreis           float64
 	HeizungWaermeGewichtung float64            // Heizungs-Split-Gewichtung (0.7/0.6/0.5), Ticket #27
+	EinspeisungPreis        float64            // EUR/kWh für die PV-Einspeisevergütung (Ticket #47)
 	Readings                map[string]float64 // meter key -> Zählerstand, must cover all of MeterKeys
 	Personen                map[int64]int64    // apartment id -> Personenzahl
 	QM                      map[int64]float64  // apartment id -> Wohnfläche (writes through to apartments.qm)
@@ -69,9 +71,9 @@ func CreatePeriod(db *sql.DB, in PeriodInput) (periodID int64, err error) {
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`INSERT INTO periods (reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung)
-		 VALUES (?, ?, ?, ?, ?)`,
-		in.ReadingDate, in.Strompreis, in.FrischwasserPreis, in.AbwasserPreis, in.HeizungWaermeGewichtung,
+		`INSERT INTO periods (reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		in.ReadingDate, in.Strompreis, in.FrischwasserPreis, in.AbwasserPreis, in.HeizungWaermeGewichtung, in.EinspeisungPreis,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert period: %w", err)
@@ -130,9 +132,9 @@ func UpdatePeriod(db *sql.DB, periodID int64, in PeriodInput) error {
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`UPDATE periods SET reading_date = ?, strompreis = ?, frischwasser_preis = ?, abwasser_preis = ?, heizung_waerme_gewichtung = ?
+		`UPDATE periods SET reading_date = ?, strompreis = ?, frischwasser_preis = ?, abwasser_preis = ?, heizung_waerme_gewichtung = ?, einspeisung_preis = ?
 		 WHERE id = ?`,
-		in.ReadingDate, in.Strompreis, in.FrischwasserPreis, in.AbwasserPreis, in.HeizungWaermeGewichtung, periodID,
+		in.ReadingDate, in.Strompreis, in.FrischwasserPreis, in.AbwasserPreis, in.HeizungWaermeGewichtung, in.EinspeisungPreis, periodID,
 	)
 	if err != nil {
 		return fmt.Errorf("update period: %w", err)
@@ -187,6 +189,7 @@ type LatestPeriod struct {
 	FrischwasserPreis       float64
 	AbwasserPreis           float64
 	HeizungWaermeGewichtung float64
+	EinspeisungPreis        float64
 	Readings                map[string]float64
 	PersonenByApartment     map[int64]int64
 }
@@ -294,7 +297,7 @@ func GetLatestPeriod(db *sql.DB) (*LatestPeriod, error) {
 // to the latest period anymore).
 func GetPeriodDetails(db *sql.DB, id int64) (*LatestPeriod, error) {
 	row := db.QueryRow(
-		`SELECT id, reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung
+		`SELECT id, reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis
 		 FROM periods WHERE id = ?`,
 		id,
 	)
@@ -302,7 +305,7 @@ func GetPeriodDetails(db *sql.DB, id int64) (*LatestPeriod, error) {
 		Readings:            map[string]float64{},
 		PersonenByApartment: map[int64]int64{},
 	}
-	if err := row.Scan(&p.ID, &p.ReadingDate, &p.Strompreis, &p.FrischwasserPreis, &p.AbwasserPreis, &p.HeizungWaermeGewichtung); err != nil {
+	if err := row.Scan(&p.ID, &p.ReadingDate, &p.Strompreis, &p.FrischwasserPreis, &p.AbwasserPreis, &p.HeizungWaermeGewichtung, &p.EinspeisungPreis); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
