@@ -108,10 +108,22 @@ func formatDatumDE(readingDate string) string {
 	return t.Format("02.01.2006")
 }
 
+// formatDatumZeitDE renders a build timestamp (RFC3339, as set via -ldflags
+// at build time - Ticket #48) in the German DD.MM.YYYY, HH:MM form. Falls
+// back to the raw string if it isn't a parseable RFC3339 timestamp.
+func formatDatumZeitDE(buildDate string) string {
+	t, err := time.Parse(time.RFC3339, buildDate)
+	if err != nil {
+		return buildDate
+	}
+	return t.Local().Format("02.01.2006, 15:04")
+}
+
 var templateFuncs = template.FuncMap{
-	"de":      formatDecimalDE,
-	"deEUR":   formatEuroDE,
-	"deDatum": formatDatumDE,
+	"de":          formatDecimalDE,
+	"deEUR":       formatEuroDE,
+	"deDatum":     formatDatumDE,
+	"deDatumZeit": formatDatumZeitDE,
 }
 
 var meterDisplays = []meterDisplay{
@@ -128,7 +140,7 @@ var meterDisplays = []meterDisplay{
 }
 
 // NewMux wires up the wizard and read routes.
-func NewMux(db *sql.DB) *http.ServeMux {
+func NewMux(db *sql.DB, version, buildDate string) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", handleIndex(db))
 	mux.HandleFunc("GET /ablesungen", handleAblesungenListe(db))
@@ -138,7 +150,7 @@ func NewMux(db *sql.DB) *http.ServeMux {
 	mux.HandleFunc("GET /ablesungen/{id}/bearbeiten", handleEditWizardForm(db))
 	mux.HandleFunc("POST /ablesungen/{id}", handleUpdateAblesung(db))
 	mux.HandleFunc("POST /ablesungen/{id}/loeschen", handleDeleteAblesung(db))
-	mux.HandleFunc("GET /dashboard", handleDashboard(db))
+	mux.HandleFunc("GET /dashboard", handleDashboard(db, version, buildDate))
 	mux.HandleFunc("GET /berechnungslogik", handleBerechnungslogik())
 	return mux
 }
@@ -903,7 +915,7 @@ func mitJahrestrennern(monate []verlaufMonat, periodenKosten []periodKosten) []v
 	return out
 }
 
-func handleDashboard(db *sql.DB) http.HandlerFunc {
+func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		period, err := store.GetLatestPeriod(db)
 		if err != nil {
@@ -987,6 +999,8 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 			KostenNote     string
 			HasVerlauf     bool
 			VerlaufSpalten []verlaufColumn
+			Version        string
+			BuildDate      string
 		}{
 			Base:           requestBase(r),
 			Period:         period,
@@ -995,6 +1009,8 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 			KostenNote:     kostenNote,
 			HasVerlauf:     len(periodenKosten) > 0,
 			VerlaufSpalten: verlaufSpalten,
+			Version:        version,
+			BuildDate:      buildDate,
 		}
 
 		if err := dashboardTemplate.ExecuteTemplate(w, "layout", data); err != nil {
