@@ -227,9 +227,10 @@ func UpdatePeriod(db *sql.DB, periodID int64, in PeriodInput) error {
 			return fmt.Errorf("missing reading for meter %q", key)
 		}
 		if _, err := tx.Exec(
-			`UPDATE meter_readings SET zaehlerstand = ?
-			 WHERE period_id = ? AND meter_id = (SELECT id FROM meters WHERE key = ?)`,
-			value, periodID, key,
+			`INSERT INTO meter_readings (period_id, meter_id, zaehlerstand)
+			 SELECT ?, id, ? FROM meters WHERE key = ?
+			 ON CONFLICT(period_id, meter_id) DO UPDATE SET zaehlerstand = excluded.zaehlerstand`,
+			periodID, value, key,
 		); err != nil {
 			return fmt.Errorf("update reading for %q: %w", key, err)
 		}
@@ -237,8 +238,9 @@ func UpdatePeriod(db *sql.DB, periodID int64, in PeriodInput) error {
 
 	for apartmentID, personen := range in.Personen {
 		if _, err := tx.Exec(
-			`UPDATE period_occupancy SET personen = ? WHERE period_id = ? AND apartment_id = ?`,
-			personen, periodID, apartmentID,
+			`INSERT INTO period_occupancy (period_id, apartment_id, personen) VALUES (?, ?, ?)
+			 ON CONFLICT(period_id, apartment_id) DO UPDATE SET personen = excluded.personen`,
+			periodID, apartmentID, personen,
 		); err != nil {
 			return fmt.Errorf("update occupancy for apartment %d: %w", apartmentID, err)
 		}

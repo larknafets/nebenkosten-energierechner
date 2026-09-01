@@ -213,6 +213,65 @@ func TestUpdatePeriod_Roundtrip(t *testing.T) {
 	}
 }
 
+// TestUpdatePeriod_AddsMissingMeterReading verifies UpdatePeriod can set a
+// meter's reading for a period that never had one - e.g. an old period that
+// predates a meter (strom_einspeisung before Ticket #47). It used to be a
+// blind UPDATE, which silently dropped the value when no row existed yet to
+// match; it's an upsert now.
+func TestUpdatePeriod_AddsMissingMeterReading(t *testing.T) {
+	db := openTestDB(t)
+	p1 := mustCreatePeriod(t, db, "2026-06-01", baseReadings(nil))
+
+	if _, err := db.Exec(`DELETE FROM meter_readings WHERE period_id = ? AND meter_id = (SELECT id FROM meters WHERE key = 'strom_einspeisung')`, p1); err != nil {
+		t.Fatalf("simulate missing reading: %v", err)
+	}
+
+	if err := UpdatePeriod(db, p1, PeriodInput{
+		ReadingDate:             "2026-06-01",
+		HeizungWaermeGewichtung: 0.7,
+		Readings:                baseReadings(map[string]float64{"strom_einspeisung": 1234}),
+	}); err != nil {
+		t.Fatalf("UpdatePeriod: %v", err)
+	}
+
+	details, err := GetPeriodDetails(db, p1)
+	if err != nil {
+		t.Fatalf("GetPeriodDetails: %v", err)
+	}
+	if details.Readings["strom_einspeisung"] != 1234 {
+		t.Errorf("Readings[strom_einspeisung] = %v, want 1234", details.Readings["strom_einspeisung"])
+	}
+}
+
+// TestUpdatePeriod_AddsMissingOccupancy is TestUpdatePeriod_AddsMissingMeterReading's
+// counterpart for period_occupancy - e.g. an apartment added after the
+// period was first created.
+func TestUpdatePeriod_AddsMissingOccupancy(t *testing.T) {
+	db := openTestDB(t)
+	p1 := mustCreatePeriod(t, db, "2026-06-01", baseReadings(nil))
+
+	if _, err := db.Exec(`DELETE FROM period_occupancy WHERE period_id = ? AND apartment_id = 2`, p1); err != nil {
+		t.Fatalf("simulate missing occupancy: %v", err)
+	}
+
+	if err := UpdatePeriod(db, p1, PeriodInput{
+		ReadingDate:             "2026-06-01",
+		HeizungWaermeGewichtung: 0.7,
+		Readings:                baseReadings(nil),
+		Personen:                map[int64]int64{1: 2, 2: 3},
+	}); err != nil {
+		t.Fatalf("UpdatePeriod: %v", err)
+	}
+
+	details, err := GetPeriodDetails(db, p1)
+	if err != nil {
+		t.Fatalf("GetPeriodDetails: %v", err)
+	}
+	if details.PersonenByApartment[2] != 3 {
+		t.Errorf("PersonenByApartment[2] = %v, want 3", details.PersonenByApartment[2])
+	}
+}
+
 // TestDateNeighborBounds verifies the "korrigieren" date-reorder guard
 // (Ticket #44 review finding): a period's own date is excluded from the
 // bounds computation, and only the closest neighbors on either side count.
