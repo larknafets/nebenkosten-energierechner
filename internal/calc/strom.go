@@ -17,6 +17,14 @@ type StromErgebnis struct {
 	W2AnteilKWh        float64
 	WPAnteilKWh        float64
 
+	// PVAnteilW2KWh/PVAnteilWPKWh is the gap between the submeter's own
+	// consumption and what the min()-cap actually attributed to Netzbezug -
+	// since the submeters read gross consumption while Netzbezug is net of
+	// PV self-consumption, a gap can only exist because PV covered it
+	// (Ticket #50: "Nicht dem Netzbezug zugeordnet (PV)").
+	PVAnteilW2KWh float64
+	PVAnteilWPKWh float64
+
 	// KostenW2 is the displayed cost position for Wohnung 2 - kaufmännisch
 	// auf Cent gerundet (Issue #8).
 	KostenW2 float64
@@ -50,6 +58,8 @@ func Strom(db *sql.DB, periodID int64) (*StromErgebnis, error) {
 		NetzbezugGesamtKWh:      netzbezugGesamt,
 		W2AnteilKWh:             w2Anteil,
 		WPAnteilKWh:             wpAnteil,
+		PVAnteilW2KWh:           max(0, verbrauch["strom_wohnung2"]-w2Anteil),
+		PVAnteilWPKWh:           max(0, verbrauch["strom_waermepumpe"]-wpAnteil),
 		KostenW2:                Round2(w2Anteil * period.Strompreis),
 		KostenWPGesamtUnrounded: wpAnteil * period.Strompreis,
 	}, nil

@@ -79,6 +79,9 @@ func TestStrom_SequentialAllocation(t *testing.T) {
 	if got.KostenWPGesamtUnrounded != 2164.80 {
 		t.Errorf("KostenWPGesamtUnrounded = %v, want 2164.80", got.KostenWPGesamtUnrounded)
 	}
+	if got.PVAnteilW2KWh != 0 || got.PVAnteilWPKWh != 0 {
+		t.Errorf("ohne Deckelung sollte kein PV-Anteil anfallen, got W2=%v WP=%v", got.PVAnteilW2KWh, got.PVAnteilWPKWh)
+	}
 }
 
 func TestStrom_WaermepumpeGedeckeltAufRest(t *testing.T) {
@@ -98,6 +101,9 @@ func TestStrom_WaermepumpeGedeckeltAufRest(t *testing.T) {
 	}
 	if got.WPAnteilKWh != 100 {
 		t.Errorf("WPAnteilKWh = %v, want 100 (gedeckelt auf Rest-Netzbezug)", got.WPAnteilKWh)
+	}
+	if got.PVAnteilWPKWh != 4900 {
+		t.Errorf("PVAnteilWPKWh = %v, want 4900 (5000 Verbrauch - 100 angerechnet, durch PV gedeckt)", got.PVAnteilWPKWh)
 	}
 }
 
@@ -119,6 +125,9 @@ func TestStrom_PVUeberschussBeideNull(t *testing.T) {
 	}
 	if got.KostenW2 != 0 || got.KostenWPGesamtUnrounded != 0 {
 		t.Errorf("bei Netzbezug=0 sollten beide Kosten 0 sein, got KostenW2=%v KostenWP=%v", got.KostenW2, got.KostenWPGesamtUnrounded)
+	}
+	if got.PVAnteilW2KWh != 300 || got.PVAnteilWPKWh != 400 {
+		t.Errorf("bei Netzbezug=0 sollte der volle Verbrauch dem PV-Anteil zugerechnet werden, got W2=%v WP=%v", got.PVAnteilW2KWh, got.PVAnteilWPKWh)
 	}
 }
 

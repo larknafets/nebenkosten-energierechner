@@ -42,8 +42,10 @@
     <tbody>
       <tr><td>Netzbezug Gesamt</td><td>{{de .Strom.NetzbezugGesamtKWh}} kWh</td></tr>
       <tr><td>Wohnung 2 Anteil</td><td>{{de .Strom.W2AnteilKWh}} kWh</td></tr>
+      <tr><td>Nicht dem Netzbezug zugeordnet (PV)</td><td>{{de .Strom.PVAnteilW2KWh}} kWh</td></tr>
       <tr><td><strong>Kosten Wohnung 2</strong></td><td><strong>{{deEUR .Strom.KostenW2}} EUR</strong></td></tr>
       <tr><td>Wärmepumpe Anteil</td><td>{{de .Strom.WPAnteilKWh}} kWh</td></tr>
+      <tr><td>Nicht dem Netzbezug zugeordnet (PV)</td><td>{{de .Strom.PVAnteilWPKWh}} kWh</td></tr>
       <tr><td>Kosten Wärmepumpe gesamt (Basis Heizungskosten)</td><td>{{deEUR .Strom.KostenWPGesamtUnrounded}} EUR</td></tr>
     </tbody>
   </table>
@@ -75,6 +77,7 @@
     <tbody>
       <tr><td>Wärmeverbrauch</td><td>{{de .Heizung.WaermeW1MWh}} MWh</td><td>{{de .Heizung.WaermeW2MWh}} MWh</td></tr>
       <tr><td>Wohnfläche</td><td>{{de .Heizung.QMW1}} m²</td><td>{{de .Heizung.QMW2}} m²</td></tr>
+      <tr><td>Wärmepumpe-Strom (Heizung + Warmwasser)</td><td colspan="2">{{de .Strom.WPAnteilKWh}} kWh</td></tr>
       <tr><td><strong>Kosten Heizung/Warmwasser</strong></td><td><strong>{{deEUR .Heizung.KostenHeizungW1}} EUR</strong></td><td><strong>{{deEUR .Heizung.KostenHeizungW2}} EUR</strong></td></tr>
     </tbody>
   </table>
