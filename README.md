@@ -132,8 +132,27 @@ Berechnete Kosten werden nicht persistiert, sondern bei jedem Aufruf live aus de
 
 ## Tech-Stack
 
-Go, `modernc.org/sqlite` (kein ORM), server-rendered `html/template` mit Vanilla-JS für die Wizard-Interaktivität (kein htmx - ursprünglich in der Spec vorgesehen, aber nicht gebraucht), ein Docker-Container mit SQLite unter `/data`. Einbindung als Home Assistant Addon über `larknafets/ha-addons` (Ingress-Integration umgesetzt, siehe Issue #22), analog `larknafets/gcs-connector-evcc`.
+Go, `modernc.org/sqlite` (kein ORM, `database/sql`), server-rendered `html/template` mit Vanilla-JS für die Wizard-Interaktivität (kein htmx - ursprünglich in der Spec vorgesehen, aber nicht gebraucht). SQLite-Datei unter `/data` im Container. Multi-Arch-Docker-Image (`linux/amd64`, `linux/arm64`, `linux/arm/v7`) auf Basis `gcr.io/distroless/static-debian12`, läuft als root. Version und Build-Datum werden per `-ldflags` eingebrannt und im Dashboard angezeigt (Ticket #48).
 
-## Umsetzung
+## Installation
 
-Implementierungs-Tickets: [#10–#22](https://github.com/larknafets/nebenkosten-energierechner/issues?q=is%3Aissue+label%3Aready-for-agent).
+### Docker
+
+```bash
+docker run -d \
+  --name nebenkosten-energierechner \
+  -p 8080:8080 \
+  -v nebenkosten-data:/data \
+  ghcr.io/larknafets/nebenkosten-energierechner:latest
+```
+
+Danach erreichbar unter `http://localhost:8080`, Health-Check unter `/healthz`. Die Image-Tags folgen den Release-Versionen - siehe [Releases](https://github.com/larknafets/nebenkosten-energierechner/releases).
+
+| Umgebungsvariable | Default | Beschreibung |
+|---|---|---|
+| `DB_PATH` | `/data/nebenkosten.db` | Pfad zur SQLite-Datenbankdatei |
+| `LISTEN_ADDR` | `:8080` | Listen-Adresse des HTTP-Servers |
+
+### Home Assistant Add-on
+
+Für den Betrieb als Home Assistant Add-on (inkl. Ingress-Integration, siehe Issue #22) siehe das Add-on-Repository [`larknafets/ha-addons`](https://github.com/larknafets/ha-addons).
