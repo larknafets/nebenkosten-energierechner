@@ -29,6 +29,11 @@ type HeizungErgebnis struct {
 	// KostenHeizung* sind kaufmännisch auf Cent gerundet (Issue #8).
 	KostenHeizungW1 float64
 	KostenHeizungW2 float64
+
+	// WPAnteil*KWh ist strom.WPAnteilKWh, mit denselben Gewichten wie
+	// KostenHeizung* auf die Wohnungen verteilt.
+	WPAnteilW1KWh float64
+	WPAnteilW2KWh float64
 }
 
 // Heizung computes the Heizungskosten-Zuteilung for the given period.
@@ -92,5 +97,8 @@ func Heizung(db *sql.DB, periodID int64) (*HeizungErgebnis, error) {
 
 		KostenHeizungW1: Round2(total * (gewichtungWaerme*ratioWaermeW1 + gewichtungFlaeche*ratioFlaecheW1)),
 		KostenHeizungW2: Round2(total * (gewichtungWaerme*ratioWaermeW2 + gewichtungFlaeche*ratioFlaecheW2)),
+
+		WPAnteilW1KWh: strom.WPAnteilKWh * (gewichtungWaerme*ratioWaermeW1 + gewichtungFlaeche*ratioFlaecheW1),
+		WPAnteilW2KWh: strom.WPAnteilKWh * (gewichtungWaerme*ratioWaermeW2 + gewichtungFlaeche*ratioFlaecheW2),
 	}, nil
 }
