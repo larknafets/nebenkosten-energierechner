@@ -88,7 +88,7 @@ jobs:
       - name: Update version
         run: |
           version="${GITHUB_REF_NAME#v}"
-          sed -i -e "s/^version:.*/version: \"${version}\"/" ./hassio/nebenkosten-energierechner/config.yaml
+          sed -i -e "s/^version:.*/version: \"${version}\"/" ./hassio/nebenkostenrechner/config.yaml
 
       - name: Generate changelog
         env:
@@ -103,14 +103,14 @@ jobs:
             | gsub("(?m)^\\* [0-9a-f]{40} "; "* "))\n"
           ' -r > /tmp/changelog_entries.md
 
-          printf '%s\n\n' 'Full release details: https://github.com/larknafets/nebenkostenrechner/releases' > ./hassio/nebenkosten-energierechner/CHANGELOG.md
-          cat /tmp/changelog_entries.md >> ./hassio/nebenkosten-energierechner/CHANGELOG.md
+          printf '%s\n\n' 'Full release details: https://github.com/larknafets/nebenkostenrechner/releases' > ./hassio/nebenkostenrechner/CHANGELOG.md
+          cat /tmp/changelog_entries.md >> ./hassio/nebenkostenrechner/CHANGELOG.md
 
       - name: Push
         run: |
           cd ./hassio
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add nebenkosten-energierechner/config.yaml nebenkosten-energierechner/CHANGELOG.md
+          git add nebenkostenrechner/config.yaml nebenkostenrechner/CHANGELOG.md
           git commit -m "Mirror nebenkostenrechner release ${GITHUB_REF_NAME}"
           git push
