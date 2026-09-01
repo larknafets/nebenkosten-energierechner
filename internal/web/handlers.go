@@ -646,13 +646,28 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		// ZeitraumStart is the immediately preceding period's ReadingDate -
+		// the values shown here are the *consumption over that interval*,
+		// not just a single point-in-time reading, so the detail view
+		// spells out the whole span, not only its end date.
+		var zeitraumStart string
+		vorperiode, err := store.PeriodReadingsBefore(db, period.ID, 1)
+		if err != nil {
+			http.Error(w, "vorperiode: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if len(vorperiode) > 0 {
+			zeitraumStart = vorperiode[0].ReadingDate
+		}
+
 		data := struct {
-			Base       string
-			Period     *store.LatestPeriod
-			AllPeriods []store.PeriodSummary
-			Apartments []store.Apartment
-			Personen   map[int64]int64
-			Meters     []struct {
+			Base          string
+			Period        *store.LatestPeriod
+			AllPeriods    []store.PeriodSummary
+			Apartments    []store.Apartment
+			Personen      map[int64]int64
+			ZeitraumStart string
+			Meters        []struct {
 				Label string
 				Value float64
 				Unit  string
@@ -662,16 +677,17 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 			Heizung    *calc.HeizungErgebnis
 			KostenNote string
 		}{
-			Base:       requestBase(r),
-			Period:     period,
-			AllPeriods: allPeriods,
-			Apartments: apartments,
-			Personen:   period.PersonenByApartment,
-			Meters:     meters,
-			Strom:      k.Strom,
-			Wasser:     k.Wasser,
-			Heizung:    k.Heizung,
-			KostenNote: k.KostenNote,
+			Base:          requestBase(r),
+			Period:        period,
+			AllPeriods:    allPeriods,
+			Apartments:    apartments,
+			Personen:      period.PersonenByApartment,
+			ZeitraumStart: zeitraumStart,
+			Meters:        meters,
+			Strom:         k.Strom,
+			Wasser:        k.Wasser,
+			Heizung:       k.Heizung,
+			KostenNote:    k.KostenNote,
 		}
 
 		if err := ablesungTemplate.ExecuteTemplate(w, "layout", data); err != nil {

@@ -13,6 +13,7 @@
 
 <div class="panel">
   <p><strong>Ablesedatum:</strong> {{deDatum .Period.ReadingDate}}</p>
+  <p><strong>Zeitraum:</strong> {{if .ZeitraumStart}}{{deDatum .ZeitraumStart}} – {{deDatum .Period.ReadingDate}}{{else}}bis {{deDatum .Period.ReadingDate}} (keine Vorperiode){{end}}</p>
   <p><strong>Preise:</strong> Strom {{deEUR .Period.Strompreis}} EUR/kWh · Frischwasser {{deEUR .Period.FrischwasserPreis}} EUR/m³ · Abwasser {{deEUR .Period.AbwasserPreis}} EUR/m³</p>
 
   <table class="letzte">

@@ -1,6 +1,6 @@
 {{define "content"}}
 <h1>{{if .IsEdit}}Ablesung korrigieren{{else}}Ablesung erfassen{{end}}</h1>
-<p><a href="{{.Base}}/dashboard">&larr; Zurück zum Dashboard</a></p>
+<p class="muted"><a href="{{.Base}}/dashboard">&larr; Zurück zum Dashboard</a></p>
 
 <form method="post" action="{{.FormAction}}" class="panel">
   <div class="field" style="max-width:220px">
