@@ -27,15 +27,16 @@ var templateFS embed.FS
 // parsing them together into one shared template set would let the last
 // one silently overwrite the others.
 var (
-	wizardTemplate    = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/wizard.html"))
-	letzteTemplate    = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/letzte.html"))
-	dashboardTemplate = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/dashboard.html"))
+	wizardTemplate     = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/wizard.html"))
+	ablesungTemplate   = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/ablesung.html"))
+	ablesungenTemplate = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/ablesungen.html"))
+	dashboardTemplate  = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/dashboard.html"))
 
 	berechnungslogikTemplate = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/berechnungslogik.html"))
 )
 
 // meterDisplay describes how one meter's reading is labelled on the
-// "letzte Ablesung" view. Order matches the wizard's step grouping.
+// Ablesung detail view. Order matches the wizard's step grouping.
 type meterDisplay struct {
 	Key   string
 	Label string
@@ -129,11 +130,13 @@ var meterDisplays = []meterDisplay{
 func NewMux(db *sql.DB) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", handleIndex(db))
+	mux.HandleFunc("GET /ablesungen", handleAblesungenListe(db))
 	mux.HandleFunc("GET /ablesungen/neu", handleWizardForm(db))
 	mux.HandleFunc("POST /ablesungen", handleCreateAblesung(db))
-	mux.HandleFunc("GET /ablesungen/letzte", handleLetzteAblesung(db))
-	mux.HandleFunc("GET /ablesungen/letzte/bearbeiten", handleEditWizardForm(db))
+	mux.HandleFunc("GET /ablesungen/{id}", handleAblesungDetail(db))
+	mux.HandleFunc("GET /ablesungen/{id}/bearbeiten", handleEditWizardForm(db))
 	mux.HandleFunc("POST /ablesungen/{id}", handleUpdateAblesung(db))
+	mux.HandleFunc("POST /ablesungen/{id}/loeschen", handleDeleteAblesung(db))
 	mux.HandleFunc("GET /dashboard", handleDashboard(db))
 	mux.HandleFunc("GET /berechnungslogik", handleBerechnungslogik())
 	return mux
@@ -155,7 +158,7 @@ func requestBase(r *http.Request) string {
 
 func handleIndex(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, requestBase(r)+"/ablesungen/letzte", http.StatusFound)
+		http.Redirect(w, r, requestBase(r)+"/dashboard", http.StatusFound)
 	}
 }
 
@@ -268,53 +271,54 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// handleEditWizardForm serves the "korrigieren" form for the latest
-// Ablesung (Ticket #34), prefilled with its own current values. The
-// negative-Verbrauch/Ausreißer-Warnung baseline still compares against the
-// genuine previous period (the one before the Ablesung being edited), so
-// it's excluded from the "recent" periods used to build that baseline.
+// handleEditWizardForm serves the "korrigieren" form for an arbitrary
+// Ablesung (Ticket #44 - generalized from Ticket #34's latest-only version),
+// prefilled with its own current values. The negative-Verbrauch/
+// Ausreißer-Warnung baseline always compares against the genuine previous
+// period - the one chronologically before the Ablesung being edited,
+// regardless of whether newer Ablesungen exist after it.
 func handleEditWizardForm(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		periodID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid period id", http.StatusBadRequest)
+			return
+		}
+
 		apartments, err := store.Apartments(db)
 		if err != nil {
 			http.Error(w, "apartments: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		latest, err := store.GetLatestPeriod(db)
+		target, err := store.GetPeriodDetails(db, periodID)
 		if err != nil {
-			http.Error(w, "latest period: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "period: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if latest == nil {
-			http.Error(w, "keine Ablesung zum Korrigieren vorhanden", http.StatusNotFound)
+		if target == nil {
+			http.NotFound(w, r)
 			return
 		}
 
-		// +1 to also fetch the Ablesung being edited, so it can be dropped
-		// below - the baseline needs the periods *before* it, same count
-		// as handleWizardForm's create-mode baseline.
-		recent, err := store.RecentPeriodReadings(db, 5)
+		recent, err := store.PeriodReadingsBefore(db, periodID, 4)
 		if err != nil {
 			http.Error(w, "recent periods: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if len(recent) > 0 && recent[0].ID == latest.ID {
-			recent = recent[1:]
-		}
 
 		data := wizardData{
 			Base:                      requestBase(r),
-			FormAction:                fmt.Sprintf("%s/ablesungen/%d", requestBase(r), latest.ID),
+			FormAction:                fmt.Sprintf("%s/ablesungen/%d", requestBase(r), target.ID),
 			IsEdit:                    true,
-			ReadingDate:               latest.ReadingDate,
+			ReadingDate:               target.ReadingDate,
 			Apartments:                apartments,
-			EditReadings:              latest.Readings,
-			PreviousStrompreis:        latest.Strompreis,
-			PreviousFrischwasserPreis: latest.FrischwasserPreis,
-			PreviousAbwasserPreis:     latest.AbwasserPreis,
-			PreviousPersonen:          latest.PersonenByApartment,
-			PreviousHeizungGewichtung: latest.HeizungWaermeGewichtung,
+			EditReadings:              target.Readings,
+			PreviousStrompreis:        target.Strompreis,
+			PreviousFrischwasserPreis: target.FrischwasserPreis,
+			PreviousAbwasserPreis:     target.AbwasserPreis,
+			PreviousPersonen:          target.PersonenByApartment,
+			PreviousHeizungGewichtung: target.HeizungWaermeGewichtung,
 		}
 		if len(recent) > 0 {
 			data.HasPrevious = true
@@ -417,20 +421,40 @@ func handleCreateAblesung(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		if _, err := store.CreatePeriod(db, in); err != nil {
+		periodID, err := store.CreatePeriod(db, in)
+		if err != nil {
 			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		http.Redirect(w, r, requestBase(r)+"/ablesungen/letzte", http.StatusFound)
+		http.Redirect(w, r, fmt.Sprintf("%s/ablesungen/%d", requestBase(r), periodID), http.StatusFound)
 	}
 }
 
-// handleUpdateAblesung corrects the latest Ablesung in place (Ticket #34).
-// Only the latest period is ever editable - the guard against the id in
-// the URL having fallen behind (a newer Ablesung was created since the
-// edit form was loaded) keeps a stale edit from silently rewriting the
-// wrong period.
+// dateNeighborBounds finds, among `all` periods excluding periodID, the
+// closest ReadingDate below and above `currentDate` - the range a
+// correction may move periodID's own date within without silently
+// reordering it past a neighbor (Ticket #44 review finding: generalizing
+// "korrigieren" to any period means a date change can now shift which
+// period is whose Vorperiode for everyone in between, not just itself).
+func dateNeighborBounds(all []store.PeriodSummary, periodID int64, currentDate string) (prev, next string, hasPrev, hasNext bool) {
+	for _, p := range all {
+		if p.ID == periodID {
+			continue
+		}
+		if p.ReadingDate <= currentDate && (!hasPrev || p.ReadingDate > prev) {
+			prev, hasPrev = p.ReadingDate, true
+		}
+		if p.ReadingDate >= currentDate && (!hasNext || p.ReadingDate < next) {
+			next, hasNext = p.ReadingDate, true
+		}
+	}
+	return
+}
+
+// handleUpdateAblesung corrects an existing Ablesung in place (Ticket #34,
+// generalized to any period by Ticket #44 - no restriction to the latest
+// one anymore, see store.UpdatePeriod).
 func handleUpdateAblesung(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		periodID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -439,13 +463,13 @@ func handleUpdateAblesung(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		latest, err := store.GetLatestPeriod(db)
+		existing, err := store.GetPeriodDetails(db, periodID)
 		if err != nil {
-			http.Error(w, "latest period: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "period: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if latest == nil || latest.ID != periodID {
-			http.Error(w, "nur die letzte Ablesung kann korrigiert werden", http.StatusConflict)
+		if existing == nil {
+			http.NotFound(w, r)
 			return
 		}
 
@@ -466,12 +490,52 @@ func handleUpdateAblesung(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		allPeriods, err := store.AllPeriods(db)
+		if err != nil {
+			http.Error(w, "periods: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		prev, next, hasPrev, hasNext := dateNeighborBounds(allPeriods, periodID, existing.ReadingDate)
+		if hasPrev && in.ReadingDate <= prev {
+			http.Error(w, fmt.Sprintf("Ablesedatum muss nach der Vorperiode (%s) liegen", prev), http.StatusBadRequest)
+			return
+		}
+		if hasNext && in.ReadingDate >= next {
+			http.Error(w, fmt.Sprintf("Ablesedatum muss vor der Folgeperiode (%s) liegen", next), http.StatusBadRequest)
+			return
+		}
+
 		if err := store.UpdatePeriod(db, periodID, in); err != nil {
 			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		http.Redirect(w, r, requestBase(r)+"/ablesungen/letzte", http.StatusFound)
+		http.Redirect(w, r, fmt.Sprintf("%s/ablesungen/%d", requestBase(r), periodID), http.StatusFound)
+	}
+}
+
+// handleDeleteAblesung deletes a period (Ticket #45). Any period is
+// deletable, including the last remaining one - no "abgeschlossen" status
+// exists in this app; the client-side confirm() dialog is the only
+// safety net (see ablesung.html).
+func handleDeleteAblesung(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		periodID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid period id", http.StatusBadRequest)
+			return
+		}
+
+		if err := store.DeletePeriod(db, periodID); err != nil {
+			if errors.Is(err, store.ErrPeriodNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, "delete: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, requestBase(r)+"/ablesungen", http.StatusFound)
 	}
 }
 
@@ -506,11 +570,54 @@ func berechneKosten(db *sql.DB, periodID int64) (kosten, error) {
 	return kosten{Strom: strom, Wasser: wasser, Heizung: heizung}, nil
 }
 
-func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
+// handleAblesungenListe lists every recorded period (Ticket #43), newest
+// first, linking each to its detail view.
+func handleAblesungenListe(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		period, err := store.GetLatestPeriod(db)
+		periods, err := store.AllPeriods(db)
 		if err != nil {
-			http.Error(w, "latest period: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "periods: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		data := struct {
+			Base    string
+			Periods []store.PeriodSummary
+		}{
+			Base:    requestBase(r),
+			Periods: periods,
+		}
+
+		if err := ablesungenTemplate.ExecuteTemplate(w, "layout", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+// handleAblesungDetail shows one period's Zählerstände and full
+// Kostenaufstellung (Ticket #43, generalized from the old "letzte Ablesung"
+// view to any period by id), with a dropdown to jump to any other period.
+func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		periodID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid period id", http.StatusBadRequest)
+			return
+		}
+
+		period, err := store.GetPeriodDetails(db, periodID)
+		if err != nil {
+			http.Error(w, "period: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if period == nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		allPeriods, err := store.AllPeriods(db)
+		if err != nil {
+			http.Error(w, "periods: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
@@ -525,30 +632,24 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 			Value float64
 			Unit  string
 		}
-		personen := map[int64]int64{}
-		if period != nil {
-			personen = period.PersonenByApartment
-			for _, m := range meterDisplays {
-				meters = append(meters, struct {
-					Label string
-					Value float64
-					Unit  string
-				}{m.Label, period.Readings[m.Key], m.Unit})
-			}
+		for _, m := range meterDisplays {
+			meters = append(meters, struct {
+				Label string
+				Value float64
+				Unit  string
+			}{m.Label, period.Readings[m.Key], m.Unit})
 		}
 
-		var k kosten
-		if period != nil {
-			k, err = berechneKosten(db, period.ID)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
+		k, err := berechneKosten(db, period.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
 		data := struct {
 			Base       string
 			Period     *store.LatestPeriod
+			AllPeriods []store.PeriodSummary
 			Apartments []store.Apartment
 			Personen   map[int64]int64
 			Meters     []struct {
@@ -563,8 +664,9 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 		}{
 			Base:       requestBase(r),
 			Period:     period,
+			AllPeriods: allPeriods,
 			Apartments: apartments,
-			Personen:   personen,
+			Personen:   period.PersonenByApartment,
 			Meters:     meters,
 			Strom:      k.Strom,
 			Wasser:     k.Wasser,
@@ -572,7 +674,7 @@ func handleLetzteAblesung(db *sql.DB) http.HandlerFunc {
 			KostenNote: k.KostenNote,
 		}
 
-		if err := letzteTemplate.ExecuteTemplate(w, "layout", data); err != nil {
+		if err := ablesungTemplate.ExecuteTemplate(w, "layout", data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}

@@ -225,6 +225,98 @@ func TestUpdatePeriod_UnknownID(t *testing.T) {
 	}
 }
 
+// TestGetPeriodDetails_ArbitraryPeriod verifies GetPeriodDetails (Ticket
+// #43/#44's generalization of GetLatestPeriod) returns the right period's
+// data by id, not just the latest one.
+func TestGetPeriodDetails_ArbitraryPeriod(t *testing.T) {
+	db := openTestDB(t)
+	p1 := mustCreatePeriod(t, db, "2026-09-01", baseReadings(map[string]float64{"strom_gesamt": 100}))
+	mustCreatePeriod(t, db, "2026-10-01", baseReadings(map[string]float64{"strom_gesamt": 200}))
+
+	got, err := GetPeriodDetails(db, p1)
+	if err != nil {
+		t.Fatalf("GetPeriodDetails: %v", err)
+	}
+	if got == nil {
+		t.Fatal("GetPeriodDetails: want the older period, got nil")
+	}
+	if got.ID != p1 || got.ReadingDate != "2026-09-01" {
+		t.Errorf("GetPeriodDetails = {ID:%d, ReadingDate:%q}, want {%d, 2026-09-01}", got.ID, got.ReadingDate, p1)
+	}
+	if got.Readings["strom_gesamt"] != 100 {
+		t.Errorf("GetPeriodDetails.Readings[strom_gesamt] = %v, want 100", got.Readings["strom_gesamt"])
+	}
+}
+
+func TestGetPeriodDetails_UnknownID(t *testing.T) {
+	db := openTestDB(t)
+	got, err := GetPeriodDetails(db, 999)
+	if err != nil {
+		t.Fatalf("GetPeriodDetails: %v", err)
+	}
+	if got != nil {
+		t.Errorf("GetPeriodDetails(999) = %+v, want nil", got)
+	}
+}
+
+// TestPeriodReadingsBefore_ArbitraryTarget verifies the Ausreißer-Baseline
+// lookup works against any target period, not just the latest one (Ticket
+// #44: "korrigieren" is no longer limited to the latest Ablesung).
+func TestPeriodReadingsBefore_ArbitraryTarget(t *testing.T) {
+	db := openTestDB(t)
+	p1 := mustCreatePeriod(t, db, "2026-06-01", baseReadings(map[string]float64{"strom_gesamt": 100}))
+	p2 := mustCreatePeriod(t, db, "2026-07-01", baseReadings(map[string]float64{"strom_gesamt": 200}))
+	mustCreatePeriod(t, db, "2026-08-01", baseReadings(map[string]float64{"strom_gesamt": 300}))
+
+	before, err := PeriodReadingsBefore(db, p2, 4)
+	if err != nil {
+		t.Fatalf("PeriodReadingsBefore: %v", err)
+	}
+	if len(before) != 1 || before[0].ID != p1 {
+		t.Fatalf("PeriodReadingsBefore(p2) = %+v, want just [p1]", before)
+	}
+}
+
+func TestDeletePeriod_MiddlePeriod_Roundtrip(t *testing.T) {
+	db := openTestDB(t)
+	p1 := mustCreatePeriod(t, db, "2026-06-01", baseReadings(map[string]float64{"strom_gesamt": 100}))
+	p2 := mustCreatePeriod(t, db, "2026-07-01", baseReadings(map[string]float64{"strom_gesamt": 250}))
+	p3 := mustCreatePeriod(t, db, "2026-08-01", baseReadings(map[string]float64{"strom_gesamt": 500}))
+
+	if err := DeletePeriod(db, p2); err != nil {
+		t.Fatalf("DeletePeriod: %v", err)
+	}
+
+	all, err := AllPeriods(db)
+	if err != nil {
+		t.Fatalf("AllPeriods: %v", err)
+	}
+	if len(all) != 2 || all[0].ID != p3 || all[1].ID != p1 {
+		t.Fatalf("AllPeriods after delete = %+v, want [p3, p1]", all)
+	}
+
+	if got, err := GetPeriodDetails(db, p2); err != nil || got != nil {
+		t.Fatalf("GetPeriodDetails(deleted p2) = %+v, %v, want nil, nil", got, err)
+	}
+
+	// p3's Verbrauch must now diff against p1 (the new previous period),
+	// recomputed live since nothing caches consumption.
+	v, err := Verbrauch(db, p3)
+	if err != nil {
+		t.Fatalf("Verbrauch: %v", err)
+	}
+	if v["strom_gesamt"] != 400 {
+		t.Errorf("Verbrauch[strom_gesamt] after deleting p2 = %v, want 400 (500-100)", v["strom_gesamt"])
+	}
+}
+
+func TestDeletePeriod_UnknownID(t *testing.T) {
+	db := openTestDB(t)
+	if err := DeletePeriod(db, 999); err == nil {
+		t.Fatal("DeletePeriod on unknown id: want error, got nil")
+	}
+}
+
 func TestEnsurePeriodsHeizungGewichtungColumn(t *testing.T) {
 	t.Run("fuegt Spalte zu einer alten Tabelle ohne sie hinzu, mit Default 0.7", func(t *testing.T) {
 		db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "old.db"))

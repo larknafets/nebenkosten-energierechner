@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -139,7 +140,7 @@ func UpdatePeriod(db *sql.DB, periodID int64, in PeriodInput) error {
 	if n, err := res.RowsAffected(); err != nil {
 		return fmt.Errorf("update period rows affected: %w", err)
 	} else if n == 0 {
-		return fmt.Errorf("period %d not found", periodID)
+		return fmt.Errorf("%w: period %d", ErrPeriodNotFound, periodID)
 	}
 
 	for _, key := range MeterKeys {
@@ -198,6 +199,28 @@ type PeriodReadings struct {
 	Readings    map[string]float64
 }
 
+// idDate is a period's id/reading_date pair, ordered a query returns them
+// in - the input periodReadingsFor turns into full PeriodReadings.
+type idDate struct {
+	id   int64
+	date string
+}
+
+// periodReadingsFor fetches each id's readings and zips them with the
+// already-known dates - the shared tail of RecentPeriodReadings and
+// PeriodReadingsBefore, which differ only in how they select the ids.
+func periodReadingsFor(db *sql.DB, ids []idDate) ([]PeriodReadings, error) {
+	out := make([]PeriodReadings, 0, len(ids))
+	for _, d := range ids {
+		readings, err := readingsByMeterKey(db, d.id)
+		if err != nil {
+			return nil, fmt.Errorf("readings for period %d: %w", d.id, err)
+		}
+		out = append(out, PeriodReadings{ID: d.id, ReadingDate: d.date, Readings: readings})
+	}
+	return out, nil
+}
+
 // RecentPeriodReadings returns the most recent `limit` periods (newest
 // first) together with their per-meter Zählerstand.
 func RecentPeriodReadings(db *sql.DB, limit int) ([]PeriodReadings, error) {
@@ -210,10 +233,6 @@ func RecentPeriodReadings(db *sql.DB, limit int) ([]PeriodReadings, error) {
 	}
 	defer rows.Close()
 
-	type idDate struct {
-		id   int64
-		date string
-	}
 	var ids []idDate
 	for rows.Next() {
 		var d idDate
@@ -226,15 +245,7 @@ func RecentPeriodReadings(db *sql.DB, limit int) ([]PeriodReadings, error) {
 		return nil, err
 	}
 
-	out := make([]PeriodReadings, 0, len(ids))
-	for _, d := range ids {
-		readings, err := readingsByMeterKey(db, d.id)
-		if err != nil {
-			return nil, fmt.Errorf("readings for period %d: %w", d.id, err)
-		}
-		out = append(out, PeriodReadings{ID: d.id, ReadingDate: d.date, Readings: readings})
-	}
-	return out, nil
+	return periodReadingsFor(db, ids)
 }
 
 // PeriodSummary identifies one period without its readings, for views that
@@ -266,9 +277,26 @@ func AllPeriods(db *sql.DB) ([]PeriodSummary, error) {
 // GetLatestPeriod returns the most recently dated period, or nil if none
 // exist yet.
 func GetLatestPeriod(db *sql.DB) (*LatestPeriod, error) {
+	var id int64
+	err := db.QueryRow(`SELECT id FROM periods ORDER BY reading_date DESC, id DESC LIMIT 1`).Scan(&id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("query latest period id: %w", err)
+	}
+	return GetPeriodDetails(db, id)
+}
+
+// GetPeriodDetails returns the given period together with its readings and
+// occupancy, or nil if it doesn't exist - the per-id generalization of
+// GetLatestPeriod (Ticket #43/#44: viewing/editing an Ablesung isn't limited
+// to the latest period anymore).
+func GetPeriodDetails(db *sql.DB, id int64) (*LatestPeriod, error) {
 	row := db.QueryRow(
 		`SELECT id, reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung
-		 FROM periods ORDER BY reading_date DESC, id DESC LIMIT 1`,
+		 FROM periods WHERE id = ?`,
+		id,
 	)
 	p := LatestPeriod{
 		Readings:            map[string]float64{},
@@ -278,7 +306,7 @@ func GetLatestPeriod(db *sql.DB) (*LatestPeriod, error) {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("query latest period: %w", err)
+		return nil, fmt.Errorf("query period %d: %w", id, err)
 	}
 
 	rows, err := db.Query(
@@ -309,6 +337,80 @@ func GetLatestPeriod(db *sql.DB) (*LatestPeriod, error) {
 	}
 
 	return &p, nil
+}
+
+// PeriodReadingsBefore returns up to `limit` periods chronologically before
+// the given periodID (newest of those first), together with their per-meter
+// Zählerstand - the Ausreißer-Warnung/Vorperiode-Vergleich baseline for
+// editing an arbitrary (not necessarily latest) period (Ticket #44).
+func PeriodReadingsBefore(db *sql.DB, periodID int64, limit int) ([]PeriodReadings, error) {
+	target, err := GetPeriodByID(db, periodID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.Query(
+		`SELECT id, reading_date FROM periods
+		 WHERE reading_date < ? OR (reading_date = ? AND id < ?)
+		 ORDER BY reading_date DESC, id DESC LIMIT ?`,
+		target.ReadingDate, target.ReadingDate, target.ID, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query periods before %d: %w", periodID, err)
+	}
+	defer rows.Close()
+
+	var ids []idDate
+	for rows.Next() {
+		var d idDate
+		if err := rows.Scan(&d.id, &d.date); err != nil {
+			return nil, fmt.Errorf("scan period: %w", err)
+		}
+		ids = append(ids, d)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return periodReadingsFor(db, ids)
+}
+
+// ErrPeriodNotFound is returned by UpdatePeriod and DeletePeriod when the
+// given periodID doesn't exist - callers use it to tell "nothing to do"
+// apart from a genuine storage error (e.g. to answer with 404 instead of
+// 500).
+var ErrPeriodNotFound = errors.New("period not found")
+
+// DeletePeriod removes a period together with its readings and occupancy in
+// one transaction (Ticket #45). No soft-delete, no restriction on which
+// period can be deleted - Verbrauch/Kosten are computed live from the DB
+// (see internal/store/verbrauch.go), so a neighboring period's consumption
+// simply recomputes against its new adjacent period on the next read.
+func DeletePeriod(db *sql.DB, periodID int64) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM meter_readings WHERE period_id = ?`, periodID); err != nil {
+		return fmt.Errorf("delete readings: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM period_occupancy WHERE period_id = ?`, periodID); err != nil {
+		return fmt.Errorf("delete occupancy: %w", err)
+	}
+
+	res, err := tx.Exec(`DELETE FROM periods WHERE id = ?`, periodID)
+	if err != nil {
+		return fmt.Errorf("delete period: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return fmt.Errorf("delete period rows affected: %w", err)
+	} else if n == 0 {
+		return fmt.Errorf("%w: period %d", ErrPeriodNotFound, periodID)
+	}
+
+	return tx.Commit()
 }
 
 // PersonenByApartment returns the given period's occupancy (apartment id ->

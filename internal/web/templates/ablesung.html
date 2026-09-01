@@ -1,10 +1,16 @@
 {{define "content"}}
-<h1>Letzte Ablesung</h1>
-<p class="muted"><a href="{{.Base}}/dashboard">Zum Dashboard</a></p>
+<h1>Ablesung {{deDatum .Period.ReadingDate}}</h1>
+<p class="muted"><a href="{{.Base}}/dashboard">Zum Dashboard</a> · <a href="{{.Base}}/ablesungen">Zur Übersicht</a></p>
 
-{{if not .Period}}
-<p class="muted">Noch keine Ablesung erfasst. <a href="{{.Base}}/ablesungen/neu">Jetzt erfassen</a>.</p>
-{{else}}
+<div class="field" style="max-width:220px">
+  <label>Andere Ablesung anzeigen</label>
+  <select onchange="if(this.value) location.href=this.value">
+    {{range .AllPeriods}}
+    <option value="{{$.Base}}/ablesungen/{{.ID}}" {{if eq .ID $.Period.ID}}selected{{end}}>{{deDatum .ReadingDate}}</option>
+    {{end}}
+  </select>
+</div>
+
 <div class="panel">
   <p><strong>Ablesedatum:</strong> {{deDatum .Period.ReadingDate}}</p>
   <p><strong>Preise:</strong> Strom {{deEUR .Period.Strompreis}} EUR/kWh · Frischwasser {{deEUR .Period.FrischwasserPreis}} EUR/m³ · Abwasser {{deEUR .Period.AbwasserPreis}} EUR/m³</p>
@@ -74,6 +80,12 @@
   {{end}}
 </div>
 
-<p style="margin-top:1rem"><a href="{{.Base}}/ablesungen/neu">Neue Ablesung erfassen</a> · <a href="{{.Base}}/ablesungen/letzte/bearbeiten">Diese Ablesung korrigieren</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></p>
-{{end}}
+<div style="margin-top:1rem">
+  <a href="{{.Base}}/ablesungen/neu">Neue Ablesung erfassen</a> ·
+  <a href="{{.Base}}/ablesungen/{{.Period.ID}}/bearbeiten">Diese Ablesung korrigieren</a> ·
+  <form method="post" action="{{.Base}}/ablesungen/{{.Period.ID}}/loeschen" onsubmit="return confirm('Ablesung vom {{deDatum .Period.ReadingDate}} wirklich löschen?');" style="display:inline">
+    <button type="submit" class="danger">Diese Ablesung löschen</button>
+  </form> ·
+  <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a>
+</div>
 {{end}}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/larknafets/nebenkosten-energierechner/internal/calc"
+	"github.com/larknafets/nebenkosten-energierechner/internal/store"
 )
 
 func TestKategorien(t *testing.T) {
@@ -263,6 +264,37 @@ func TestParseHeizungGewichtung(t *testing.T) {
 		if got != c.want {
 			t.Errorf("parseHeizungGewichtung(%q) = %v, want %v", c.raw, got, c.want)
 		}
+	}
+}
+
+// TestDateNeighborBounds verifies the "korrigieren" date-reorder guard
+// (Ticket #44 review finding): a period's own date is excluded from the
+// bounds computation, and only the closest neighbors on either side count.
+func TestDateNeighborBounds(t *testing.T) {
+	all := []store.PeriodSummary{
+		{ID: 1, ReadingDate: "2026-06-01"},
+		{ID: 2, ReadingDate: "2026-07-01"},
+		{ID: 3, ReadingDate: "2026-08-01"},
+	}
+
+	prev, next, hasPrev, hasNext := dateNeighborBounds(all, 2, "2026-07-01")
+	if !hasPrev || prev != "2026-06-01" {
+		t.Errorf("prev = %q, %v, want 2026-06-01, true", prev, hasPrev)
+	}
+	if !hasNext || next != "2026-08-01" {
+		t.Errorf("next = %q, %v, want 2026-08-01, true", next, hasNext)
+	}
+
+	// Oldest period: no prev bound.
+	_, _, hasPrev, _ = dateNeighborBounds(all, 1, "2026-06-01")
+	if hasPrev {
+		t.Error("oldest period: hasPrev = true, want false")
+	}
+
+	// Newest period: no next bound.
+	_, _, _, hasNext = dateNeighborBounds(all, 3, "2026-08-01")
+	if hasNext {
+		t.Error("newest period: hasNext = true, want false")
 	}
 }
 
