@@ -20,6 +20,7 @@ Preise (aktuell, werden pro Monat neu erfasst statt zentral versioniert):
 | Strom | 0,22 EUR/kWh |
 | Frischwasser | 1,46 EUR/m³ |
 | Abwasser | 4,87 EUR/m³ |
+| Einspeisung (PV) | 0,08 EUR/kWh |
 
 ## Zähler
 
@@ -34,6 +35,7 @@ Preise (aktuell, werden pro Monat neu erfasst statt zentral versioniert):
 | `wasser_warmwasseraufbereitung` | Zwischenwasserzähler Warmwasseraufbereitung | m³ |
 | `waerme_wohnung1` | Wärmemengenzähler Wohnung 1 | **MWh** |
 | `waerme_wohnung2` | Wärmemengenzähler Wohnung 2 | **MWh** |
+| `strom_einspeisung` | Einspeisezähler (PV) | kWh |
 
 Ablese-Rhythmus: 1x/Monat. Verbrauch = aktueller Zählerstand minus Stand der chronologisch nächst-älteren Ablesung (einfache Differenz, funktioniert automatisch auch über Lücken hinweg).
 
@@ -90,6 +92,14 @@ Kosten_Frischwasser_X = Frischwasser_X * Frischwasserpreis
 Kosten_Abwasser_X     = Abwasser_X * Abwasserpreis
 ```
 
+### Einspeisevergütung (PV)
+
+Rein informativ, unabhängig von der Kostenverteilung oben - keine Wohnungs-Zuteilung, da der Einspeisezähler haus-weit misst.
+
+```
+Einspeisevergütung = Verbrauch(strom_einspeisung) * Einspeisung_Preis
+```
+
 ### Rundung
 
 Jede Kostenposition (Strom, Heizung/Warmwasser, Frischwasser, Abwasser) wird einzeln je Wohnung **kaufmännisch auf Cent gerundet** (0,5 Cent immer aufgerundet), erst nach der vollständigen Berechnung mit float-Genauigkeit. Die angezeigte Gesamtsumme je Wohnung kann dadurch um 1-2 Cent von der rechnerisch exakten Summe abweichen - das ist akzeptiert, es gibt keinen Korrekturmechanismus.
@@ -113,7 +123,7 @@ SQLite, kein ORM (`modernc.org/sqlite` + `database/sql`):
 ```
 apartments(id, name, qm)
 meters(id, key UNIQUE, type, unit, apartment_id NULLABLE -> apartments.id, label)
-periods(id, reading_date DATE, strompreis, frischwasser_preis, abwasser_preis)
+periods(id, reading_date DATE, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis)
 meter_readings(id, period_id -> periods.id, meter_id -> meters.id, zaehlerstand, UNIQUE(period_id, meter_id))
 period_occupancy(id, period_id -> periods.id, apartment_id -> apartments.id, personen, UNIQUE(period_id, apartment_id))
 ```
