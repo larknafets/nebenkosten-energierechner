@@ -19,10 +19,10 @@
 {{else}}
 <div class="panel">
   <table class="letzte">
-    <thead><tr><th>Ablesedatum</th><th></th></tr></thead>
+    <thead><tr><th>Ablesedatum</th><th>Zeitraum</th><th></th></tr></thead>
     <tbody>
       {{range .Periods}}
-      <tr><td>{{deDatum .ReadingDate}}</td><td><a href="{{$.Base}}/ablesungen/{{.ID}}">Details</a></td></tr>
+      <tr><td>{{.ReadingDate}}</td><td>{{.Zeitraum}}</td><td><a href="{{$.Base}}/ablesungen/{{.ID}}">Details</a></td></tr>
       {{end}}
     </tbody>
   </table>

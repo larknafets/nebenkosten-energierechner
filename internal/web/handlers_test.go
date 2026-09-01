@@ -419,6 +419,47 @@ func baseReadingsForImportTest(overrides map[string]float64) map[string]float64 
 	return out
 }
 
+func TestPeriodListItems(t *testing.T) {
+	periods := []store.PeriodSummary{
+		{ID: 3, ReadingDate: "2026-08-01"},
+		{ID: 2, ReadingDate: "2026-07-01"},
+		{ID: 1, ReadingDate: "2026-06-01"},
+	}
+
+	items := periodListItems(periods)
+	if len(items) != 3 {
+		t.Fatalf("len(items) = %d, want 3", len(items))
+	}
+	if items[0].Label != "01.08.2026 (01.07.2026–01.08.2026)" {
+		t.Errorf("items[0].Label = %q, want %q", items[0].Label, "01.08.2026 (01.07.2026–01.08.2026)")
+	}
+	if items[2].Label != "01.06.2026 (keine Vorperiode)" {
+		t.Errorf("items[2].Label (oldest) = %q, want %q", items[2].Label, "01.06.2026 (keine Vorperiode)")
+	}
+	if items[0].ID != 3 || items[2].ID != 1 {
+		t.Errorf("ids not preserved: %+v", items)
+	}
+}
+
+func TestPeriodOverviewRows(t *testing.T) {
+	periods := []store.PeriodSummary{
+		{ID: 3, ReadingDate: "2026-08-01"},
+		{ID: 2, ReadingDate: "2026-07-01"},
+		{ID: 1, ReadingDate: "2026-06-01"},
+	}
+
+	rows := periodOverviewRows(periods)
+	if len(rows) != 3 {
+		t.Fatalf("len(rows) = %d, want 3", len(rows))
+	}
+	if rows[0].ReadingDate != "01.08.2026" || rows[0].Zeitraum != "01.07.2026–01.08.2026" {
+		t.Errorf("rows[0] = %+v, want ReadingDate=01.08.2026 Zeitraum=01.07.2026–01.08.2026", rows[0])
+	}
+	if rows[2].ReadingDate != "01.06.2026" || rows[2].Zeitraum != "keine Vorperiode" {
+		t.Errorf("rows[2] (oldest) = %+v, want ReadingDate=01.06.2026 Zeitraum=\"keine Vorperiode\"", rows[2])
+	}
+}
+
 func TestIngressBase(t *testing.T) {
 	cases := []struct {
 		header string

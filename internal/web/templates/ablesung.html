@@ -6,7 +6,7 @@
   <label>Andere Ablesung anzeigen</label>
   <select onchange="if(this.value) location.href=this.value">
     {{range .AllPeriods}}
-    <option value="{{$.Base}}/ablesungen/{{.ID}}" {{if eq .ID $.Period.ID}}selected{{end}}>{{deDatum .ReadingDate}}</option>
+    <option value="{{$.Base}}/ablesungen/{{.ID}}" {{if eq .ID $.Period.ID}}selected{{end}}>{{.Label}}</option>
     {{end}}
   </select>
 </div>

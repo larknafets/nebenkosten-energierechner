@@ -597,6 +597,58 @@ func berechneKosten(db *sql.DB, periodID int64) (kosten, error) {
 	return kosten{Strom: strom, Wasser: wasser, Heizung: heizung, Einspeisung: einspeisung}, nil
 }
 
+// periodListItem is one period's Ablesedatum together with its Zeitraum,
+// combined into a single label (the gap to the chronologically previous
+// period, "keine Vorperiode" for the oldest) - the Ablesung-Detail "andere
+// Ablesung anzeigen" dropdown, where a single-line option leaves no room
+// for 2 columns.
+type periodListItem struct {
+	ID    int64
+	Label string
+}
+
+// periodListItems builds one periodListItem per period. periods must be in
+// store.AllPeriods' own order (newest first) - the predecessor of
+// periods[i] is then periods[i+1], the next-older one.
+func periodListItems(periods []store.PeriodSummary) []periodListItem {
+	out := make([]periodListItem, len(periods))
+	for i, p := range periods {
+		var label string
+		if i+1 < len(periods) {
+			label = fmt.Sprintf("%s (%s–%s)", formatDatumDE(p.ReadingDate), formatDatumDE(periods[i+1].ReadingDate), formatDatumDE(p.ReadingDate))
+		} else {
+			label = fmt.Sprintf("%s (keine Vorperiode)", formatDatumDE(p.ReadingDate))
+		}
+		out[i] = periodListItem{ID: p.ID, Label: label}
+	}
+	return out
+}
+
+// periodOverviewRow is one period's Ablesedatum and Zeitraum as 2 separate
+// values - the Ablesungen-Übersicht's table, which has room for its own
+// column per field (unlike the dropdown's single-line option).
+type periodOverviewRow struct {
+	ID          int64
+	ReadingDate string
+	Zeitraum    string
+}
+
+// periodOverviewRows builds one periodOverviewRow per period, same order/
+// predecessor rule as periodListItems.
+func periodOverviewRows(periods []store.PeriodSummary) []periodOverviewRow {
+	out := make([]periodOverviewRow, len(periods))
+	for i, p := range periods {
+		var zeitraum string
+		if i+1 < len(periods) {
+			zeitraum = fmt.Sprintf("%s–%s", formatDatumDE(periods[i+1].ReadingDate), formatDatumDE(p.ReadingDate))
+		} else {
+			zeitraum = "keine Vorperiode"
+		}
+		out[i] = periodOverviewRow{ID: p.ID, ReadingDate: formatDatumDE(p.ReadingDate), Zeitraum: zeitraum}
+	}
+	return out
+}
+
 // handleAblesungenListe lists every recorded period (Ticket #43), newest
 // first, linking each to its detail view. ImportedCount/Warnings surface the
 // CSV import's result (Ticket #54) - passed via query params since the app
@@ -613,12 +665,12 @@ func handleAblesungenListe(db *sql.DB) http.HandlerFunc {
 
 		data := struct {
 			Base          string
-			Periods       []store.PeriodSummary
+			Periods       []periodOverviewRow
 			ImportedCount int
 			Warnings      []string
 		}{
 			Base:          requestBase(r),
-			Periods:       periods,
+			Periods:       periodOverviewRows(periods),
 			ImportedCount: importedCount,
 			Warnings:      r.URL.Query()["warning"],
 		}
@@ -986,7 +1038,7 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 		data := struct {
 			Base          string
 			Period        *store.LatestPeriod
-			AllPeriods    []store.PeriodSummary
+			AllPeriods    []periodListItem
 			Apartments    []store.Apartment
 			Personen      map[int64]int64
 			ZeitraumStart string
@@ -1003,7 +1055,7 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 		}{
 			Base:          requestBase(r),
 			Period:        period,
-			AllPeriods:    allPeriods,
+			AllPeriods:    periodListItems(allPeriods),
 			Apartments:    apartments,
 			Personen:      period.PersonenByApartment,
 			ZeitraumStart: zeitraumStart,
