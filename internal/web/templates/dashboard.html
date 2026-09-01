@@ -27,7 +27,10 @@
 </div>
 {{end}}
 
-<p style="margin-top:1rem"><a href="{{.Base}}/ablesungen/neu">Neue Ablesung erfassen</a> · <a href="{{.Base}}/ablesungen">Ablesungen</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></p>
+<div class="btn-row">
+  <a href="{{.Base}}/ablesungen/neu" class="button success">Neue Ablesung erfassen</a>
+  <span class="muted">· <a href="{{.Base}}/ablesungen">Ablesungen</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></span>
+</div>
 {{end}}
 
 {{if .HasVerlauf}}

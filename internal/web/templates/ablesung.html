@@ -81,12 +81,11 @@
   {{end}}
 </div>
 
-<div style="margin-top:1rem">
-  <a href="{{.Base}}/ablesungen/neu">Neue Ablesung erfassen</a> ·
-  <a href="{{.Base}}/ablesungen/{{.Period.ID}}/bearbeiten">Diese Ablesung korrigieren</a> ·
-  <form method="post" action="{{.Base}}/ablesungen/{{.Period.ID}}/loeschen" onsubmit="return confirm('Ablesung vom {{deDatum .Period.ReadingDate}} wirklich löschen?');" style="display:inline">
+<div class="btn-row">
+  <a href="{{.Base}}/ablesungen/neu" class="button success">Neue Ablesung erfassen</a>
+  <a href="{{.Base}}/ablesungen/{{.Period.ID}}/bearbeiten" class="button secondary">Diese Ablesung korrigieren</a>
+  <form method="post" action="{{.Base}}/ablesungen/{{.Period.ID}}/loeschen" onsubmit="return confirm('Ablesung vom {{deDatum .Period.ReadingDate}} wirklich löschen?');">
     <button type="submit" class="danger">Diese Ablesung löschen</button>
-  </form> ·
-  <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a>
+  </form>
 </div>
 {{end}}

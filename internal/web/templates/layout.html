@@ -7,7 +7,7 @@
 <style>
   :root {
     --bg: #f4f5f7; --panel: #ffffff; --border: #e0e2e7; --text: #1c1e21;
-    --muted: #6b7280; --accent: #2563eb; --accent-soft: #eef2ff;
+    --muted: #6b7280; --accent: #2563eb; --accent-soft: #eef2ff; --success: #16a34a;
     --cat-strom: #f59e0b; --cat-heizung: #ef4444; --cat-wasser: #3b82f6;
   }
   * { box-sizing: border-box; }
@@ -27,9 +27,12 @@
   .grid-2 { grid-template-columns: 1fr 1fr; }
   .grid-3 { grid-template-columns: repeat(3, 1fr); }
   .grid-4 { grid-template-columns: repeat(4, 1fr); }
-  button.primary { background: var(--accent); color: white; border: none; border-radius: 6px; padding: .6rem 1.1rem; font-size: .9rem; cursor: pointer; }
-  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: .6rem 1.1rem; font-size: .9rem; cursor: pointer; }
-  button.danger { background: transparent; color: #b91c1c; border: 1px solid #b91c1c; border-radius: 6px; padding: .4rem .8rem; font-size: .85rem; cursor: pointer; }
+  button, a.button { display: inline-block; border-radius: 6px; padding: .6rem 1.1rem; font-size: .9rem; cursor: pointer; text-decoration: none; line-height: 1.2; }
+  button.primary, a.button.primary { background: var(--accent); color: white; border: none; }
+  button.secondary, a.button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button.success, a.button.success { background: var(--success); color: white; border: none; }
+  button.danger, a.button.danger { background: transparent; color: #b91c1c; border: 1px solid #b91c1c; }
+  .btn-row { display: flex; gap: .75rem; justify-content: center; align-items: center; flex-wrap: wrap; margin-top: 1.25rem; }
   .wizard-actions { display: flex; justify-content: space-between; margin-top: 1.25rem; }
   .c-steps { display: flex; gap: .5rem; margin-bottom: 1.25rem; }
   .c-step-dot { flex: 1; text-align: center; padding: .5rem; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: .8rem; font-weight: 600; }
