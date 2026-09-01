@@ -213,6 +213,88 @@ func TestUpdatePeriod_Roundtrip(t *testing.T) {
 	}
 }
 
+// TestDateNeighborBounds verifies the "korrigieren" date-reorder guard
+// (Ticket #44 review finding): a period's own date is excluded from the
+// bounds computation, and only the closest neighbors on either side count.
+func TestDateNeighborBounds(t *testing.T) {
+	all := []PeriodSummary{
+		{ID: 1, ReadingDate: "2026-06-01"},
+		{ID: 2, ReadingDate: "2026-07-01"},
+		{ID: 3, ReadingDate: "2026-08-01"},
+	}
+
+	prev, next, hasPrev, hasNext := dateNeighborBounds(all, 2, "2026-07-01")
+	if !hasPrev || prev != "2026-06-01" {
+		t.Errorf("prev = %q, %v, want 2026-06-01, true", prev, hasPrev)
+	}
+	if !hasNext || next != "2026-08-01" {
+		t.Errorf("next = %q, %v, want 2026-08-01, true", next, hasNext)
+	}
+
+	// Oldest period: no prev bound.
+	_, _, hasPrev, _ = dateNeighborBounds(all, 1, "2026-06-01")
+	if hasPrev {
+		t.Error("oldest period: hasPrev = true, want false")
+	}
+
+	// Newest period: no next bound.
+	_, _, _, hasNext = dateNeighborBounds(all, 3, "2026-08-01")
+	if hasNext {
+		t.Error("newest period: hasNext = true, want false")
+	}
+}
+
+// TestUpdatePeriod_DateConflict proves UpdatePeriod itself rejects a date
+// moved past a chronological neighbor - not just the web wizard that used to
+// be the only caller checking this (architecture review: the invariant now
+// lives behind UpdatePeriod's own interface, so every caller is protected).
+func TestUpdatePeriod_DateConflict(t *testing.T) {
+	db := openTestDB(t)
+	mustCreatePeriod(t, db, "2026-06-01", baseReadings(nil))
+	p2 := mustCreatePeriod(t, db, "2026-07-01", baseReadings(nil))
+	mustCreatePeriod(t, db, "2026-08-01", baseReadings(nil))
+
+	t.Run("date at or before the previous neighbor", func(t *testing.T) {
+		err := UpdatePeriod(db, p2, PeriodInput{
+			ReadingDate:             "2026-06-01",
+			HeizungWaermeGewichtung: 0.7,
+			Readings:                baseReadings(nil),
+		})
+		var tooEarly *PeriodDateTooEarlyError
+		if !errors.As(err, &tooEarly) {
+			t.Fatalf("UpdatePeriod err = %v, want *PeriodDateTooEarlyError", err)
+		}
+		if tooEarly.Neighbor != "2026-06-01" {
+			t.Errorf("Neighbor = %q, want 2026-06-01", tooEarly.Neighbor)
+		}
+	})
+
+	t.Run("date at or after the next neighbor", func(t *testing.T) {
+		err := UpdatePeriod(db, p2, PeriodInput{
+			ReadingDate:             "2026-08-01",
+			HeizungWaermeGewichtung: 0.7,
+			Readings:                baseReadings(nil),
+		})
+		var tooLate *PeriodDateTooLateError
+		if !errors.As(err, &tooLate) {
+			t.Fatalf("UpdatePeriod err = %v, want *PeriodDateTooLateError", err)
+		}
+		if tooLate.Neighbor != "2026-08-01" {
+			t.Errorf("Neighbor = %q, want 2026-08-01", tooLate.Neighbor)
+		}
+	})
+
+	t.Run("date within the gap stays allowed", func(t *testing.T) {
+		if err := UpdatePeriod(db, p2, PeriodInput{
+			ReadingDate:             "2026-07-15",
+			HeizungWaermeGewichtung: 0.7,
+			Readings:                baseReadings(nil),
+		}); err != nil {
+			t.Fatalf("UpdatePeriod: %v", err)
+		}
+	})
+}
+
 func TestUpdatePeriod_UnknownID(t *testing.T) {
 	db := openTestDB(t)
 	err := UpdatePeriod(db, 999, PeriodInput{

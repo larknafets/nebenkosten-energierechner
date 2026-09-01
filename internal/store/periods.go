@@ -118,13 +118,89 @@ func CreatePeriod(db *sql.DB, in PeriodInput) (periodID int64, err error) {
 	return periodID, nil
 }
 
+// PeriodDateTooEarlyError is returned by UpdatePeriod when in.ReadingDate
+// would move periodID at or before its chronological predecessor's date.
+type PeriodDateTooEarlyError struct {
+	Neighbor string // the predecessor's ReadingDate
+}
+
+func (e *PeriodDateTooEarlyError) Error() string {
+	return fmt.Sprintf("reading date must be after the previous period (%s)", e.Neighbor)
+}
+
+// PeriodDateTooLateError is UpdatePeriod's mirror of PeriodDateTooEarlyError
+// for the chronological successor.
+type PeriodDateTooLateError struct {
+	Neighbor string // the successor's ReadingDate
+}
+
+func (e *PeriodDateTooLateError) Error() string {
+	return fmt.Sprintf("reading date must be before the next period (%s)", e.Neighbor)
+}
+
+// dateNeighborBounds finds, among `all` periods excluding periodID, the
+// closest ReadingDate below and above `currentDate` - the range a
+// correction may move periodID's own date within without silently
+// reordering it past a neighbor (Ticket #44 review finding: generalizing
+// "korrigieren" to any period means a date change can now shift which
+// period is whose Vorperiode for everyone in between, not just itself).
+func dateNeighborBounds(all []PeriodSummary, periodID int64, currentDate string) (prev, next string, hasPrev, hasNext bool) {
+	for _, p := range all {
+		if p.ID == periodID {
+			continue
+		}
+		if p.ReadingDate <= currentDate && (!hasPrev || p.ReadingDate > prev) {
+			prev, hasPrev = p.ReadingDate, true
+		}
+		if p.ReadingDate >= currentDate && (!hasNext || p.ReadingDate < next) {
+			next, hasNext = p.ReadingDate, true
+		}
+	}
+	return
+}
+
+// checkDateNeighbors validates in.ReadingDate against periodID's
+// chronological neighbors before UpdatePeriod writes it. The neighbor
+// bounds are computed around periodID's *current* (pre-edit) date, not the
+// new one - a correction may only move the date within the gap it already
+// occupies, not jump elsewhere and skip the check.
+func checkDateNeighbors(db *sql.DB, periodID int64, readingDate string) error {
+	var currentDate string
+	if err := db.QueryRow(`SELECT reading_date FROM periods WHERE id = ?`, periodID).Scan(&currentDate); err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("%w: period %d", ErrPeriodNotFound, periodID)
+		}
+		return fmt.Errorf("query period %d: %w", periodID, err)
+	}
+
+	all, err := AllPeriods(db)
+	if err != nil {
+		return fmt.Errorf("periods: %w", err)
+	}
+
+	prev, next, hasPrev, hasNext := dateNeighborBounds(all, periodID, currentDate)
+	if hasPrev && readingDate <= prev {
+		return &PeriodDateTooEarlyError{Neighbor: prev}
+	}
+	if hasNext && readingDate >= next {
+		return &PeriodDateTooLateError{Neighbor: next}
+	}
+	return nil
+}
+
 // UpdatePeriod overwrites an existing period's fields, readings, and
 // occupancy in place - no new row, no history of the previous values
 // (Ticket #34: only the latest period is ever editable, in-place, no
 // audit log). Costs aren't stored anywhere (berechneKosten/Verbrauch read
 // live from the DB on every request), so overwriting here is all that's
-// needed for the change to show up - nothing to invalidate.
+// needed for the change to show up - nothing to invalidate. The neighbor-date
+// invariant (see checkDateNeighbors) is enforced here, not just by the web
+// wizard, so any caller gets the same protection.
 func UpdatePeriod(db *sql.DB, periodID int64, in PeriodInput) error {
+	if err := checkDateNeighbors(db, periodID, in.ReadingDate); err != nil {
+		return err
+	}
+
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)

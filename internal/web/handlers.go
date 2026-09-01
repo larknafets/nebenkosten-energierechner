@@ -449,30 +449,11 @@ func handleCreateAblesung(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// dateNeighborBounds finds, among `all` periods excluding periodID, the
-// closest ReadingDate below and above `currentDate` - the range a
-// correction may move periodID's own date within without silently
-// reordering it past a neighbor (Ticket #44 review finding: generalizing
-// "korrigieren" to any period means a date change can now shift which
-// period is whose Vorperiode for everyone in between, not just itself).
-func dateNeighborBounds(all []store.PeriodSummary, periodID int64, currentDate string) (prev, next string, hasPrev, hasNext bool) {
-	for _, p := range all {
-		if p.ID == periodID {
-			continue
-		}
-		if p.ReadingDate <= currentDate && (!hasPrev || p.ReadingDate > prev) {
-			prev, hasPrev = p.ReadingDate, true
-		}
-		if p.ReadingDate >= currentDate && (!hasNext || p.ReadingDate < next) {
-			next, hasNext = p.ReadingDate, true
-		}
-	}
-	return
-}
-
 // handleUpdateAblesung corrects an existing Ablesung in place (Ticket #34,
 // generalized to any period by Ticket #44 - no restriction to the latest
-// one anymore, see store.UpdatePeriod).
+// one anymore, see store.UpdatePeriod). The neighbor-date reorder guard
+// lives in store.UpdatePeriod itself; this handler only translates its
+// typed errors into the German user-facing messages.
 func handleUpdateAblesung(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		periodID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -508,23 +489,17 @@ func handleUpdateAblesung(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		allPeriods, err := store.AllPeriods(db)
-		if err != nil {
-			http.Error(w, "periods: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		prev, next, hasPrev, hasNext := dateNeighborBounds(allPeriods, periodID, existing.ReadingDate)
-		if hasPrev && in.ReadingDate <= prev {
-			http.Error(w, fmt.Sprintf("Ablesedatum muss nach der Vorperiode (%s) liegen", prev), http.StatusBadRequest)
-			return
-		}
-		if hasNext && in.ReadingDate >= next {
-			http.Error(w, fmt.Sprintf("Ablesedatum muss vor der Folgeperiode (%s) liegen", next), http.StatusBadRequest)
-			return
-		}
-
 		if err := store.UpdatePeriod(db, periodID, in); err != nil {
-			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
+			var tooEarly *store.PeriodDateTooEarlyError
+			var tooLate *store.PeriodDateTooLateError
+			switch {
+			case errors.As(err, &tooEarly):
+				http.Error(w, fmt.Sprintf("Ablesedatum muss nach der Vorperiode (%s) liegen", tooEarly.Neighbor), http.StatusBadRequest)
+			case errors.As(err, &tooLate):
+				http.Error(w, fmt.Sprintf("Ablesedatum muss vor der Folgeperiode (%s) liegen", tooLate.Neighbor), http.StatusBadRequest)
+			default:
+				http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 
