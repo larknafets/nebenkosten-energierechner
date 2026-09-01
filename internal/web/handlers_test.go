@@ -1,9 +1,11 @@
 package web
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/larknafets/nebenkosten-energierechner/internal/calc"
+	"github.com/larknafets/nebenkosten-energierechner/internal/store"
 )
 
 func TestKategorien(t *testing.T) {
@@ -264,6 +266,157 @@ func TestParseHeizungGewichtung(t *testing.T) {
 			t.Errorf("parseHeizungGewichtung(%q) = %v, want %v", c.raw, got, c.want)
 		}
 	}
+}
+
+func TestParseDecimalDE(t *testing.T) {
+	cases := []struct {
+		raw     string
+		want    float64
+		wantErr bool
+	}{
+		{"25,33", 25.33, false},
+		{"0", 0, false},
+		{" 116,23 ", 116.23, false},
+		{"", 0, true},
+		{"abc", 0, true},
+	}
+	for _, c := range cases {
+		got, err := parseDecimalDE(c.raw)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("parseDecimalDE(%q): want error, got %v", c.raw, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("parseDecimalDE(%q): unexpected error: %v", c.raw, err)
+		}
+		if got != c.want {
+			t.Errorf("parseDecimalDE(%q) = %v, want %v", c.raw, got, c.want)
+		}
+	}
+}
+
+// csvRow builds one CSV data row (csvHeader order) with the given
+// reading_date/strom_gesamt, everything else at a fixed valid default -
+// the exact values elsewhere don't matter for the tests using this.
+func csvRow(readingDate string, stromGesamt string) string {
+	return strings.Join([]string{
+		readingDate, stromGesamt, "0", "0", "0", "0", "0", "0", "0", "0", "0",
+		"0,22", "1,46", "4,87", "0,7", "0,08",
+		"2", "1", "116,23", "86",
+	}, ";")
+}
+
+func TestParseImportCSV_RoundTrip(t *testing.T) {
+	csvText := strings.Join(csvHeader, ";") + "\n" +
+		csvRow("2026-06-01", "100") + "\n" +
+		csvRow("2026-07-01", "210") + "\n"
+
+	rows, err := parseImportCSV(strings.NewReader(csvText))
+	if err != nil {
+		t.Fatalf("parseImportCSV: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("len(rows) = %d, want 2", len(rows))
+	}
+	if rows[0].line != 2 || rows[1].line != 3 {
+		t.Errorf("line numbers = [%d, %d], want [2, 3]", rows[0].line, rows[1].line)
+	}
+	if rows[1].input.Readings["strom_gesamt"] != 210 {
+		t.Errorf("Readings[strom_gesamt] = %v, want 210", rows[1].input.Readings["strom_gesamt"])
+	}
+	if rows[1].input.Strompreis != 0.22 {
+		t.Errorf("Strompreis = %v, want 0.22", rows[1].input.Strompreis)
+	}
+	if rows[1].input.HeizungWaermeGewichtung != 0.7 {
+		t.Errorf("HeizungWaermeGewichtung = %v, want 0.7", rows[1].input.HeizungWaermeGewichtung)
+	}
+	if rows[1].input.Personen[1] != 2 || rows[1].input.Personen[2] != 1 {
+		t.Errorf("Personen = %v, want {1:2, 2:1}", rows[1].input.Personen)
+	}
+	if rows[1].input.QM[1] != 116.23 {
+		t.Errorf("QM[1] = %v, want 116.23", rows[1].input.QM[1])
+	}
+}
+
+func TestParseImportCSV_WithBOM(t *testing.T) {
+	csvText := "\xEF\xBB\xBF" + strings.Join(csvHeader, ";") + "\n" + csvRow("2026-06-01", "100") + "\n"
+	rows, err := parseImportCSV(strings.NewReader(csvText))
+	if err != nil {
+		t.Fatalf("parseImportCSV: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+}
+
+func TestParseImportCSV_MissingColumn(t *testing.T) {
+	header := strings.Join(csvHeader[:len(csvHeader)-1], ";") // drop qm_2
+	csvText := header + "\n"
+	if _, err := parseImportCSV(strings.NewReader(csvText)); err == nil {
+		t.Fatal("parseImportCSV: want error for missing column, got nil")
+	}
+}
+
+func TestParseImportCSV_HardErrorHasLineNumber(t *testing.T) {
+	csvText := strings.Join(csvHeader, ";") + "\n" +
+		csvRow("2026-06-01", "100") + "\n" +
+		csvRow("2026-07-01", "nicht-numerisch") + "\n"
+
+	_, err := parseImportCSV(strings.NewReader(csvText))
+	if err == nil {
+		t.Fatal("parseImportCSV: want error for non-numeric Zählerstand, got nil")
+	}
+	if !strings.Contains(err.Error(), "Zeile 3") {
+		t.Errorf("error = %q, want it to mention Zeile 3", err.Error())
+	}
+}
+
+func TestImportWarnings_NegativeAndOutlier(t *testing.T) {
+	rows := []importRow{
+		{line: 2, input: store.PeriodInput{ReadingDate: "2026-01-01", Readings: baseReadingsForImportTest(map[string]float64{"strom_gesamt": 1000})}},
+		{line: 3, input: store.PeriodInput{ReadingDate: "2026-02-01", Readings: baseReadingsForImportTest(map[string]float64{"strom_gesamt": 1100})}},
+		{line: 4, input: store.PeriodInput{ReadingDate: "2026-03-01", Readings: baseReadingsForImportTest(map[string]float64{"strom_gesamt": 1200})}},
+		{line: 5, input: store.PeriodInput{ReadingDate: "2026-04-01", Readings: baseReadingsForImportTest(map[string]float64{"strom_gesamt": 1300})}},
+		// consumption 1050 vs. previous 3 avg 100 -> Ausreißer.
+		{line: 6, input: store.PeriodInput{ReadingDate: "2026-05-01", Readings: baseReadingsForImportTest(map[string]float64{"strom_gesamt": 2350})}},
+		// negativer Verbrauch: 2300 < 2350.
+		{line: 7, input: store.PeriodInput{ReadingDate: "2026-06-01", Readings: baseReadingsForImportTest(map[string]float64{"strom_gesamt": 2300})}},
+	}
+	ids := make([]int64, len(rows))
+	for i := range ids {
+		ids[i] = int64(i + 1)
+	}
+
+	warnings := importWarnings(rows, ids)
+
+	var hasOutlier, hasNegative bool
+	for _, w := range warnings {
+		if strings.Contains(w, "Zeile 6") && strings.Contains(w, "Ausreißer") {
+			hasOutlier = true
+		}
+		if strings.Contains(w, "Zeile 7") && strings.Contains(w, "negativer Verbrauch") {
+			hasNegative = true
+		}
+	}
+	if !hasOutlier {
+		t.Errorf("expected an Ausreißer warning for Zeile 6, got %v", warnings)
+	}
+	if !hasNegative {
+		t.Errorf("expected a negativer-Verbrauch warning for Zeile 7, got %v", warnings)
+	}
+}
+
+func baseReadingsForImportTest(overrides map[string]float64) map[string]float64 {
+	out := make(map[string]float64, len(store.MeterKeys))
+	for _, k := range store.MeterKeys {
+		out[k] = 0
+	}
+	for k, v := range overrides {
+		out[k] = v
+	}
+	return out
 }
 
 func TestIngressBase(t *testing.T) {

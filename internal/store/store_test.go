@@ -213,6 +213,100 @@ func TestUpdatePeriod_Roundtrip(t *testing.T) {
 	}
 }
 
+// TestImportPeriods_AllOrNothing verifies ImportPeriods writes every period
+// in one shared transaction (Ticket #54): a failure partway through rolls
+// back everything from that call, not just the failing input.
+func TestImportPeriods_AllOrNothing(t *testing.T) {
+	db := openTestDB(t)
+
+	_, err := ImportPeriods(db, []PeriodInput{
+		{
+			ReadingDate:             "2026-06-01",
+			HeizungWaermeGewichtung: 0.7,
+			Readings:                baseReadings(nil),
+		},
+		{
+			ReadingDate:             "2026-07-01",
+			HeizungWaermeGewichtung: 0.7,
+			Readings:                map[string]float64{}, // will fail: no readings at all
+		},
+	})
+	if err == nil {
+		t.Fatal("ImportPeriods: want error for the incomplete second input, got nil")
+	}
+
+	all, allErr := AllPeriods(db)
+	if allErr != nil {
+		t.Fatalf("AllPeriods: %v", allErr)
+	}
+	if len(all) != 0 {
+		t.Errorf("AllPeriods after failed ImportPeriods = %d, want 0 (all-or-nothing rollback)", len(all))
+	}
+}
+
+// TestImportPeriods_Success verifies a clean multi-period import lands all
+// rows and returns their ids in input order.
+func TestImportPeriods_Success(t *testing.T) {
+	db := openTestDB(t)
+
+	ids, err := ImportPeriods(db, []PeriodInput{
+		{
+			ReadingDate:             "2026-06-01",
+			HeizungWaermeGewichtung: 0.7,
+			Readings:                baseReadings(map[string]float64{"strom_gesamt": 100}),
+			Personen:                map[int64]int64{1: 2, 2: 1},
+			QM:                      map[int64]float64{1: 116.23, 2: 86},
+		},
+		{
+			ReadingDate:             "2026-07-01",
+			HeizungWaermeGewichtung: 0.7,
+			Readings:                baseReadings(map[string]float64{"strom_gesamt": 200}),
+			Personen:                map[int64]int64{1: 2, 2: 1},
+			QM:                      map[int64]float64{1: 116.23, 2: 86},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ImportPeriods: %v", err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("ImportPeriods returned %d ids, want 2", len(ids))
+	}
+
+	all, err := AllPeriods(db)
+	if err != nil {
+		t.Fatalf("AllPeriods: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("AllPeriods = %d, want 2", len(all))
+	}
+}
+
+// TestAllPeriodDetails_OrderAndData verifies AllPeriodDetails returns every
+// period oldest-first with its full readings/occupancy attached (Ticket
+// #53's CSV export data source).
+func TestAllPeriodDetails_OrderAndData(t *testing.T) {
+	db := openTestDB(t)
+	p1 := mustCreatePeriod(t, db, "2026-07-01", baseReadings(map[string]float64{"strom_gesamt": 200}))
+	p2 := mustCreatePeriod(t, db, "2026-06-01", baseReadings(map[string]float64{"strom_gesamt": 100}))
+
+	details, err := AllPeriodDetails(db)
+	if err != nil {
+		t.Fatalf("AllPeriodDetails: %v", err)
+	}
+	if len(details) != 2 {
+		t.Fatalf("AllPeriodDetails = %d, want 2", len(details))
+	}
+	if details[0].ID != p2 || details[1].ID != p1 {
+		t.Errorf("AllPeriodDetails order = [%d, %d], want [%d, %d] (oldest first)", details[0].ID, details[1].ID, p2, p1)
+	}
+	if details[0].Readings["strom_gesamt"] != 100 {
+		t.Errorf("details[0].Readings[strom_gesamt] = %v, want 100", details[0].Readings["strom_gesamt"])
+	}
+	if details[0].PersonenByApartment[1] != 2 || details[0].PersonenByApartment[2] != 1 {
+		t.Errorf("details[0].PersonenByApartment = %v, want {1:2, 2:1}", details[0].PersonenByApartment)
+	}
+}
+
 // TestUpdatePeriod_AddsMissingMeterReading verifies UpdatePeriod can set a
 // meter's reading for a period that never had one - e.g. an old period that
 // predates a meter (strom_einspeisung before Ticket #47). It used to be a

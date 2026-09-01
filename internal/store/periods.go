@@ -59,17 +59,13 @@ type PeriodInput struct {
 	QM                      map[int64]float64  // apartment id -> Wohnfläche (writes through to apartments.qm)
 }
 
-// CreatePeriod inserts a new period with its meter readings and occupancy in
-// one transaction, and updates the apartments' Wohnfläche (qm changes so
-// rarely that it's captured in the same monthly form rather than a separate
-// settings area - see Issue #7 resolution).
-func CreatePeriod(db *sql.DB, in PeriodInput) (periodID int64, err error) {
-	tx, err := db.Begin()
-	if err != nil {
-		return 0, fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
+// insertPeriodTx inserts one period with its meter readings and occupancy,
+// and updates the apartments' Wohnfläche (qm changes so rarely that it's
+// captured in the same monthly form rather than a separate settings area -
+// see Issue #7 resolution). Shared by CreatePeriod (one period, own
+// transaction) and ImportPeriods (many periods, one shared transaction -
+// Ticket #54).
+func insertPeriodTx(tx *sql.Tx, in PeriodInput) (periodID int64, err error) {
 	res, err := tx.Exec(
 		`INSERT INTO periods (reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
@@ -112,10 +108,51 @@ func CreatePeriod(db *sql.DB, in PeriodInput) (periodID int64, err error) {
 		}
 	}
 
+	return periodID, nil
+}
+
+// CreatePeriod inserts a new period in its own transaction.
+func CreatePeriod(db *sql.DB, in PeriodInput) (periodID int64, err error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	periodID, err = insertPeriodTx(tx, in)
+	if err != nil {
+		return 0, err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("commit tx: %w", err)
 	}
 	return periodID, nil
+}
+
+// ImportPeriods inserts every given period in one shared transaction - all
+// or nothing, for the CSV bulk import (Ticket #54): a failure on any input
+// rolls back every period from this call, not just the failing one.
+func ImportPeriods(db *sql.DB, inputs []PeriodInput) (ids []int64, err error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	ids = make([]int64, 0, len(inputs))
+	for _, in := range inputs {
+		id, err := insertPeriodTx(tx, in)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+	return ids, nil
 }
 
 // PeriodDateTooEarlyError is returned by UpdatePeriod when in.ReadingDate
@@ -353,6 +390,79 @@ func AllPeriods(db *sql.DB) ([]PeriodSummary, error) {
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// AllPeriodDetails returns every period with its full readings and
+// occupancy, oldest first - the CSV export's data source (Ticket #53). 3
+// batched queries total (periods, readings, occupancy), not one per period.
+func AllPeriodDetails(db *sql.DB) ([]*LatestPeriod, error) {
+	rows, err := db.Query(
+		`SELECT id, reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis
+		 FROM periods ORDER BY reading_date ASC, id ASC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query periods: %w", err)
+	}
+	defer rows.Close()
+
+	byID := map[int64]*LatestPeriod{}
+	var out []*LatestPeriod
+	for rows.Next() {
+		p := &LatestPeriod{
+			Readings:            map[string]float64{},
+			PersonenByApartment: map[int64]int64{},
+		}
+		if err := rows.Scan(&p.ID, &p.ReadingDate, &p.Strompreis, &p.FrischwasserPreis, &p.AbwasserPreis, &p.HeizungWaermeGewichtung, &p.EinspeisungPreis); err != nil {
+			return nil, fmt.Errorf("scan period: %w", err)
+		}
+		byID[p.ID] = p
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	readingRows, err := db.Query(
+		`SELECT r.period_id, m.key, r.zaehlerstand FROM meter_readings r JOIN meters m ON m.id = r.meter_id`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query readings: %w", err)
+	}
+	defer readingRows.Close()
+	for readingRows.Next() {
+		var periodID int64
+		var key string
+		var value float64
+		if err := readingRows.Scan(&periodID, &key, &value); err != nil {
+			return nil, fmt.Errorf("scan reading: %w", err)
+		}
+		if p, ok := byID[periodID]; ok {
+			p.Readings[key] = value
+		}
+	}
+	if err := readingRows.Err(); err != nil {
+		return nil, err
+	}
+
+	occRows, err := db.Query(`SELECT period_id, apartment_id, personen FROM period_occupancy`)
+	if err != nil {
+		return nil, fmt.Errorf("query occupancy: %w", err)
+	}
+	defer occRows.Close()
+	for occRows.Next() {
+		var periodID, apartmentID, personen int64
+		if err := occRows.Scan(&periodID, &apartmentID, &personen); err != nil {
+			return nil, fmt.Errorf("scan occupancy: %w", err)
+		}
+		if p, ok := byID[periodID]; ok {
+			p.PersonenByApartment[apartmentID] = personen
+		}
+	}
+	if err := occRows.Err(); err != nil {
+		return nil, err
+	}
+
+	return out, nil
 }
 
 // GetLatestPeriod returns the most recently dated period, or nil if none

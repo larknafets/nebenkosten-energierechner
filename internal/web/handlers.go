@@ -4,13 +4,18 @@
 package web
 
 import (
+	"bufio"
 	"database/sql"
 	"embed"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"math"
 	"net/http"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -139,13 +144,30 @@ var meterDisplays = []meterDisplay{
 	{"strom_einspeisung", "Einspeisung (PV)", "kWh"},
 }
 
+// csvHeader is the canonical CSV column order for both export (Ticket #53)
+// and import (Ticket #54) - reading_date, every meter key (Zählerstände,
+// not Verbrauch), the period-level prices/Gewichtung, then Personen/QM per
+// apartment (fixed ids 1/2, see store's seed()).
+var csvHeader = append(append([]string{"reading_date"}, store.MeterKeys...),
+	"strompreis", "frischwasser_preis", "abwasser_preis", "heizung_gewichtung", "einspeisung_preis",
+	"personen_1", "personen_2", "qm_1", "qm_2",
+)
+
+// parseDecimalDE is formatDecimalDE's inverse: German decimal-comma input
+// ("25,33") to float64. CSV cells always use this convention (Ticket #54).
+func parseDecimalDE(s string) (float64, error) {
+	return strconv.ParseFloat(strings.ReplaceAll(strings.TrimSpace(s), ",", "."), 64)
+}
+
 // NewMux wires up the wizard and read routes.
 func NewMux(db *sql.DB, version, buildDate string) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", handleIndex(db))
 	mux.HandleFunc("GET /ablesungen", handleAblesungenListe(db))
+	mux.HandleFunc("GET /ablesungen/export.csv", handleExportCSV(db))
 	mux.HandleFunc("GET /ablesungen/neu", handleWizardForm(db))
 	mux.HandleFunc("POST /ablesungen", handleCreateAblesung(db))
+	mux.HandleFunc("POST /ablesungen/import", handleImportCSV(db))
 	mux.HandleFunc("GET /ablesungen/{id}", handleAblesungDetail(db))
 	mux.HandleFunc("GET /ablesungen/{id}/bearbeiten", handleEditWizardForm(db))
 	mux.HandleFunc("POST /ablesungen/{id}", handleUpdateAblesung(db))
@@ -214,6 +236,11 @@ type wizardData struct {
 	// option checked - unlike the blank-when-absent price fields above,
 	// this can't just be left empty.
 	PreviousHeizungGewichtung float64
+
+	// NoPeriods gates the CSV-Import button (Ticket #54) - only offered as
+	// a bootstrap path into a genuinely empty database, never set in edit
+	// mode (handleEditWizardForm leaves it at its zero value, false).
+	NoPeriods bool
 }
 
 // outlierAvg computes the Ausreißer-Warnung baseline (Ticket #13) from up
@@ -264,6 +291,7 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			ReadingDate:               time.Now().Format("2006-01-02"),
 			Apartments:                apartments,
 			PreviousHeizungGewichtung: 0.7,
+			NoPeriods:                 previousPeriod == nil,
 		}
 		if len(recent) > 0 {
 			data.HasPrevious = true
@@ -570,7 +598,9 @@ func berechneKosten(db *sql.DB, periodID int64) (kosten, error) {
 }
 
 // handleAblesungenListe lists every recorded period (Ticket #43), newest
-// first, linking each to its detail view.
+// first, linking each to its detail view. ImportedCount/Warnings surface the
+// CSV import's result (Ticket #54) - passed via query params since the app
+// has no session/flash mechanism.
 func handleAblesungenListe(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		periods, err := store.AllPeriods(db)
@@ -579,18 +609,312 @@ func handleAblesungenListe(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		importedCount, _ := strconv.Atoi(r.URL.Query().Get("imported"))
+
 		data := struct {
-			Base    string
-			Periods []store.PeriodSummary
+			Base          string
+			Periods       []store.PeriodSummary
+			ImportedCount int
+			Warnings      []string
 		}{
-			Base:    requestBase(r),
-			Periods: periods,
+			Base:          requestBase(r),
+			Periods:       periods,
+			ImportedCount: importedCount,
+			Warnings:      r.URL.Query()["warning"],
 		}
 
 		if err := ablesungenTemplate.ExecuteTemplate(w, "layout", data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
+}
+
+// handleExportCSV streams every Ablesung as CSV (Ticket #53) - Excel-DE
+// dialect (Semikolon, Komma-Dezimal, UTF-8 mit BOM), same csvHeader the
+// import (Ticket #54) reads back.
+func handleExportCSV(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		details, err := store.AllPeriodDetails(db)
+		if err != nil {
+			http.Error(w, "periods: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		apartments, err := store.Apartments(db)
+		if err != nil {
+			http.Error(w, "apartments: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// QM isn't historized per period (it's a live column on apartments,
+		// see store.PeriodInput.QM's doc comment) - every row gets today's
+		// value, the only one the data model has.
+		var qm1, qm2 float64
+		for _, a := range apartments {
+			switch a.ID {
+			case 1:
+				qm1 = a.QM
+			case 2:
+				qm2 = a.QM
+			}
+		}
+
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="ablesungen.csv"`)
+		w.Write([]byte{0xEF, 0xBB, 0xBF})
+
+		cw := csv.NewWriter(w)
+		cw.Comma = ';'
+		if err := cw.Write(csvHeader); err != nil {
+			return
+		}
+		for _, p := range details {
+			row := make([]string, 0, len(csvHeader))
+			row = append(row, p.ReadingDate)
+			for _, key := range store.MeterKeys {
+				row = append(row, formatDecimalDE(p.Readings[key]))
+			}
+			row = append(row,
+				formatDecimalDE(p.Strompreis),
+				formatDecimalDE(p.FrischwasserPreis),
+				formatDecimalDE(p.AbwasserPreis),
+				formatDecimalDE(p.HeizungWaermeGewichtung),
+				formatDecimalDE(p.EinspeisungPreis),
+				formatDecimalDE(float64(p.PersonenByApartment[1])),
+				formatDecimalDE(float64(p.PersonenByApartment[2])),
+				formatDecimalDE(qm1),
+				formatDecimalDE(qm2),
+			)
+			if err := cw.Write(row); err != nil {
+				return
+			}
+		}
+		cw.Flush()
+	}
+}
+
+// importMaxBytes caps the CSV upload (Ticket #54) - single-user app, no
+// real threat model, just a guard against an accidental huge file.
+const importMaxBytes = 2 << 20 // 2 MiB
+
+// importRow pairs a parsed PeriodInput with its original CSV line number,
+// so warnings can still point at the uploaded file after the rows are
+// re-sorted into chronological order.
+type importRow struct {
+	input store.PeriodInput
+	line  int
+}
+
+// handleImportCSV bootstraps a completely empty database from a CSV in the
+// csvHeader format (Ticket #54) - rejected if any Ablesung already exists,
+// even though the form button is already hidden in that case (defense in
+// depth). A hard error in any row aborts the whole import (alles oder
+// nichts); negative-Verbrauch/Ausreißer warnings never block, just get
+// reported afterwards on the Ablesungen-Übersicht.
+func handleImportCSV(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		existing, err := store.AllPeriods(db)
+		if err != nil {
+			http.Error(w, "periods: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if len(existing) > 0 {
+			http.Error(w, "Import nur möglich, solange noch keine Ablesung existiert", http.StatusBadRequest)
+			return
+		}
+
+		r.Body = http.MaxBytesReader(w, r.Body, importMaxBytes)
+		if err := r.ParseMultipartForm(importMaxBytes); err != nil {
+			http.Error(w, "Datei zu groß oder ungültig (Limit 2 MB): "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		file, _, err := r.FormFile("csv")
+		if err != nil {
+			http.Error(w, "keine CSV-Datei hochgeladen", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		rows, err := parseImportCSV(file)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		sort.Slice(rows, func(i, j int) bool { return rows[i].input.ReadingDate < rows[j].input.ReadingDate })
+
+		inputs := make([]store.PeriodInput, len(rows))
+		for i, row := range rows {
+			inputs[i] = row.input
+		}
+
+		ids, err := store.ImportPeriods(db, inputs)
+		if err != nil {
+			http.Error(w, "import: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		warnings := importWarnings(rows, ids)
+		redirectURL := fmt.Sprintf("%s/ablesungen?imported=%d", requestBase(r), len(ids))
+		for _, msg := range warnings {
+			redirectURL += "&warning=" + url.QueryEscape(msg)
+		}
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+	}
+}
+
+// parseImportCSV reads csvHeader-formatted CSV (Semikolon, Komma-Dezimal,
+// optionales UTF-8-BOM) and validates every row into a PeriodInput. Returns
+// the first hard error encountered (missing/kaputte Werte, ungültiges
+// Datum/Heizungs-Gewichtung) - the caller aborts the whole import on any
+// error, so there's no point collecting more than one.
+func parseImportCSV(file io.Reader) ([]importRow, error) {
+	reader := bufio.NewReader(file)
+	if bom, err := reader.Peek(3); err == nil && bom[0] == 0xEF && bom[1] == 0xBB && bom[2] == 0xBF {
+		reader.Discard(3)
+	}
+
+	cr := csv.NewReader(reader)
+	cr.Comma = ';'
+
+	header, err := cr.Read()
+	if err != nil {
+		return nil, fmt.Errorf("CSV: Kopfzeile konnte nicht gelesen werden: %w", err)
+	}
+	colIdx := make(map[string]int, len(header))
+	for i, name := range header {
+		colIdx[strings.TrimSpace(name)] = i
+	}
+	for _, want := range csvHeader {
+		if _, ok := colIdx[want]; !ok {
+			return nil, fmt.Errorf("CSV: Spalte %q fehlt", want)
+		}
+	}
+
+	var rows []importRow
+	line := 1
+	for {
+		record, err := cr.Read()
+		if err == io.EOF {
+			break
+		}
+		line++
+		if err != nil {
+			return nil, fmt.Errorf("Zeile %d: %v", line, err)
+		}
+
+		in, err := parseImportRow(record, colIdx, line)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, importRow{input: in, line: line})
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("CSV enthält keine Ablesungen")
+	}
+	return rows, nil
+}
+
+func parseImportRow(record []string, colIdx map[string]int, line int) (store.PeriodInput, error) {
+	cell := func(col string) string { return record[colIdx[col]] }
+
+	readingDate := strings.TrimSpace(cell("reading_date"))
+	if _, err := time.Parse("2006-01-02", readingDate); err != nil {
+		return store.PeriodInput{}, fmt.Errorf("Zeile %d: ungültiges Ablesedatum %q (Format JJJJ-MM-TT)", line, readingDate)
+	}
+
+	readings := make(map[string]float64, len(store.MeterKeys))
+	for _, key := range store.MeterKeys {
+		v, err := parseDecimalDE(cell(key))
+		if err != nil {
+			return store.PeriodInput{}, fmt.Errorf("Zeile %d: ungültiger Wert für %s: %q", line, key, cell(key))
+		}
+		readings[key] = v
+	}
+
+	strompreis, err1 := parseDecimalDE(cell("strompreis"))
+	frischwasserPreis, err2 := parseDecimalDE(cell("frischwasser_preis"))
+	abwasserPreis, err3 := parseDecimalDE(cell("abwasser_preis"))
+	einspeisungPreis, err4 := parseDecimalDE(cell("einspeisung_preis"))
+	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
+		return store.PeriodInput{}, fmt.Errorf("Zeile %d: ungültiger Preiswert", line)
+	}
+
+	heizungGewichtung, err := parseHeizungGewichtung(strings.ReplaceAll(cell("heizung_gewichtung"), ",", "."))
+	if err != nil {
+		return store.PeriodInput{}, fmt.Errorf("Zeile %d: %v", line, err)
+	}
+
+	personen := make(map[int64]int64, 2)
+	qm := make(map[int64]float64, 2)
+	for _, id := range [2]int64{1, 2} {
+		personenCol := fmt.Sprintf("personen_%d", id)
+		p, err := parseDecimalDE(cell(personenCol))
+		if err != nil {
+			return store.PeriodInput{}, fmt.Errorf("Zeile %d: ungültige Personenzahl für Wohnung %d: %q", line, id, cell(personenCol))
+		}
+		personen[id] = int64(p)
+
+		qmCol := fmt.Sprintf("qm_%d", id)
+		q, err := parseDecimalDE(cell(qmCol))
+		if err != nil {
+			return store.PeriodInput{}, fmt.Errorf("Zeile %d: ungültige Wohnfläche für Wohnung %d: %q", line, id, cell(qmCol))
+		}
+		qm[id] = q
+	}
+
+	return store.PeriodInput{
+		ReadingDate:             readingDate,
+		Strompreis:              strompreis,
+		FrischwasserPreis:       frischwasserPreis,
+		AbwasserPreis:           abwasserPreis,
+		HeizungWaermeGewichtung: heizungGewichtung,
+		EinspeisungPreis:        einspeisungPreis,
+		Readings:                readings,
+		Personen:                personen,
+		QM:                      qm,
+	}, nil
+}
+
+// importWarnings reproduces the wizard's client-side negative-Verbrauch/
+// Ausreißer checks server-side (Ticket #54) - the bulk import has no
+// per-field JS to run them, but a bulk import of historical data is exactly
+// where a typo is easiest to miss. rows must already be chronologically
+// sorted, ids in the same order (ImportPeriods preserves it).
+func importWarnings(rows []importRow, ids []int64) []string {
+	var warnings []string
+	var history []store.PeriodReadings // newest-first, capped at 4
+
+	for i, row := range rows {
+		if i > 0 {
+			prev := history[0]
+			for _, key := range store.MeterKeys {
+				newVal, prevVal := row.input.Readings[key], prev.Readings[key]
+				if newVal < prevVal {
+					warnings = append(warnings, fmt.Sprintf("Zeile %d (%s): negativer Verbrauch bei %s (%s < Vorstand %s)",
+						row.line, row.input.ReadingDate, key, formatDecimalDE(newVal), formatDecimalDE(prevVal)))
+				}
+			}
+			if avg, ok := outlierAvg(history); ok {
+				for _, key := range store.MeterKeys {
+					a := avg[key]
+					if a == 0 {
+						continue
+					}
+					consumption := row.input.Readings[key] - prev.Readings[key]
+					if math.Abs(consumption-a) > 0.5*math.Abs(a) {
+						warnings = append(warnings, fmt.Sprintf("Zeile %d (%s): Ausreißer bei %s (Verbrauch %s weicht >50%% vom Schnitt der letzten 3 Ablesungen %s ab)",
+							row.line, row.input.ReadingDate, key, formatDecimalDE(consumption), formatDecimalDE(a)))
+					}
+				}
+			}
+		}
+
+		history = append([]store.PeriodReadings{{ID: ids[i], ReadingDate: row.input.ReadingDate, Readings: row.input.Readings}}, history...)
+		if len(history) > 4 {
+			history = history[:4]
+		}
+	}
+	return warnings
 }
 
 // handleAblesungDetail shows one period's Zählerstände and full

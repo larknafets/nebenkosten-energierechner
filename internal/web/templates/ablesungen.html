@@ -2,6 +2,18 @@
 <h1>Ablesungen</h1>
 <p class="muted"><a href="{{.Base}}/dashboard">Zum Dashboard</a></p>
 
+{{if .ImportedCount}}
+<p class="panel" style="border-color:#2e7d32">✓ {{.ImportedCount}} Ablesungen importiert.</p>
+{{end}}
+{{if .Warnings}}
+<div class="panel" style="border-color:#e6a700">
+  <strong>Hinweise beim Import:</strong>
+  <ul>
+    {{range .Warnings}}<li>{{.}}</li>{{end}}
+  </ul>
+</div>
+{{end}}
+
 {{if not .Periods}}
 <p class="muted">Noch keine Ablesung erfasst. <a href="{{.Base}}/ablesungen/neu">Jetzt erfassen</a>.</p>
 {{else}}
@@ -18,6 +30,7 @@
 
 <div class="btn-row">
   <a href="{{.Base}}/ablesungen/neu" class="button success">Neue Ablesung erfassen</a>
+  <a href="{{.Base}}/ablesungen/export.csv" class="button secondary">CSV Export</a>
 </div>
 {{end}}
 {{end}}
