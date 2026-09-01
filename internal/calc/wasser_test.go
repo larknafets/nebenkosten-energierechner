@@ -3,8 +3,8 @@ package calc_test
 import (
 	"testing"
 
-	"github.com/larknafets/nebenkosten-energierechner/internal/calc"
-	"github.com/larknafets/nebenkosten-energierechner/internal/store"
+	"github.com/larknafets/nebenkostenrechner/internal/calc"
+	"github.com/larknafets/nebenkostenrechner/internal/store"
 )
 
 func TestWasser_PersonenanteilUndKosten(t *testing.T) {

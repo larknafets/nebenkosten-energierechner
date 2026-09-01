@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/larknafets/nebenkosten-energierechner/internal/store"
+	"github.com/larknafets/nebenkostenrechner/internal/store"
 )
 
 // EinspeisungErgebnis is the PV-Einspeisevergütung result for one period -

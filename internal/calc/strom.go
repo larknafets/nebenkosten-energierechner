@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/larknafets/nebenkosten-energierechner/internal/store"
+	"github.com/larknafets/nebenkostenrechner/internal/store"
 )
 
 // StromErgebnis is the PV-Netzbezug-Zuteilung result for one period. See
-// https://github.com/larknafets/nebenkosten-energierechner/issues/2 for the
+// https://github.com/larknafets/nebenkostenrechner/issues/2 for the
 // formula: Netzbezug wird zuerst Wohnung 2 zugeteilt (gedeckelt auf ihren
 // Verbrauch), dann die Wärmepumpe auf den Rest - was danach übrig bleibt,
 // zählt implizit zu Wohnung 1 (keine eigene Kostenposition).

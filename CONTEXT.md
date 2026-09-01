@@ -1,4 +1,4 @@
-# Nebenkosten-Energierechner
+# Nebenkostenrechner
 
 Monatliche Nebenkostenabrechnung für ein Zweifamilienhaus mit Wärmepumpe und PV-Anlage: Strom-, Heizungs- und Wasserkosten werden aus monatlich erfassten Zählerständen berechnet und auf Wohnung 1/Wohnung 2 verteilt.
 

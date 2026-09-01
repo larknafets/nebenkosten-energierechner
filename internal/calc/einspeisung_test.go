@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/larknafets/nebenkosten-energierechner/internal/calc"
-	"github.com/larknafets/nebenkosten-energierechner/internal/store"
+	"github.com/larknafets/nebenkostenrechner/internal/calc"
+	"github.com/larknafets/nebenkostenrechner/internal/store"
 )
 
 func mustCreatePeriodMitEinspeisung(t *testing.T, db *sql.DB, date string, einspeisungPreis float64, readings map[string]float64) int64 {

@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/larknafets/nebenkosten-energierechner/internal/store"
+	"github.com/larknafets/nebenkostenrechner/internal/store"
 )
 
 // HeizungErgebnis is the Heizung/Warmwasser-Kostenverteilung result for one
-// period. See https://github.com/larknafets/nebenkosten-energierechner/issues/16:
+// period. See https://github.com/larknafets/nebenkostenrechner/issues/16:
 // die Wärmepumpen-Stromkosten (aus der Strom-Kostenberechnung, #14) werden
 // nach Wärmeverbrauch und Wohnfläche auf beide Wohnungen verteilt, gewichtet
 // mit der Periode-eigenen HeizungWaermeGewichtung (0.7/0.6/0.5, Default 0.7

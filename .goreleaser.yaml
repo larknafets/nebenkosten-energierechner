@@ -5,9 +5,9 @@ before:
     - go mod tidy
 
 builds:
-  - id: nebenkosten-energierechner
-    main: ./cmd/nebenkosten-energierechner
-    binary: nebenkosten-energierechner
+  - id: nebenkostenrechner
+    main: ./cmd/nebenkostenrechner
+    binary: nebenkostenrechner
     env:
       - CGO_ENABLED=0
     ldflags:
@@ -22,7 +22,7 @@ builds:
       - "7"
 
 archives:
-  - id: nebenkosten-energierechner
+  - id: nebenkostenrechner
     formats: [tar.gz]
     name_template: >-
       {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}
@@ -40,4 +40,4 @@ changelog:
 release:
   github:
     owner: larknafets
-    name: nebenkosten-energierechner
+    name: nebenkostenrechner

@@ -1,8 +1,8 @@
-# Nebenkosten-Energierechner
+# Nebenkostenrechner
 
 Web-App zur monatlichen Nebenkostenabrechnung für ein Zweifamilienhaus mit Wärmepumpe und PV-Anlage. Berechnet Strom-, Heizung/Warmwasser- und Wasserkosten je Wohnung aus monatlich erfassten Zählerständen.
 
-Details und Entscheidungshistorie: [Spec-Map (Issue #1)](https://github.com/larknafets/nebenkosten-energierechner/issues/1).
+Details und Entscheidungshistorie: [Spec-Map (Issue #1)](https://github.com/larknafets/nebenkostenrechner/issues/1).
 
 ## Stammdaten
 
@@ -140,13 +140,13 @@ Go, `modernc.org/sqlite` (kein ORM, `database/sql`), server-rendered `html/templ
 
 ```bash
 docker run -d \
-  --name nebenkosten-energierechner \
+  --name nebenkostenrechner \
   -p 8080:8080 \
   -v nebenkosten-data:/data \
-  ghcr.io/larknafets/nebenkosten-energierechner:latest
+  ghcr.io/larknafets/nebenkostenrechner:latest
 ```
 
-Danach erreichbar unter `http://localhost:8080`, Health-Check unter `/healthz`. Die Image-Tags folgen den Release-Versionen - siehe [Releases](https://github.com/larknafets/nebenkosten-energierechner/releases).
+Danach erreichbar unter `http://localhost:8080`, Health-Check unter `/healthz`. Die Image-Tags folgen den Release-Versionen - siehe [Releases](https://github.com/larknafets/nebenkostenrechner/releases).
 
 | Umgebungsvariable | Default | Beschreibung |
 |---|---|---|

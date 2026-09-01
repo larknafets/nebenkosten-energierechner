@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-GitHub Issues via `gh` CLI (larknafets/nebenkosten-energierechner). See `docs/agents/issue-tracker.md`.
+GitHub Issues via `gh` CLI (larknafets/nebenkostenrechner). See `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 

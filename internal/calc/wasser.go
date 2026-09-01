@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/larknafets/nebenkosten-energierechner/internal/store"
+	"github.com/larknafets/nebenkostenrechner/internal/store"
 )
 
 // WasserErgebnis is the Wasserkosten-Zuteilung result for one period. See
-// https://github.com/larknafets/nebenkosten-energierechner/issues/3 for the
+// https://github.com/larknafets/nebenkostenrechner/issues/3 for the
 // formula: Wohnung 2 zählt direkt über ihren Zwischenzähler, Wohnung 1 ist
 // der Rest des Gesamtverbrauchs. Die Warmwasseraufbereitung wird nach dem
 // Personenverhältnis der Periode auf beide Wohnungen verteilt und dem

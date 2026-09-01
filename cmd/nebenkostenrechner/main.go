@@ -1,5 +1,4 @@
-// Command nebenkosten-energierechner runs the Nebenkosten-Energierechner
-// web server.
+// Command nebenkostenrechner runs the Nebenkostenrechner web server.
 package main
 
 import (
@@ -7,8 +6,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/larknafets/nebenkosten-energierechner/internal/store"
-	"github.com/larknafets/nebenkosten-energierechner/internal/web"
+	"github.com/larknafets/nebenkostenrechner/internal/store"
+	"github.com/larknafets/nebenkostenrechner/internal/web"
 )
 
 // version and buildDate are set via -ldflags at build time (Docker build

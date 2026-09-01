@@ -1,5 +1,5 @@
 // Package store owns the SQLite schema, migrations, and seed data for the
-// Nebenkosten-Energierechner. See https://github.com/larknafets/nebenkosten-energierechner/issues/6
+// Nebenkostenrechner. See https://github.com/larknafets/nebenkostenrechner/issues/6
 // for the schema decision this package implements.
 package store
 

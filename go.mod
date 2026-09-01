@@ -1,4 +1,4 @@
-module github.com/larknafets/nebenkosten-energierechner
+module github.com/larknafets/nebenkostenrechner
 
 go 1.27.0
 

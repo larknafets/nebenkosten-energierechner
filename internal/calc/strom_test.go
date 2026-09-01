@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/larknafets/nebenkosten-energierechner/internal/calc"
-	"github.com/larknafets/nebenkosten-energierechner/internal/store"
+	"github.com/larknafets/nebenkostenrechner/internal/calc"
+	"github.com/larknafets/nebenkostenrechner/internal/store"
 )
 
 func openTestDB(t *testing.T) *sql.DB {

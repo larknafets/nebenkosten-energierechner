@@ -1,6 +1,6 @@
-// Package web serves the Nebenkosten-Energierechner's HTML wizard and
+// Package web serves the Nebenkostenrechner's HTML wizard and
 // read views. Server-rendered html/template, no SPA build step - see
-// https://github.com/larknafets/nebenkosten-energierechner/issues/4.
+// https://github.com/larknafets/nebenkostenrechner/issues/4.
 package web
 
 import (
@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/larknafets/nebenkosten-energierechner/internal/calc"
-	"github.com/larknafets/nebenkosten-energierechner/internal/store"
+	"github.com/larknafets/nebenkostenrechner/internal/calc"
+	"github.com/larknafets/nebenkostenrechner/internal/store"
 )
 
 //go:embed templates/*.html

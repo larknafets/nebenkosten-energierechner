@@ -94,7 +94,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api repos/larknafets/nebenkosten-energierechner/releases --paginate | jq -s '
+          gh api repos/larknafets/nebenkostenrechner/releases --paginate | jq -s '
             [.[][] | select(.draft == false and .prerelease == false)]
             | sort_by(.published_at)
             | reverse
@@ -103,7 +103,7 @@ jobs:
             | gsub("(?m)^\\* [0-9a-f]{40} "; "* "))\n"
           ' -r > /tmp/changelog_entries.md
 
-          printf '%s\n\n' 'Full release details: https://github.com/larknafets/nebenkosten-energierechner/releases' > ./hassio/nebenkosten-energierechner/CHANGELOG.md
+          printf '%s\n\n' 'Full release details: https://github.com/larknafets/nebenkostenrechner/releases' > ./hassio/nebenkosten-energierechner/CHANGELOG.md
           cat /tmp/changelog_entries.md >> ./hassio/nebenkosten-energierechner/CHANGELOG.md
 
       - name: Push
@@ -112,5 +112,5 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add nebenkosten-energierechner/config.yaml nebenkosten-energierechner/CHANGELOG.md
-          git commit -m "Mirror nebenkosten-energierechner release ${GITHUB_REF_NAME}"
+          git commit -m "Mirror nebenkostenrechner release ${GITHUB_REF_NAME}"
           git push
