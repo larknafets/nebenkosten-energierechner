@@ -181,6 +181,12 @@ type FixkostenInput struct {
 // DeleteFixkostenEintrag when the given id doesn't exist.
 var ErrFixkostenEintragNotFound = errors.New("fixkosten eintrag not found")
 
+// ErrNoKostenpositionenJahr is returned by calc.Fixkosten when the given
+// Fixkosten-Eingabe's Jahr has no Kostenpositionen-Jahresdaten yet (the
+// Jahr was never "angelegt" on /stammdaten) - analogous to
+// ErrNoPreviousPeriod's softened-to-a-user-hint handling in the web layer.
+var ErrNoKostenpositionenJahr = errors.New("no kostenpositionen jahresdaten for this jahr")
+
 // insertFixkostenTx inserts one Fixkosten-Eingabe with its Werte/Personen.
 // Shared by CreateFixkostenEintrag and (a future bulk-insert, should one
 // ever be needed) so the write shape stays in one place.
