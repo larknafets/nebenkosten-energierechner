@@ -44,3 +44,31 @@ Ein Wasser-Begriff (Zähler `wasser_warmwasseraufbereitung`), nicht zu verwechse
 
 **Einspeisung / Einspeisevergütung**:
 Die ins Netz eingespeiste PV-Überschussmenge (Zähler `strom_einspeisung`) und die dafür gezahlte Vergütung. Rein informativ, haus-weit, unabhängig von der Kostenverteilung - nicht zu verwechseln mit "Nicht dem Netzbezug zugeordnet (PV)" oben, das eine Kosten-interne Zuteilungsgröße ist.
+
+## Fixkosten
+
+**Fixkosten-Eingabe**:
+Eine monatliche Erfassung, analog zur Ablesung: Personenzahl je Wohnung (eigenständig, nicht die der Ablesung) und - für monatlich-typisierte Kostenpositionen - ihr expliziter Monatswert. Anders als die Ablesung hängt sie nicht von einer Vorperiode ab (kein Verbrauch, keine Zählerstand-Differenz).
+_Avoid_: Fixkosten-Eintrag, Fixkosten-Periode
+
+**Kostenposition**:
+Eine der 14 festen Positionen (Grundsteuer, Wohngebäudeversicherung, Deichbeiträge, Abfallwirtschaft, Grundpreise Strom/Wasser/Abwasser/Internet, Wärmepumpen-Wartung) - Struktur so fix wie die Zähler, geseeded wie `meters`. Ihre Logik/Typ/Jahreswert sind dagegen jahresweise gepflegte Daten, siehe Kostenpositions-Jahr.
+
+**Kostenpositions-Jahr**:
+Eine Kostenposition zusammen mit ihrer Berechnungslogik, ihrem Typ und (bei Typ "jährlich") ihrem Jahreswert für ein bestimmtes Kalenderjahr - änder- und löschbar, nicht eingefroren wie ein Ablesungswert. Auf der Stammdaten-Seite verwaltet.
+
+**Berechnungslogik**:
+Die Regel, nach der eine Kostenposition auf Wohnung 1/2 aufgeteilt wird: Je Wohneinheit (50/50), Je anteiliges Flurstück, Je anteilige Wohnungsgröße, oder Je Anzahl Personen (aus der Fixkosten-Eingabe des jeweiligen Monats).
+_Avoid_: Verteilungsschlüssel, Split (das ist die Heizungs-Gewichtung, ein anderer Begriff)
+
+**Typ (jährlich/monatlich)**:
+Ob eine Kostenposition einen Jahreswert hat, der für die Monatsanzeige automatisch durch 12 geteilt wird ("jährlich"), oder ob ihr Monatswert direkt in jeder Fixkosten-Eingabe eingetragen wird ("monatlich").
+
+**Jahreswert**:
+Der Jahresgesamtbetrag einer "jährlich"-typisierten Kostenposition, in den Stammdaten gepflegt. Bei einem Typ-Wechsel mitten im Jahr dient der letzte bekannte Jahreswert einer "monatlich"-Position ohne eigenen Monatswert als Fallback (/12), bis ein expliziter Monatswert eingetragen wird.
+
+**Monatswert**:
+Der einer Kostenposition für einen konkreten Monat tatsächlich zugerechnete Betrag - bei "jährlich" `Jahreswert / 12`, bei "monatlich" der explizite Wert aus der Fixkosten-Eingabe (oder der Jahreswert-Fallback, siehe oben).
+
+**Flurstück / Flurstücksgröße**:
+Die Grundstücksgröße je Wohnung (`apartments.flurstueck_groesse`), Grundlage der Berechnungslogik "Je anteiliges Flurstück" (z.B. für Deichbeiträge). Wie die Wohnungsgröße ein aktueller Einzelwert, nicht historisiert - auf der Stammdaten-Seite gepflegt.
