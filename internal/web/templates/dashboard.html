@@ -24,14 +24,26 @@
   <div class="panel stat-card">
     <div class="muted">Wallboxen</div>
     <div class="stat-value">{{deEUR .WallboxCard.GesamtEUR}} €</div>
-    <div class="stat-bar-track"><div class="stat-bar-seg cat-strom" style="width:100%"></div></div>
-    <div class="muted stat-kategorien">Stromkosten</div>
+    <div class="stat-bar-track">
+      {{range .WallboxCard.Segmente}}
+      <div class="stat-bar-seg cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%"></div>
+      {{end}}
+    </div>
+    <div class="muted stat-kategorien">
+      {{range .WallboxCard.Segmente}}<div>{{.Label}} {{de .Verbrauch}} {{.Einheit}}</div>{{end}}
+    </div>
   </div>
   <div class="panel stat-card">
     <div class="muted">PV-Anlage</div>
     <div class="stat-value" style="color:var(--success)">+{{deEUR .PVCard.GesamtEUR}} €</div>
-    <div class="stat-bar-track"><div class="stat-bar-seg" style="width:100%;background:var(--success)"></div></div>
-    <div class="muted stat-kategorien">Einspeisevergütung</div>
+    <div class="stat-bar-track">
+      {{range .PVCard.Segmente}}
+      <div class="stat-bar-seg cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%"></div>
+      {{end}}
+    </div>
+    <div class="muted stat-kategorien">
+      {{range .PVCard.Segmente}}<div>{{.Label}} {{de .Verbrauch}} {{.Einheit}}</div>{{end}}
+    </div>
   </div>
 </div>
 

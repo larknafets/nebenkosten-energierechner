@@ -390,6 +390,11 @@ type dashboardSimpleCard struct {
 	Name      string
 	GesamtEUR float64
 	IstErtrag bool // true for PV-Anlage: "+" prefix, success color (Vergütung statt Kosten)
+
+	// Segmente is die Jahressumme je Bar-Segment (kWh via Verbrauch, EUR via
+	// Kosten) - bei Wallbox 2 (Stromkosten/PV-Anteil), bei PV-Anlage 1
+	// (Einspeisevergütung), analog zu buildSimpleVerlauf's Monats-Segmente.
+	Segmente []dashboardSegment
 }
 
 // dashboardSimpleMonat is one calendar month's row in a Wallbox/PV-Anlage
@@ -481,16 +486,42 @@ var pvSeries = simpleSeries{
 // whose ReadingDate falls in jahr.
 func buildSimpleJahresCard(series simpleSeries, jahr int, periodenKosten []periodKosten) dashboardSimpleCard {
 	var sum float64
+	var segSummen []dashboardSegment // gleiche Reihenfolge/Label wie series.Wert liefert
 	for _, pk := range periodenKosten {
 		t, err := time.Parse("2006-01-02", pk.ReadingDate)
 		if err != nil || t.Year() != jahr {
 			continue
 		}
-		if _, eur, ok := series.Wert(pk.K); ok {
-			sum += eur
+		segs, eur, ok := series.Wert(pk.K)
+		if !ok {
+			continue
+		}
+		sum += eur
+		if segSummen == nil {
+			segSummen = make([]dashboardSegment, len(segs))
+			for i, s := range segs {
+				segSummen[i] = dashboardSegment{Farbe: s.Farbe, Label: s.Label, Einheit: s.Einheit}
+			}
+		}
+		for i, s := range segs {
+			segSummen[i].Kosten += s.Kosten
+			segSummen[i].Verbrauch += s.Verbrauch
 		}
 	}
-	return dashboardSimpleCard{Name: series.Name, GesamtEUR: calc.Round2(sum), IstErtrag: series.IstErtrag}
+
+	var gesamtKWh float64
+	for _, s := range segSummen {
+		gesamtKWh += s.Verbrauch
+	}
+	for i := range segSummen {
+		segSummen[i].Kosten = calc.Round2(segSummen[i].Kosten)
+		segSummen[i].Verbrauch = calc.Round2(segSummen[i].Verbrauch)
+		if gesamtKWh > 0 {
+			segSummen[i].ProzentNeuestesGesamt = segSummen[i].Verbrauch / gesamtKWh * 100
+		}
+	}
+
+	return dashboardSimpleCard{Name: series.Name, GesamtEUR: calc.Round2(sum), IstErtrag: series.IstErtrag, Segmente: segSummen}
 }
 
 // buildSimpleVerlauf builds a Wallbox/PV-Anlage Monatsverlauf - one bar per

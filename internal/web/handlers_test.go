@@ -286,6 +286,20 @@ func TestBuildSimpleVerlaufUndJahresCard(t *testing.T) {
 	if card.GesamtEUR != 18 || card.IstErtrag {
 		t.Errorf("card = %+v, want GesamtEUR=18 IstErtrag=false", card)
 	}
+	// Jahressumme je Segment: Stromkosten 30+15=45 kWh, PV-Anteil 10+5=15
+	// kWh (der Monat ohne Wallbox-Ergebnis zaehlt nicht mit).
+	if len(card.Segmente) != 2 {
+		t.Fatalf("want 2 Segmente, got %d: %+v", len(card.Segmente), card.Segmente)
+	}
+	if s := card.Segmente[0]; s.Label != "Stromkosten" || s.Verbrauch != 45 || s.Kosten != 18 {
+		t.Errorf("card.Segmente[0] = %+v, want Label=Stromkosten Verbrauch=45 Kosten=18", s)
+	}
+	if s := card.Segmente[1]; s.Label != "PV-Anteil" || s.Verbrauch != 15 || s.Kosten != 0 {
+		t.Errorf("card.Segmente[1] = %+v, want Label=PV-Anteil Verbrauch=15 Kosten=0", s)
+	}
+	if want := 75.0; card.Segmente[0].ProzentNeuestesGesamt < want-0.01 || card.Segmente[0].ProzentNeuestesGesamt > want+0.01 {
+		t.Errorf("Stromkosten-Segment ProzentNeuestesGesamt = %v, want ~75 (45/60)", card.Segmente[0].ProzentNeuestesGesamt)
+	}
 
 	t.Run("PV-Anlage nutzt Einspeisung statt Wallbox", func(t *testing.T) {
 		p := []periodKosten{{ReadingDate: "2026-11-15", K: kosten{Einspeisung: &calc.EinspeisungErgebnis{EinspeisungKWh: 100, Ertrag: 8}}}}
