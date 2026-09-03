@@ -272,7 +272,7 @@ func TestParseHeizungGewichtung(t *testing.T) {
 
 // TestParsePeriodInput_NoQMFields verifies the Ablesung-Formular (Issue #61)
 // no longer needs qm_1/qm_2 form fields - parsePeriodInput must succeed
-// without them, since Wohnfläche is edited on /stammdaten now.
+// without them, since Wohnungsgröße is edited on /stammdaten now.
 func TestParsePeriodInput_NoQMFields(t *testing.T) {
 	apartments := []store.Apartment{{ID: 1, Name: "Wohnung 1"}, {ID: 2, Name: "Wohnung 2"}}
 
@@ -310,7 +310,7 @@ func TestParsePeriodInput_NoQMFields(t *testing.T) {
 func TestCSVHeader_NoQMColumns(t *testing.T) {
 	for _, col := range csvHeader {
 		if col == "qm_1" || col == "qm_2" {
-			t.Errorf("csvHeader contains %q, want no qm_1/qm_2 columns (Issue #61 moved Wohnfläche to /stammdaten)", col)
+			t.Errorf("csvHeader contains %q, want no qm_1/qm_2 columns (Issue #61 moved Wohnungsgröße to /stammdaten)", col)
 		}
 	}
 	last := csvHeader[len(csvHeader)-1]

@@ -18,7 +18,7 @@ Kosten_WP_gesamt = WP_Anteil_kWh * Strompreis   (Basis für Heizungskosten, sieh
 
 <div class="panel" style="margin-top:1rem">
   <h2>Heizung/Warmwasser (konfigurierbarer Split, Default 70/30)</h2>
-  <p>Die Wärmepumpen-Stromkosten (siehe oben) werden nach Wärmemengenzähler-Verhältnis und Wohnflächen-Verhältnis auf beide Wohnungen verteilt. Die Gewichtung wird pro Ablesung gewählt - 70/30, 60/40 oder 50/50 - und bleibt für diese Periode eingefroren.</p>
+  <p>Die Wärmepumpen-Stromkosten (siehe oben) werden nach Wärmemengenzähler-Verhältnis und Wohnungsgrößen-Verhältnis auf beide Wohnungen verteilt. Die Gewichtung wird pro Ablesung gewählt - 70/30, 60/40 oder 50/50 - und bleibt für diese Periode eingefroren.</p>
   <pre class="formula">Ratio_Waerme_W1  = Verbrauch(waerme_wohnung1) / (Verbrauch(waerme_wohnung1) + Verbrauch(waerme_wohnung2))
 Ratio_Waerme_W2  = Verbrauch(waerme_wohnung2) / (Verbrauch(waerme_wohnung1) + Verbrauch(waerme_wohnung2))
 Ratio_Flaeche_W1 = qm_W1 / (qm_W1 + qm_W2)

@@ -47,7 +47,7 @@ func Apartments(db *sql.DB) ([]Apartment, error) {
 	return out, rows.Err()
 }
 
-// StammdatenInput is one apartment's Wohnfläche/Flurstücksgröße, as
+// StammdatenInput is one apartment's Wohnungsgröße/Flurstücksgröße, as
 // edited on the /stammdaten page (Issue #61) - unlike Personen/prices, these
 // aren't part of a monthly Ablesung anymore: current values only, no
 // history, no per-period freezing.
@@ -56,7 +56,7 @@ type StammdatenInput struct {
 	FlurstueckGroesse float64
 }
 
-// UpdateStammdaten writes every given apartment's Wohnfläche/
+// UpdateStammdaten writes every given apartment's Wohnungsgröße/
 // Flurstücksgröße in one transaction. Takes effect immediately for every
 // month's calculation (apartments.qm/flurstueck_groesse are live columns,
 // not historized - same behavior qm already had before Issue #61 moved its
@@ -93,7 +93,7 @@ type PeriodInput struct {
 }
 
 // insertPeriodTx inserts one period with its meter readings and occupancy.
-// Wohnfläche/Flurstücksgröße live on apartments and are edited separately on
+// Wohnungsgröße/Flurstücksgröße live on apartments and are edited separately on
 // /stammdaten (Issue #61), not per period. Shared by CreatePeriod (one
 // period, own transaction) and ImportPeriods (many periods, one shared
 // transaction - Ticket #54).

@@ -17,9 +17,9 @@ func openTestDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	// Wohnfläche lives on apartments now (Issue #61), not the period - set it
+	// Wohnungsgröße lives on apartments now (Issue #61), not the period - set it
 	// once so every calc test that used to pass it per-period (e.g. Heizung's
-	// Wohnflächen-Verhältnis fallback) still has a value to read.
+	// Wohnungsgrößen-Verhältnis fallback) still has a value to read.
 	if err := store.UpdateStammdaten(db, map[int64]store.StammdatenInput{
 		1: {QM: 116.23},
 		2: {QM: 86},

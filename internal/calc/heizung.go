@@ -10,7 +10,7 @@ import (
 // HeizungErgebnis is the Heizung/Warmwasser-Kostenverteilung result for one
 // period. See https://github.com/larknafets/nebenkostenrechner/issues/16:
 // die Wärmepumpen-Stromkosten (aus der Strom-Kostenberechnung, #14) werden
-// nach Wärmeverbrauch und Wohnfläche auf beide Wohnungen verteilt, gewichtet
+// nach Wärmeverbrauch und Wohnungsgröße auf beide Wohnungen verteilt, gewichtet
 // mit der Periode-eigenen HeizungWaermeGewichtung (0.7/0.6/0.5, Default 0.7
 // - Issue #27; früher fix 70/30).
 type HeizungErgebnis struct {

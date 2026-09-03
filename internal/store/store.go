@@ -178,7 +178,7 @@ func apartmentID(id int64) *int64 { return &id }
 // it's safe to run on every startup.
 func seed(db *sql.DB) error {
 	// qm (and flurstueck_groesse, via the column DEFAULT) start at 0 (Ticket
-	// #38) - unlike the apartment id/name, Wohnfläche/Flurstücksgröße are
+	// #38) - unlike the apartment id/name, Wohnungsgröße/Flurstücksgröße are
 	// user data, not app-fixed structure, so they aren't hardcoded here.
 	// Both are live columns, edited on /stammdaten (Issue #61), not seeded
 	// with a real value.

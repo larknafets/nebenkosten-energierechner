@@ -149,7 +149,7 @@ var meterDisplays = []meterDisplay{
 // and import (Ticket #54) - reading_date, every meter key (Zählerstände,
 // not Verbrauch), the period-level prices/Gewichtung, then Personen per
 // apartment (fixed ids 1/2, see store's seed()). No qm_1/qm_2 columns
-// (Issue #61 moved Wohnfläche off the Ablesung onto /stammdaten - hard
+// (Issue #61 moved Wohnungsgröße off the Ablesung onto /stammdaten - hard
 // cut, no backward compatibility with the old format).
 var csvHeader = append(append([]string{"reading_date"}, store.MeterKeys...),
 	"strompreis", "frischwasser_preis", "abwasser_preis", "heizung_gewichtung", "einspeisung_preis",
@@ -164,7 +164,7 @@ func parseDecimalDE(s string) (float64, error) {
 
 // parseFormFloat reads and parses one form field, returning a German
 // user-facing error naming fieldLabel/apartmentID on failure - shared by
-// /stammdaten's per-apartment Wohnfläche/Flurstücksgröße fields.
+// /stammdaten's per-apartment Wohnungsgröße/Flurstücksgröße fields.
 func parseFormFloat(r *http.Request, name, fieldLabel, apartmentID string) (float64, error) {
 	v, err := strconv.ParseFloat(r.FormValue(name), 64)
 	if err != nil {
@@ -1054,7 +1054,7 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 
 // dashboardCard is one apartment's stat card on the Dashboard (Grundansicht
 // #17 + Detailanzeige #18): its Gesamtbetrag and the badge showing that
-// period's Wohnfläche + Personenzahl, plus the Strom/Heizung/Wasser
+// period's Wohnungsgröße + Personenzahl, plus the Strom/Heizung/Wasser
 // breakdown the bar and per-category text are rendered from.
 type dashboardCard struct {
 	ApartmentName string
@@ -1362,7 +1362,7 @@ func handleBerechnungslogik() http.HandlerFunc {
 }
 
 // handleStammdatenForm serves the /stammdaten page (Issue #61): each
-// apartment's current Wohnfläche/Flurstücksgröße, editable as live
+// apartment's current Wohnungsgröße/Flurstücksgröße, editable as live
 // values - not historized per Ablesung like the rest of the monthly form.
 func handleStammdatenForm(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1386,7 +1386,7 @@ func handleStammdatenForm(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// handleUpdateStammdaten saves every apartment's Wohnfläche/
+// handleUpdateStammdaten saves every apartment's Wohnungsgröße/
 // Flurstücksgröße from the /stammdaten form.
 func handleUpdateStammdaten(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1404,7 +1404,7 @@ func handleUpdateStammdaten(db *sql.DB) http.HandlerFunc {
 		in := make(map[int64]store.StammdatenInput, len(apartments))
 		for _, a := range apartments {
 			idStr := strconv.FormatInt(a.ID, 10)
-			qm, err := parseFormFloat(r, "qm_"+idStr, "Wohnfläche", idStr)
+			qm, err := parseFormFloat(r, "qm_"+idStr, "Wohnungsgröße", idStr)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return

@@ -26,7 +26,7 @@
   </table>
 
   <table class="letzte" style="margin-top:1rem">
-    <thead><tr><th>Wohnung</th><th>Personen</th><th>Wohnfläche</th></tr></thead>
+    <thead><tr><th>Wohnung</th><th>Personen</th><th>Wohnungsgröße</th></tr></thead>
     <tbody>
       {{range .Apartments}}
       <tr><td>{{.Name}}</td><td>{{index $.Personen .ID}}</td><td>{{de .QM}} m²</td></tr>
@@ -76,7 +76,7 @@
     <thead><tr><th></th><th>Wohnung 1</th><th>Wohnung 2</th></tr></thead>
     <tbody>
       <tr><td>Wärmeverbrauch</td><td>{{de .Heizung.WaermeW1MWh}} MWh</td><td>{{de .Heizung.WaermeW2MWh}} MWh</td></tr>
-      <tr><td>Wohnfläche</td><td>{{de .Heizung.QMW1}} m²</td><td>{{de .Heizung.QMW2}} m²</td></tr>
+      <tr><td>Wohnungsgröße</td><td>{{de .Heizung.QMW1}} m²</td><td>{{de .Heizung.QMW2}} m²</td></tr>
       <tr><td>Wärmepumpe-Strom (Heizung + Warmwasser)</td><td>{{de .Heizung.WPAnteilW1KWh}} kWh</td><td>{{de .Heizung.WPAnteilW2KWh}} kWh</td></tr>
       <tr><td><strong>Kosten Heizung/Warmwasser</strong></td><td><strong>{{deEUR .Heizung.KostenHeizungW1}} EUR</strong></td><td><strong>{{deEUR .Heizung.KostenHeizungW2}} EUR</strong></td></tr>
     </tbody>

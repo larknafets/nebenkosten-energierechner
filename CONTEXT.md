@@ -35,7 +35,7 @@ _Avoid_: Heizungsstrom (verschleiert, dass Warmwasser mit drin steckt)
 Die von den Wärmemengenzählern (`waerme_wohnung1`/`waerme_wohnung2`) gemessene Wärmemenge in MWh - reine Raumheizung, keine Warmwasserbereitung.
 
 **Heizungs-Gewichtung**:
-Der pro Ablesung gewählte Split (70/30, 60/40 oder 50/50), nach dem der WP-Strom zwischen Wärmeverbrauchs-Verhältnis und Wohnflächen-Verhältnis der beiden Wohnungen gewichtet wird.
+Der pro Ablesung gewählte Split (70/30, 60/40 oder 50/50), nach dem der WP-Strom zwischen Wärmeverbrauchs-Verhältnis und Wohnungsgrößen-Verhältnis der beiden Wohnungen gewichtet wird.
 
 **Warmwasseraufbereitung**:
 Ein Wasser-Begriff (Zähler `wasser_warmwasseraufbereitung`), nicht zu verwechseln mit "WP-Strom (Heizung + Warmwasser)" oben - hier geht es um Frischwasser-Verbrauch für die Aufbereitung, nicht um Wärmepumpen-Strom.
