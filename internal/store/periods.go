@@ -22,14 +22,15 @@ var MeterKeys = []string{
 }
 
 type Apartment struct {
-	ID   int64
-	Name string
-	QM   float64
+	ID                int64
+	Name              string
+	QM                float64
+	FlurstueckGroesse float64
 }
 
 // Apartments returns the 2 apartments ordered by id.
 func Apartments(db *sql.DB) ([]Apartment, error) {
-	rows, err := db.Query(`SELECT id, name, qm FROM apartments ORDER BY id`)
+	rows, err := db.Query(`SELECT id, name, qm, flurstueck_groesse FROM apartments ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("query apartments: %w", err)
 	}
@@ -38,12 +39,45 @@ func Apartments(db *sql.DB) ([]Apartment, error) {
 	var out []Apartment
 	for rows.Next() {
 		var a Apartment
-		if err := rows.Scan(&a.ID, &a.Name, &a.QM); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.QM, &a.FlurstueckGroesse); err != nil {
 			return nil, fmt.Errorf("scan apartment: %w", err)
 		}
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// StammdatenInput is one apartment's Wohnungsgröße/Flurstücksgröße, as
+// edited on the /stammdaten page (Issue #61) - unlike Personen/prices, these
+// aren't part of a monthly Ablesung anymore: current values only, no
+// history, no per-period freezing.
+type StammdatenInput struct {
+	QM                float64
+	FlurstueckGroesse float64
+}
+
+// UpdateStammdaten writes every given apartment's Wohnungsgröße/
+// Flurstücksgröße in one transaction. Takes effect immediately for every
+// month's calculation (apartments.qm/flurstueck_groesse are live columns,
+// not historized - same behavior qm already had before Issue #61 moved its
+// editing here).
+func UpdateStammdaten(db *sql.DB, in map[int64]StammdatenInput) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	for apartmentID, s := range in {
+		if _, err := tx.Exec(
+			`UPDATE apartments SET qm = ?, flurstueck_groesse = ? WHERE id = ?`,
+			s.QM, s.FlurstueckGroesse, apartmentID,
+		); err != nil {
+			return fmt.Errorf("update stammdaten for apartment %d: %w", apartmentID, err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 // PeriodInput is one monthly reading, ready to be persisted.
@@ -56,15 +90,13 @@ type PeriodInput struct {
 	EinspeisungPreis        float64            // EUR/kWh für die PV-Einspeisevergütung (Ticket #47)
 	Readings                map[string]float64 // meter key -> Zählerstand, must cover all of MeterKeys
 	Personen                map[int64]int64    // apartment id -> Personenzahl
-	QM                      map[int64]float64  // apartment id -> Wohnfläche (writes through to apartments.qm)
 }
 
-// insertPeriodTx inserts one period with its meter readings and occupancy,
-// and updates the apartments' Wohnfläche (qm changes so rarely that it's
-// captured in the same monthly form rather than a separate settings area -
-// see Issue #7 resolution). Shared by CreatePeriod (one period, own
-// transaction) and ImportPeriods (many periods, one shared transaction -
-// Ticket #54).
+// insertPeriodTx inserts one period with its meter readings and occupancy.
+// Wohnfläche/Flurstücksgröße live on apartments and are edited separately on
+// /stammdaten (Issue #61), not per period. Shared by CreatePeriod (one
+// period, own transaction) and ImportPeriods (many periods, one shared
+// transaction - Ticket #54).
 func insertPeriodTx(tx *sql.Tx, in PeriodInput) (periodID int64, err error) {
 	res, err := tx.Exec(
 		`INSERT INTO periods (reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis)
@@ -99,12 +131,6 @@ func insertPeriodTx(tx *sql.Tx, in PeriodInput) (periodID int64, err error) {
 			periodID, apartmentID, personen,
 		); err != nil {
 			return 0, fmt.Errorf("insert occupancy for apartment %d: %w", apartmentID, err)
-		}
-	}
-
-	for apartmentID, qm := range in.QM {
-		if _, err := tx.Exec(`UPDATE apartments SET qm = ? WHERE id = ?`, qm, apartmentID); err != nil {
-			return 0, fmt.Errorf("update qm for apartment %d: %w", apartmentID, err)
 		}
 	}
 
@@ -280,12 +306,6 @@ func UpdatePeriod(db *sql.DB, periodID int64, in PeriodInput) error {
 			periodID, apartmentID, personen,
 		); err != nil {
 			return fmt.Errorf("update occupancy for apartment %d: %w", apartmentID, err)
-		}
-	}
-
-	for apartmentID, qm := range in.QM {
-		if _, err := tx.Exec(`UPDATE apartments SET qm = ? WHERE id = ?`, qm, apartmentID); err != nil {
-			return fmt.Errorf("update qm for apartment %d: %w", apartmentID, err)
 		}
 	}
 

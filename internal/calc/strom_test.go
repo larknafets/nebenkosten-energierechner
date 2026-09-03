@@ -16,6 +16,17 @@ func openTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
+
+	// Wohnfläche lives on apartments now (Issue #61), not the period - set it
+	// once so every calc test that used to pass it per-period (e.g. Heizung's
+	// Wohnflächen-Verhältnis fallback) still has a value to read.
+	if err := store.UpdateStammdaten(db, map[int64]store.StammdatenInput{
+		1: {QM: 116.23},
+		2: {QM: 86},
+	}); err != nil {
+		t.Fatalf("seed stammdaten: %v", err)
+	}
+
 	return db
 }
 
@@ -42,7 +53,6 @@ func mustCreatePeriod(t *testing.T, db *sql.DB, date string, strompreis float64,
 		HeizungWaermeGewichtung: 0.7,
 		Readings:                readings,
 		Personen:                map[int64]int64{1: 2, 2: 1},
-		QM:                      map[int64]float64{1: 116.23, 2: 86},
 	})
 	if err != nil {
 		t.Fatalf("create period %s: %v", date, err)

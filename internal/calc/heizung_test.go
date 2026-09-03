@@ -26,7 +26,6 @@ func TestHeizung_70_30_Verteilung(t *testing.T) {
 			"waerme_wohnung2":   4,
 		}),
 		Personen: map[int64]int64{1: 2, 2: 1},
-		QM:       map[int64]float64{1: 116.23, 2: 86},
 	})
 	if err != nil {
 		t.Fatalf("create period: %v", err)
@@ -70,7 +69,6 @@ func TestHeizung_KeinWaermeVerbrauch_FaelltAufHaelftigeVerteilungZurueck(t *test
 			"strom_waermepumpe": 500,
 		}),
 		Personen: map[int64]int64{1: 2, 2: 1},
-		QM:       map[int64]float64{1: 116.23, 2: 86},
 	})
 	if err != nil {
 		t.Fatalf("create period: %v", err)

@@ -1,6 +1,8 @@
 package web
 
 import (
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -268,6 +270,55 @@ func TestParseHeizungGewichtung(t *testing.T) {
 	}
 }
 
+// TestParsePeriodInput_NoQMFields verifies the Ablesung-Formular (Issue #61)
+// no longer needs qm_1/qm_2 form fields - parsePeriodInput must succeed
+// without them, since Wohnungsgröße is edited on /stammdaten now.
+func TestParsePeriodInput_NoQMFields(t *testing.T) {
+	apartments := []store.Apartment{{ID: 1, Name: "Wohnung 1"}, {ID: 2, Name: "Wohnung 2"}}
+
+	form := url.Values{
+		"reading_date":       {"2026-11-01"},
+		"strompreis":         {"0.22"},
+		"frischwasser_preis": {"1.46"},
+		"abwasser_preis":     {"4.87"},
+		"einspeisung_preis":  {"0.08"},
+		"heizung_gewichtung": {"0.7"},
+		"personen_1":         {"2"},
+		"personen_2":         {"1"},
+	}
+	for _, key := range store.MeterKeys {
+		form.Set(key, "0")
+	}
+
+	r, err := http.NewRequest(http.MethodPost, "/ablesungen", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	in, err := parsePeriodInput(r, apartments)
+	if err != nil {
+		t.Fatalf("parsePeriodInput without qm_1/qm_2: %v", err)
+	}
+	if in.Personen[1] != 2 || in.Personen[2] != 1 {
+		t.Errorf("Personen = %v, want {1:2, 2:1}", in.Personen)
+	}
+}
+
+// TestCSVHeader_NoQMColumns verifies Issue #61's hard cut: the CSV
+// export/import format no longer has qm_1/qm_2 columns.
+func TestCSVHeader_NoQMColumns(t *testing.T) {
+	for _, col := range csvHeader {
+		if col == "qm_1" || col == "qm_2" {
+			t.Errorf("csvHeader contains %q, want no qm_1/qm_2 columns (Issue #61 moved Wohnungsgröße to /stammdaten)", col)
+		}
+	}
+	last := csvHeader[len(csvHeader)-1]
+	if last != "personen_2" {
+		t.Errorf("csvHeader last column = %q, want personen_2", last)
+	}
+}
+
 func TestParseDecimalDE(t *testing.T) {
 	cases := []struct {
 		raw     string
@@ -304,7 +355,7 @@ func csvRow(readingDate string, stromGesamt string) string {
 	return strings.Join([]string{
 		readingDate, stromGesamt, "0", "0", "0", "0", "0", "0", "0", "0", "0",
 		"0,22", "1,46", "4,87", "0,7", "0,08",
-		"2", "1", "116,23", "86",
+		"2", "1",
 	}, ";")
 }
 
@@ -335,9 +386,6 @@ func TestParseImportCSV_RoundTrip(t *testing.T) {
 	if rows[1].input.Personen[1] != 2 || rows[1].input.Personen[2] != 1 {
 		t.Errorf("Personen = %v, want {1:2, 2:1}", rows[1].input.Personen)
 	}
-	if rows[1].input.QM[1] != 116.23 {
-		t.Errorf("QM[1] = %v, want 116.23", rows[1].input.QM[1])
-	}
 }
 
 func TestParseImportCSV_WithBOM(t *testing.T) {
@@ -352,7 +400,7 @@ func TestParseImportCSV_WithBOM(t *testing.T) {
 }
 
 func TestParseImportCSV_MissingColumn(t *testing.T) {
-	header := strings.Join(csvHeader[:len(csvHeader)-1], ";") // drop qm_2
+	header := strings.Join(csvHeader[:len(csvHeader)-1], ";") // drop personen_2
 	csvText := header + "\n"
 	if _, err := parseImportCSV(strings.NewReader(csvText)); err == nil {
 		t.Fatal("parseImportCSV: want error for missing column, got nil")

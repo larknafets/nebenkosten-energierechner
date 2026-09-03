@@ -55,6 +55,11 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate einspeisung_preis column: %w", err)
 	}
 
+	if err := ensureApartmentsFlurstueckGroesseColumn(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate flurstueck_groesse column: %w", err)
+	}
+
 	if err := seed(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("seed master data: %w", err)
@@ -122,6 +127,35 @@ func ensurePeriodsEinspeisungPreisColumn(db *sql.DB) error {
 	return err
 }
 
+// ensureApartmentsFlurstueckGroesseColumn adds the flurstueck_groesse column
+// to an existing apartments table that predates it (Issue #61), defaulting
+// existing rows to 0 - additive, the existing qm value is untouched.
+func ensureApartmentsFlurstueckGroesseColumn(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(apartments)`)
+	if err != nil {
+		return fmt.Errorf("inspect apartments columns: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scan apartments column: %w", err)
+		}
+		if name == "flurstueck_groesse" {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`ALTER TABLE apartments ADD COLUMN flurstueck_groesse REAL NOT NULL DEFAULT 0`)
+	return err
+}
+
 type apartmentSeed struct {
 	id   int64
 	name string
@@ -143,11 +177,11 @@ func apartmentID(id int64) *int64 { return &id }
 // they're not already present. Keyed on `apartments.id` / `meters.key` so
 // it's safe to run on every startup.
 func seed(db *sql.DB) error {
-	// qm starts at 0 (Ticket #38) - unlike the apartment id/name, Wohnfläche
-	// is user data, not app-fixed structure, so it isn't hardcoded here. It
-	// behaves like Strompreis/Personen: empty at the first Ablesung, then
-	// carried forward automatically (apartments.qm is a live column,
-	// overwritten by every CreatePeriod/UpdatePeriod).
+	// qm (and flurstueck_groesse, via the column DEFAULT) start at 0 (Ticket
+	// #38) - unlike the apartment id/name, Wohnfläche/Flurstücksgröße are
+	// user data, not app-fixed structure, so they aren't hardcoded here.
+	// Both are live columns, edited on /stammdaten (Issue #61), not seeded
+	// with a real value.
 	apartments := []apartmentSeed{
 		{id: 1, name: "Wohnung 1", qm: 0},
 		{id: 2, name: "Wohnung 2", qm: 0},

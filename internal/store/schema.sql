@@ -1,7 +1,8 @@
 CREATE TABLE IF NOT EXISTS apartments (
-    id   INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    qm   REAL NOT NULL
+    id                 INTEGER PRIMARY KEY,
+    name               TEXT NOT NULL,
+    qm                 REAL NOT NULL,
+    flurstueck_groesse REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS meters (

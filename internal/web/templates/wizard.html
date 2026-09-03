@@ -65,11 +65,6 @@
       <div class="field"><label>Personen {{.Name}}</label><input type="number" name="personen_{{.ID}}" {{if or $.IsEdit $.HasPrevious}}value="{{index $.PreviousPersonen .ID}}"{{end}} required></div>
       {{end}}
     </div>
-    <div class="grid grid-2">
-      {{range .Apartments}}
-      <div class="field"><label>Wohnfläche {{.Name}} (m²)</label><input type="number" step="any" name="qm_{{.ID}}" {{if gt .QM 0.0}}value="{{.QM}}"{{end}} required></div>
-      {{end}}
-    </div>
     <div class="field">
       <label>Heizung/Warmwasser-Gewichtung (Wärmeverbrauch / Wohnfläche)</label>
       <div class="radio-options">

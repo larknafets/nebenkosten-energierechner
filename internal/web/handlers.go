@@ -38,6 +38,7 @@ var (
 	dashboardTemplate  = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/dashboard.html"))
 
 	berechnungslogikTemplate = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/berechnungslogik.html"))
+	stammdatenTemplate       = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/stammdaten.html"))
 )
 
 // meterDisplay describes how one meter's reading is labelled on the
@@ -146,11 +147,13 @@ var meterDisplays = []meterDisplay{
 
 // csvHeader is the canonical CSV column order for both export (Ticket #53)
 // and import (Ticket #54) - reading_date, every meter key (Zählerstände,
-// not Verbrauch), the period-level prices/Gewichtung, then Personen/QM per
-// apartment (fixed ids 1/2, see store's seed()).
+// not Verbrauch), the period-level prices/Gewichtung, then Personen per
+// apartment (fixed ids 1/2, see store's seed()). No qm_1/qm_2 columns
+// (Issue #61 moved Wohnungsgröße off the Ablesung onto /stammdaten - hard
+// cut, no backward compatibility with the old format).
 var csvHeader = append(append([]string{"reading_date"}, store.MeterKeys...),
 	"strompreis", "frischwasser_preis", "abwasser_preis", "heizung_gewichtung", "einspeisung_preis",
-	"personen_1", "personen_2", "qm_1", "qm_2",
+	"personen_1", "personen_2",
 )
 
 // parseDecimalDE is formatDecimalDE's inverse: German decimal-comma input
@@ -174,6 +177,8 @@ func NewMux(db *sql.DB, version, buildDate string) *http.ServeMux {
 	mux.HandleFunc("POST /ablesungen/{id}/loeschen", handleDeleteAblesung(db))
 	mux.HandleFunc("GET /dashboard", handleDashboard(db, version, buildDate))
 	mux.HandleFunc("GET /berechnungslogik", handleBerechnungslogik())
+	mux.HandleFunc("GET /stammdaten", handleStammdatenForm(db))
+	mux.HandleFunc("POST /stammdaten", handleUpdateStammdaten(db))
 	return mux
 }
 
@@ -419,7 +424,6 @@ func parsePeriodInput(r *http.Request, apartments []store.Apartment) (store.Peri
 	}
 
 	personen := make(map[int64]int64, len(apartments))
-	qm := make(map[int64]float64, len(apartments))
 	for _, a := range apartments {
 		idStr := strconv.FormatInt(a.ID, 10)
 		p, err := strconv.ParseInt(r.FormValue("personen_"+idStr), 10, 64)
@@ -427,12 +431,6 @@ func parsePeriodInput(r *http.Request, apartments []store.Apartment) (store.Peri
 			return store.PeriodInput{}, fmt.Errorf("invalid Personenzahl for apartment %s", idStr)
 		}
 		personen[a.ID] = p
-
-		q, err := strconv.ParseFloat(r.FormValue("qm_"+idStr), 64)
-		if err != nil {
-			return store.PeriodInput{}, fmt.Errorf("invalid Wohnfläche for apartment %s", idStr)
-		}
-		qm[a.ID] = q
 	}
 
 	return store.PeriodInput{
@@ -444,7 +442,6 @@ func parsePeriodInput(r *http.Request, apartments []store.Apartment) (store.Peri
 		EinspeisungPreis:        einspeisungPreis,
 		Readings:                readings,
 		Personen:                personen,
-		QM:                      qm,
 	}, nil
 }
 
@@ -692,24 +689,6 @@ func handleExportCSV(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		apartments, err := store.Apartments(db)
-		if err != nil {
-			http.Error(w, "apartments: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		// QM isn't historized per period (it's a live column on apartments,
-		// see store.PeriodInput.QM's doc comment) - every row gets today's
-		// value, the only one the data model has.
-		var qm1, qm2 float64
-		for _, a := range apartments {
-			switch a.ID {
-			case 1:
-				qm1 = a.QM
-			case 2:
-				qm2 = a.QM
-			}
-		}
-
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename="ablesungen.csv"`)
 		w.Write([]byte{0xEF, 0xBB, 0xBF})
@@ -733,8 +712,6 @@ func handleExportCSV(db *sql.DB) http.HandlerFunc {
 				formatDecimalDE(p.EinspeisungPreis),
 				formatDecimalDE(float64(p.PersonenByApartment[1])),
 				formatDecimalDE(float64(p.PersonenByApartment[2])),
-				formatDecimalDE(qm1),
-				formatDecimalDE(qm2),
 			)
 			if err := cw.Write(row); err != nil {
 				return
@@ -897,7 +874,6 @@ func parseImportRow(record []string, colIdx map[string]int, line int) (store.Per
 	}
 
 	personen := make(map[int64]int64, 2)
-	qm := make(map[int64]float64, 2)
 	for _, id := range [2]int64{1, 2} {
 		personenCol := fmt.Sprintf("personen_%d", id)
 		p, err := parseDecimalDE(cell(personenCol))
@@ -905,13 +881,6 @@ func parseImportRow(record []string, colIdx map[string]int, line int) (store.Per
 			return store.PeriodInput{}, fmt.Errorf("Zeile %d: ungültige Personenzahl für Wohnung %d: %q", line, id, cell(personenCol))
 		}
 		personen[id] = int64(p)
-
-		qmCol := fmt.Sprintf("qm_%d", id)
-		q, err := parseDecimalDE(cell(qmCol))
-		if err != nil {
-			return store.PeriodInput{}, fmt.Errorf("Zeile %d: ungültige Wohnfläche für Wohnung %d: %q", line, id, cell(qmCol))
-		}
-		qm[id] = q
 	}
 
 	return store.PeriodInput{
@@ -923,7 +892,6 @@ func parseImportRow(record []string, colIdx map[string]int, line int) (store.Per
 		EinspeisungPreis:        einspeisungPreis,
 		Readings:                readings,
 		Personen:                personen,
-		QM:                      qm,
 	}, nil
 }
 
@@ -1379,5 +1347,70 @@ func handleBerechnungslogik() http.HandlerFunc {
 		if err := berechnungslogikTemplate.ExecuteTemplate(w, "layout", data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	}
+}
+
+// handleStammdatenForm serves the /stammdaten page (Issue #61): each
+// apartment's current Wohnungsgröße/Flurstücksgröße, editable as live
+// values - not historized per Ablesung like the rest of the monthly form.
+func handleStammdatenForm(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		apartments, err := store.Apartments(db)
+		if err != nil {
+			http.Error(w, "apartments: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		data := struct {
+			Base       string
+			Apartments []store.Apartment
+		}{
+			Base:       requestBase(r),
+			Apartments: apartments,
+		}
+
+		if err := stammdatenTemplate.ExecuteTemplate(w, "layout", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+// handleUpdateStammdaten saves every apartment's Wohnungsgröße/
+// Flurstücksgröße from the /stammdaten form.
+func handleUpdateStammdaten(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "invalid form: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		apartments, err := store.Apartments(db)
+		if err != nil {
+			http.Error(w, "apartments: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		in := make(map[int64]store.StammdatenInput, len(apartments))
+		for _, a := range apartments {
+			idStr := strconv.FormatInt(a.ID, 10)
+			qm, err := strconv.ParseFloat(r.FormValue("qm_"+idStr), 64)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("invalid Wohnfläche for apartment %s", idStr), http.StatusBadRequest)
+				return
+			}
+			flurstueckGroesse, err := strconv.ParseFloat(r.FormValue("flurstueck_groesse_"+idStr), 64)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("invalid Flurstücksgröße for apartment %s", idStr), http.StatusBadRequest)
+				return
+			}
+			in[a.ID] = store.StammdatenInput{QM: qm, FlurstueckGroesse: flurstueckGroesse}
+		}
+
+		if err := store.UpdateStammdaten(db, in); err != nil {
+			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, requestBase(r)+"/stammdaten", http.StatusFound)
 	}
 }

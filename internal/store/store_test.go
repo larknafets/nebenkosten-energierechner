@@ -38,7 +38,6 @@ func mustCreatePeriod(t *testing.T, db *sql.DB, date string, readings map[string
 		HeizungWaermeGewichtung: 0.7,
 		Readings:                readings,
 		Personen:                map[int64]int64{1: 2, 2: 1},
-		QM:                      map[int64]float64{1: 116.23, 2: 86},
 	})
 	if err != nil {
 		t.Fatalf("create period %s: %v", date, err)
@@ -175,7 +174,6 @@ func TestUpdatePeriod_Roundtrip(t *testing.T) {
 		HeizungWaermeGewichtung: 0.6,
 		Readings:                baseReadings(map[string]float64{"strom_gesamt": 210}),
 		Personen:                map[int64]int64{1: 3, 2: 1},
-		QM:                      map[int64]float64{1: 116.23, 2: 86},
 	})
 	if err != nil {
 		t.Fatalf("UpdatePeriod: %v", err)
@@ -255,14 +253,12 @@ func TestImportPeriods_Success(t *testing.T) {
 			HeizungWaermeGewichtung: 0.7,
 			Readings:                baseReadings(map[string]float64{"strom_gesamt": 100}),
 			Personen:                map[int64]int64{1: 2, 2: 1},
-			QM:                      map[int64]float64{1: 116.23, 2: 86},
 		},
 		{
 			ReadingDate:             "2026-07-01",
 			HeizungWaermeGewichtung: 0.7,
 			Readings:                baseReadings(map[string]float64{"strom_gesamt": 200}),
 			Personen:                map[int64]int64{1: 2, 2: 1},
-			QM:                      map[int64]float64{1: 116.23, 2: 86},
 		},
 	})
 	if err != nil {
@@ -698,7 +694,6 @@ func TestEinspeisungPreis_Roundtrip(t *testing.T) {
 		EinspeisungPreis:        0.082,
 		Readings:                baseReadings(nil),
 		Personen:                map[int64]int64{1: 2, 2: 1},
-		QM:                      map[int64]float64{1: 116.23, 2: 86},
 	}); err != nil {
 		t.Fatalf("UpdatePeriod: %v", err)
 	}
@@ -717,5 +712,113 @@ func TestEinspeisungPreis_Roundtrip(t *testing.T) {
 	}
 	if byID.EinspeisungPreis != 0.082 {
 		t.Errorf("GetPeriodByID.EinspeisungPreis = %v, want 0.082", byID.EinspeisungPreis)
+	}
+}
+
+// TestEnsureApartmentsFlurstueckGroesseColumn verifies Issue #61's
+// migration is additive: an existing installation's apartments.qm value
+// (Ticket #38) survives, and flurstueck_groesse backfills to 0.
+func TestEnsureApartmentsFlurstueckGroesseColumn(t *testing.T) {
+	t.Run("fuegt Spalte zu einer alten Tabelle ohne sie hinzu, mit Default 0, Bestandsdaten bleiben erhalten", func(t *testing.T) {
+		db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "old.db"))
+		if err != nil {
+			t.Fatalf("open sqlite: %v", err)
+		}
+		t.Cleanup(func() { db.Close() })
+
+		// Pre-#61-Schema: apartments ohne flurstueck_groesse.
+		if _, err := db.Exec(`CREATE TABLE apartments (
+			id   INTEGER PRIMARY KEY,
+			name TEXT NOT NULL,
+			qm   REAL NOT NULL
+		)`); err != nil {
+			t.Fatalf("create old-shape apartments table: %v", err)
+		}
+		if _, err := db.Exec(
+			`INSERT INTO apartments (id, name, qm) VALUES (1, 'Wohnung 1', 116.23)`,
+		); err != nil {
+			t.Fatalf("insert pre-existing row: %v", err)
+		}
+
+		if err := ensureApartmentsFlurstueckGroesseColumn(db); err != nil {
+			t.Fatalf("ensureApartmentsFlurstueckGroesseColumn: %v", err)
+		}
+
+		var qm, flurstueckGroesse float64
+		if err := db.QueryRow(`SELECT qm, flurstueck_groesse FROM apartments WHERE id = 1`).Scan(&qm, &flurstueckGroesse); err != nil {
+			t.Fatalf("query migrated column: %v", err)
+		}
+		if qm != 116.23 {
+			t.Errorf("pre-existing row's qm = %v, want 116.23 (unchanged by the migration)", qm)
+		}
+		if flurstueckGroesse != 0 {
+			t.Errorf("pre-existing row's flurstueck_groesse = %v, want 0 (backfilled default)", flurstueckGroesse)
+		}
+
+		// Idempotent: ein zweiter Aufruf darf nicht mit "duplicate column" fehlschlagen.
+		if err := ensureApartmentsFlurstueckGroesseColumn(db); err != nil {
+			t.Fatalf("second ensureApartmentsFlurstueckGroesseColumn call: %v", err)
+		}
+	})
+
+	t.Run("neue Tabelle hat die Spalte bereits - no-op", func(t *testing.T) {
+		db := openTestDB(t)
+		if err := ensureApartmentsFlurstueckGroesseColumn(db); err != nil {
+			t.Fatalf("ensureApartmentsFlurstueckGroesseColumn on an already-current schema: %v", err)
+		}
+	})
+}
+
+// TestUpdateStammdaten_Roundtrip verifies the /stammdaten page's write path
+// (Issue #61): both apartments' Wohnungsgröße/Flurstücksgröße persist and
+// read back via Apartments(), and a partial input only touches the
+// apartments it names.
+func TestUpdateStammdaten_Roundtrip(t *testing.T) {
+	db := openTestDB(t)
+
+	if err := UpdateStammdaten(db, map[int64]StammdatenInput{
+		1: {QM: 116.23, FlurstueckGroesse: 450.5},
+		2: {QM: 86, FlurstueckGroesse: 300},
+	}); err != nil {
+		t.Fatalf("UpdateStammdaten: %v", err)
+	}
+
+	apartments, err := Apartments(db)
+	if err != nil {
+		t.Fatalf("Apartments: %v", err)
+	}
+	var w1, w2 Apartment
+	for _, a := range apartments {
+		switch a.ID {
+		case 1:
+			w1 = a
+		case 2:
+			w2 = a
+		}
+	}
+	if w1.QM != 116.23 || w1.FlurstueckGroesse != 450.5 {
+		t.Errorf("Wohnung 1 = QM:%v FlurstueckGroesse:%v, want QM:116.23 FlurstueckGroesse:450.5", w1.QM, w1.FlurstueckGroesse)
+	}
+	if w2.QM != 86 || w2.FlurstueckGroesse != 300 {
+		t.Errorf("Wohnung 2 = QM:%v FlurstueckGroesse:%v, want QM:86 FlurstueckGroesse:300", w2.QM, w2.FlurstueckGroesse)
+	}
+
+	// Partial update: only Wohnung 1 given, Wohnung 2 must stay untouched.
+	if err := UpdateStammdaten(db, map[int64]StammdatenInput{
+		1: {QM: 120, FlurstueckGroesse: 500},
+	}); err != nil {
+		t.Fatalf("UpdateStammdaten (partial): %v", err)
+	}
+	apartments, err = Apartments(db)
+	if err != nil {
+		t.Fatalf("Apartments: %v", err)
+	}
+	for _, a := range apartments {
+		if a.ID == 1 && (a.QM != 120 || a.FlurstueckGroesse != 500) {
+			t.Errorf("Wohnung 1 after partial update = QM:%v FlurstueckGroesse:%v, want QM:120 FlurstueckGroesse:500", a.QM, a.FlurstueckGroesse)
+		}
+		if a.ID == 2 && (a.QM != 86 || a.FlurstueckGroesse != 300) {
+			t.Errorf("Wohnung 2 after partial update = QM:%v FlurstueckGroesse:%v, want unchanged QM:86 FlurstueckGroesse:300", a.QM, a.FlurstueckGroesse)
+		}
 	}
 }

@@ -1,0 +1,17 @@
+{{define "content"}}
+<h1>Stammdaten</h1>
+<p class="muted"><a href="{{.Base}}/dashboard">&larr; Zurück zum Dashboard</a></p>
+
+<form method="post" action="{{.Base}}/stammdaten" class="panel">
+  {{range .Apartments}}
+  <div class="grid grid-2">
+    <div class="field"><label>Wohnungsgröße {{.Name}} (m²)</label><input type="number" step="any" name="qm_{{.ID}}" value="{{.QM}}" required></div>
+    <div class="field"><label>Flurstücksgröße {{.Name}} (m²)</label><input type="number" step="any" name="flurstueck_groesse_{{.ID}}" value="{{.FlurstueckGroesse}}" required></div>
+  </div>
+  {{end}}
+
+  <div class="btn-row">
+    <button type="submit" class="primary">Speichern</button>
+  </div>
+</form>
+{{end}}
