@@ -252,11 +252,16 @@ func seed(db *sql.DB) error {
 
 	// kostenpositionen (Issue #60) - only id/key/label are fixed structure;
 	// Logik/Typ/Jahreswert are user-editable per year in
-	// kostenpositionen_jahre, not seeded here.
+	// kostenpositionen_jahre, not seeded here. label is kept in sync on
+	// every startup (DO UPDATE, not DO NOTHING) - there's no UI to edit it,
+	// so it's meant to always match KostenpositionDefaults, unlike key
+	// (immutable, referenced by id elsewhere) - Issue #71 renamed 2 labels
+	// in code but an already-seeded row silently kept the old text until
+	// this upsert.
 	for _, kp := range KostenpositionDefaults {
 		if _, err := db.Exec(
 			`INSERT INTO kostenpositionen (id, key, label) VALUES (?, ?, ?)
-			 ON CONFLICT(id) DO NOTHING`,
+			 ON CONFLICT(id) DO UPDATE SET label = excluded.label`,
 			kp.ID, kp.Key, kp.Label,
 		); err != nil {
 			return fmt.Errorf("seed kostenposition %q: %w", kp.Key, err)

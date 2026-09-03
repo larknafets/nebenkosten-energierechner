@@ -32,7 +32,7 @@
         <td>{{.LogikLabel}}</td>
         <td>
           {{if .IsJaehrlich}}
-          <input type="number" step="any" value="{{de .Value}}" disabled title="Kommt aus den Jahres-Stammdaten, dort ändern">
+          <input type="number" step="any" value="{{.Value}}" disabled title="Kommt aus den Jahres-Stammdaten, dort ändern">
           {{else}}
           <input type="number" step="any" name="wert_{{.ID}}" value="{{.Value}}" required>
           {{end}}
