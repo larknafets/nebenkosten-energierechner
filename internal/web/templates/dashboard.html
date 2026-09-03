@@ -51,12 +51,6 @@
 {{range $i, $card := .Cards}}
 {{$spalte := index $.VerlaufSpalten $i}}
 <div class="wohnung-panel" data-wohnung="{{$card.ApartmentID}}">
-  <div class="kpi-strip">
-    <div class="kpi"><div class="kpi-label">Verbrauch {{$.AnzeigeJahr}}</div><div class="kpi-value">{{deEUR $card.VerbrauchEUR}} €</div></div>
-    <div class="kpi"><div class="kpi-label">Fixkosten {{$.AnzeigeJahr}}</div><div class="kpi-value">{{deEUR $card.FixkostenEUR}} €</div></div>
-    <div class="kpi"><div class="kpi-label">Gesamt {{$.AnzeigeJahr}}</div><div class="kpi-value">{{deEUR $card.GesamtEUR}} €</div></div>
-  </div>
-
   <div class="panel verlauf-panel" id="verlauf-panel">
     <div class="verlauf-legend">
       <span><i class="cat-strom"></i>Strom</span>
@@ -103,9 +97,6 @@
 
 {{with $.WallboxVerlauf}}
 <div class="wohnung-panel" data-wohnung="{{.ID}}">
-  <div class="kpi-strip" style="grid-template-columns:1fr">
-    <div class="kpi"><div class="kpi-label">Stromkosten {{$.AnzeigeJahr}}</div><div class="kpi-value">{{deEUR $.WallboxCard.GesamtEUR}} €</div></div>
-  </div>
   <div class="panel verlauf-panel">
     <div class="verlauf-legend"><span><i class="cat-strom"></i>Stromkosten</span><span><i class="cat-pv"></i>PV-Anteil</span></div>
     {{range .Eintraege}}
@@ -128,9 +119,6 @@
 
 {{with $.PVVerlauf}}
 <div class="wohnung-panel" data-wohnung="{{.ID}}">
-  <div class="kpi-strip" style="grid-template-columns:1fr">
-    <div class="kpi"><div class="kpi-label">Einspeisevergütung {{$.AnzeigeJahr}}</div><div class="kpi-value" style="color:var(--success)">+{{deEUR $.PVCard.GesamtEUR}} €</div></div>
-  </div>
   <div class="panel verlauf-panel">
     <div class="verlauf-legend"><span><i class="cat-pv"></i>Einspeisevergütung</span></div>
     {{range .Eintraege}}
