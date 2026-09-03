@@ -1,6 +1,6 @@
 {{define "content"}}
 <h1>Stammdaten</h1>
-<p class="muted"><a href="{{.Base}}/dashboard">&larr; Zurück zum Dashboard</a></p>
+{{template "crumbBack" .}}
 
 <form method="post" action="{{.Base}}/stammdaten" class="panel">
   {{range .Apartments}}

@@ -1,5 +1,6 @@
 {{define "content"}}
 <h1>Nebenkostenrechner</h1>
+{{template "crumb" .}}
 
 {{if not .HasAnyData}}
 <p class="muted">Noch keine Ablesung oder Fixkosten-Eingabe erfasst. <a href="{{.Base}}/ablesungen/neu">Ablesung erfassen</a> oder <a href="{{.Base}}/fixkosten/neu">Fixkosten-Eingabe erfassen</a>.</p>
@@ -25,7 +26,6 @@
 <div class="btn-row">
   <a href="{{.Base}}/ablesungen/neu" class="button success">Neue Ablesung erfassen</a>
   <a href="{{.Base}}/fixkosten/neu" class="button success">Neue Fixkosten-Eingabe erfassen</a>
-  <span class="muted">· <a href="{{.Base}}/ablesungen">Ablesungen</a> · <a href="{{.Base}}/fixkosten">Fixkosten</a> · <a href="{{.Base}}/stammdaten">Stammdaten</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></span>
 </div>
 
 <div class="wohnung-tabs" id="wohnung-tabs">

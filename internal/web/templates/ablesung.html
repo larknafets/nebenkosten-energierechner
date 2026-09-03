@@ -1,6 +1,6 @@
 {{define "content"}}
 <h1>Ablesung {{deDatum .Period.ReadingDate}}</h1>
-<p class="muted"><a href="{{.Base}}/dashboard">Zum Dashboard</a> · <a href="{{.Base}}/ablesungen">Zur Übersicht</a></p>
+{{template "crumbBack" .}}
 
 <div class="field" style="max-width:220px">
   <label>Andere Ablesung anzeigen</label>

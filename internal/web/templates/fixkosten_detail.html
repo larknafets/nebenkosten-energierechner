@@ -1,6 +1,6 @@
 {{define "content"}}
 <h1>Fixkosten {{.MonatLabel}}</h1>
-<p class="muted"><a href="{{.Base}}/dashboard">Zum Dashboard</a> · <a href="{{.Base}}/fixkosten">Zur Übersicht</a></p>
+{{template "crumbBack" .}}
 
 <div class="field" style="max-width:220px">
   <label>Andere Eingabe anzeigen</label>

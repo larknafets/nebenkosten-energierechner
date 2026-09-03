@@ -1,6 +1,6 @@
 {{define "content"}}
 <h1>Ablesungen</h1>
-<p class="muted"><a href="{{.Base}}/dashboard">Zum Dashboard</a></p>
+{{template "crumbBack" .}}
 
 {{if .ImportedCount}}
 <p class="panel" style="border-color:#2e7d32">✓ {{.ImportedCount}} Ablesungen importiert.</p>

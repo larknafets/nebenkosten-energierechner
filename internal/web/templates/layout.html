@@ -207,3 +207,10 @@
 </body>
 </html>
 {{end}}
+
+{{/* crumb/crumbBack are the top nav every page shows right under its <h1>
+     (Prototyp-Vorbild) - crumb on the Dashboard itself (no self-link),
+     crumbBack everywhere else ("← Zurück zum Dashboard" instead of a bare
+     "Dashboard" link). */}}
+{{define "crumb"}}<p class="muted"><a href="{{.Base}}/ablesungen">Ablesungen</a> · <a href="{{.Base}}/fixkosten">Fixkosten</a> · <a href="{{.Base}}/stammdaten">Stammdaten</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></p>{{end}}
+{{define "crumbBack"}}<p class="muted"><a href="{{.Base}}/dashboard">&larr; Zurück zum Dashboard</a> · <a href="{{.Base}}/ablesungen">Ablesungen</a> · <a href="{{.Base}}/fixkosten">Fixkosten</a> · <a href="{{.Base}}/stammdaten">Stammdaten</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></p>{{end}}

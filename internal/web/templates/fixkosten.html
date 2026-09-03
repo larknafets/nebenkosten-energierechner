@@ -1,6 +1,6 @@
 {{define "content"}}
 <h1>Fixkosten</h1>
-<p class="muted"><a href="{{.Base}}/dashboard">Zum Dashboard</a></p>
+{{template "crumbBack" .}}
 
 {{if not .Eingaben}}
 <p class="muted">Noch keine Fixkosten-Eingabe erfasst. <a href="{{.Base}}/fixkosten/neu">Jetzt erfassen</a>.</p>

@@ -1,6 +1,6 @@
 {{define "content"}}
 <h1>{{if .IsEdit}}Fixkosten-Eingabe korrigieren{{else}}Fixkosten-Eingabe erfassen{{end}}</h1>
-<p class="muted"><a href="{{.Base}}/dashboard">&larr; Zurück zum Dashboard</a></p>
+{{template "crumbBack" .}}
 
 {{if .JahrNotAngelegt}}
 <div class="panel" style="border-color:#e6a700">
