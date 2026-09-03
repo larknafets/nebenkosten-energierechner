@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  PROTOTYPE — WIRF MICH WEG. Kein Go, keine Server-Anbindung, keine Persistenz.
+  PROTOTYPE - WIRF MICH WEG. Kein Go, keine Server-Anbindung, keine Persistenz.
   Beantwortet Ticket #57 (child von Wayfinder-Map #55, larknafets/nebenkostenrechner):
   "Wie sehen Dashboard + neue Seiten (Fixkosten, Stammdaten) visuell aus?"
 
@@ -17,7 +17,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PROTOTYPE — Fixkosten/Dashboard</title>
+<title>PROTOTYPE - Fixkosten/Dashboard</title>
 <style>
   :root {
     color-scheme: light;
@@ -167,7 +167,7 @@
 </style>
 </head>
 <body>
-<div class="proto-banner">🚧 PROTOTYPE — nicht speichern, keine echten Daten, Ticket #57</div>
+<div class="proto-banner">🚧 PROTOTYPE - nicht speichern, keine echten Daten, Ticket #57</div>
 <div class="theme-toggle">
   <button type="button" class="theme-btn" data-choice="light" title="Hell">☀</button>
   <button type="button" class="theme-btn" data-choice="dark" title="Dunkel">☾</button>
@@ -711,7 +711,7 @@ function renderStammdaten() {
         '<td><input type="number" step="0.1" value="' + a.qm + '" data-qm="' + id + '"></td>' +
         '<td><input type="number" step="1" value="' + a.flurstueck + '" data-flurstueck="' + id + '"></td></tr>';
     }).join("") + '</tbody></table>' +
-    '<p class="muted" style="margin-top:.6rem">Einzelwerte, nicht historisiert — Änderung wirkt sofort auf alle Monate (analog zur bisherigen Wohnfläche-Pflege). Bisher Teil des Ablesung-Formulars, jetzt hierher umgezogen.</p></div>' +
+    '<p class="muted" style="margin-top:.6rem">Einzelwerte, nicht historisiert - Änderung wirkt sofort auf alle Monate (analog zur bisherigen Wohnfläche-Pflege). Bisher Teil des Ablesung-Formulars, jetzt hierher umgezogen.</p></div>' +
     '<h3 style="margin-top:1.5rem">Kostenpositionen je Jahr</h3>' +
     '<p class="muted">Jährlich-Positionen haben hier ihren Betrag; monatlich-Positionen werden im jeweiligen Fixkosten-Monatseintrag gepflegt und tauchen hier nur mit ihrer Berechnungslogik auf.</p>' +
     years.map(function (year) { return stammdatenYearBlock(year); }).join("") +
@@ -841,11 +841,11 @@ function render() {
   else if (page === "fixkosten-neu") renderFixkostenForm(q.get("m"));
   else if (page === "fixkosten-detail") renderFixkostenDetail(q.get("m") || MONTHS[MONTHS.length - 1].key);
   else if (page === "ablesung-neu") {
-    document.getElementById("app-root").innerHTML = '<h1>Neue Ablesung erfassen</h1>' + crumb("dashboard") + '<p class="muted">Unverändert gegenüber heute — nicht Teil dieses Prototyps. QM-Felder sind hier entfernt, siehe <a href="#stammdaten">Stammdaten</a>.</p><div class="btn-row"><a href="#dashboard" class="button secondary">Zurück</a></div>';
+    document.getElementById("app-root").innerHTML = '<h1>Neue Ablesung erfassen</h1>' + crumb("dashboard") + '<p class="muted">Unverändert gegenüber heute - nicht Teil dieses Prototyps. QM-Felder sind hier entfernt, siehe <a href="#stammdaten">Stammdaten</a>.</p><div class="btn-row"><a href="#dashboard" class="button secondary">Zurück</a></div>';
   } else if (page === "ablesungen") {
-    document.getElementById("app-root").innerHTML = '<h1>Ablesungen</h1>' + crumb("ablesungen") + '<p class="muted">Unverändert gegenüber heute — nicht Teil dieses Prototyps. Nur die QM-Felder im Formular entfallen, siehe <a href="#stammdaten">Stammdaten</a>.</p><div class="btn-row"><a href="#dashboard" class="button secondary">Zurück</a></div>';
+    document.getElementById("app-root").innerHTML = '<h1>Ablesungen</h1>' + crumb("ablesungen") + '<p class="muted">Unverändert gegenüber heute - nicht Teil dieses Prototyps. Nur die QM-Felder im Formular entfallen, siehe <a href="#stammdaten">Stammdaten</a>.</p><div class="btn-row"><a href="#dashboard" class="button secondary">Zurück</a></div>';
   } else if (page === "berechnungslogik") {
-    document.getElementById("app-root").innerHTML = '<h1>Wie wird gerechnet?</h1>' + crumb("berechnungslogik") + '<p class="muted">Unverändert gegenüber heute — nicht Teil dieses Prototyps. Würde um die Fixkosten-Berechnungslogiken (Wohneinheit/Flurstück/Wohnungsgröße/Personen) ergänzt.</p><div class="btn-row"><a href="#dashboard" class="button secondary">Zurück</a></div>';
+    document.getElementById("app-root").innerHTML = '<h1>Wie wird gerechnet?</h1>' + crumb("berechnungslogik") + '<p class="muted">Unverändert gegenüber heute - nicht Teil dieses Prototyps. Würde um die Fixkosten-Berechnungslogiken (Wohneinheit/Flurstück/Wohnungsgröße/Personen) ergänzt.</p><div class="btn-row"><a href="#dashboard" class="button secondary">Zurück</a></div>';
   }
 }
 
