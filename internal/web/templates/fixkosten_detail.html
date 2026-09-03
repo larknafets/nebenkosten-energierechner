@@ -1,0 +1,46 @@
+{{define "content"}}
+<h1>Fixkosten {{.MonatLabel}}</h1>
+<p class="muted"><a href="{{.Base}}/dashboard">Zum Dashboard</a> · <a href="{{.Base}}/fixkosten">Zur Übersicht</a></p>
+
+<div class="field" style="max-width:220px">
+  <label>Andere Eingabe anzeigen</label>
+  <select onchange="if(this.value) location.href=this.value">
+    {{range .AllEintraege}}
+    <option value="{{$.Base}}/fixkosten/{{.ID}}" {{if eq .ID $.Eintrag.ID}}selected{{end}}>{{.Label}}</option>
+    {{end}}
+  </select>
+</div>
+
+<div class="panel">
+  <table class="letzte">
+    <thead><tr><th>Wohnung</th><th>Personen</th></tr></thead>
+    <tbody>
+      {{range .Apartments}}
+      <tr><td>{{.Name}}</td><td>{{index $.Eintrag.Personen .ID}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  {{if .KostenNote}}
+  <p class="muted" style="margin-top:1.25rem">{{.KostenNote}}</p>
+  {{else}}
+  <table class="letzte" style="margin-top:1.25rem">
+    <thead><tr><th>Position</th><th>Logik</th><th>Wohnung 1</th><th>Wohnung 2</th></tr></thead>
+    <tbody>
+      {{range .Positionen}}
+      <tr><td>{{.Label}}</td><td>{{.LogikLabel}}</td><td>{{deEUR .KostenW1}} €</td><td>{{deEUR .KostenW2}} €</td></tr>
+      {{end}}
+      <tr><td colspan="2"><strong>Summe</strong></td><td><strong>{{deEUR .KostenW1}} €</strong></td><td><strong>{{deEUR .KostenW2}} €</strong></td></tr>
+    </tbody>
+  </table>
+  {{end}}
+</div>
+
+<div class="btn-row">
+  <a href="{{.Base}}/fixkosten/neu" class="button success">Neue Fixkosten-Eingabe erfassen</a>
+  <a href="{{.Base}}/fixkosten/{{.Eintrag.ID}}/bearbeiten" class="button secondary">Diese Eingabe korrigieren</a>
+  <form method="post" action="{{.Base}}/fixkosten/{{.Eintrag.ID}}/loeschen" onsubmit="return confirm('Fixkosten-Eingabe {{.MonatLabel}} wirklich löschen?');">
+    <button type="submit" class="danger">Diese Eingabe löschen</button>
+  </form>
+</div>
+{{end}}

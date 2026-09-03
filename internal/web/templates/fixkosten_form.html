@@ -1,0 +1,50 @@
+{{define "content"}}
+<h1>{{if .IsEdit}}Fixkosten-Eingabe korrigieren{{else}}Fixkosten-Eingabe erfassen{{end}}</h1>
+<p class="muted"><a href="{{.Base}}/dashboard">&larr; Zurück zum Dashboard</a></p>
+
+{{if .JahrNotAngelegt}}
+<div class="panel" style="border-color:#e6a700">
+  <p>Für Jahr {{.Jahr}} sind noch keine Kostenpositionen in den Stammdaten angelegt.</p>
+  <p><a href="{{.Base}}/stammdaten">Jetzt in den Stammdaten anlegen</a>, dann diese Seite neu laden.</p>
+</div>
+{{else}}
+<form method="post" action="{{.FormAction}}" class="panel">
+  <div class="field" style="max-width:220px">
+    <label>Monat</label>
+    <input type="month" name="monat" value="{{.Monat}}" required>
+  </div>
+
+  <h3>Personen</h3>
+  <div class="grid grid-2">
+    {{range .Apartments}}
+    <div class="field"><label>Personen {{.Name}}</label><input type="number" name="personen_{{.ID}}" {{if or $.IsEdit $.PreviousPersonen}}value="{{index $.PreviousPersonen .ID}}"{{end}} required></div>
+    {{end}}
+  </div>
+
+  <h3>Fixkosten</h3>
+  <table class="letzte">
+    <thead><tr><th>Position</th><th>Logik</th><th>Wert (EUR/Monat)</th></tr></thead>
+    <tbody>
+      {{range .Positionen}}
+      <tr>
+        <td>{{.Label}}{{if .IsJaehrlich}} <span class="badge">Jahreswert · Stammdaten</span>{{end}}</td>
+        <td>{{.LogikLabel}}</td>
+        <td>
+          {{if .IsJaehrlich}}
+          <input type="number" step="any" value="{{de .Value}}" disabled title="Kommt aus den Jahres-Stammdaten, dort ändern">
+          {{else}}
+          <input type="number" step="any" name="wert_{{.ID}}" value="{{.Value}}" required>
+          {{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  <div class="btn-row">
+    <button type="submit" class="primary">Speichern</button>
+    <a href="{{.Base}}/fixkosten" class="button secondary">Abbrechen</a>
+  </div>
+</form>
+{{end}}
+{{end}}

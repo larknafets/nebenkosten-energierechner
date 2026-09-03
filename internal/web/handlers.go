@@ -39,6 +39,10 @@ var (
 
 	berechnungslogikTemplate = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/berechnungslogik.html"))
 	stammdatenTemplate       = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/stammdaten.html"))
+
+	fixkostenListeTemplate  = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/fixkosten.html"))
+	fixkostenFormTemplate   = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/fixkosten_form.html"))
+	fixkostenDetailTemplate = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/fixkosten_detail.html"))
 )
 
 // meterDisplay describes how one meter's reading is labelled on the
@@ -190,6 +194,13 @@ func NewMux(db *sql.DB, version, buildDate string) *http.ServeMux {
 	mux.HandleFunc("GET /berechnungslogik", handleBerechnungslogik())
 	mux.HandleFunc("GET /stammdaten", handleStammdatenForm(db))
 	mux.HandleFunc("POST /stammdaten", handleUpdateStammdaten(db))
+	mux.HandleFunc("GET /fixkosten", handleFixkostenListe(db))
+	mux.HandleFunc("GET /fixkosten/neu", handleFixkostenForm(db))
+	mux.HandleFunc("POST /fixkosten", handleCreateFixkosten(db))
+	mux.HandleFunc("GET /fixkosten/{id}", handleFixkostenDetail(db))
+	mux.HandleFunc("GET /fixkosten/{id}/bearbeiten", handleFixkostenEditForm(db))
+	mux.HandleFunc("POST /fixkosten/{id}", handleUpdateFixkosten(db))
+	mux.HandleFunc("POST /fixkosten/{id}/loeschen", handleDeleteFixkosten(db))
 	return mux
 }
 
