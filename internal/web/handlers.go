@@ -1206,10 +1206,10 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 		// Entities neben den Wohnung-Tabs, analog zum Prototyp
 		// (docs/prototypes/fixkosten-prototype.html): eigene Jahressumme +
 		// Monatsverlauf, kein Fixkosten-Anteil, keine Wohnungs-Zuteilung.
-		wallboxCard := buildSimpleJahresCard("Wallboxen", false, jahr, periodenKosten, wallboxWert)
-		wallboxVerlauf := buildSimpleVerlauf("wallbox", "Wallboxen", false, periodenKosten, wallboxWert)
-		pvCard := buildSimpleJahresCard("PV-Anlage", true, jahr, periodenKosten, einspeisungWert)
-		pvVerlauf := buildSimpleVerlauf("pv", "PV-Anlage", true, periodenKosten, einspeisungWert)
+		wallboxCard := buildSimpleJahresCard(wallboxSeries, jahr, periodenKosten)
+		wallboxVerlauf := buildSimpleVerlauf(wallboxSeries, periodenKosten)
+		pvCard := buildSimpleJahresCard(pvSeries, jahr, periodenKosten)
+		pvVerlauf := buildSimpleVerlauf(pvSeries, periodenKosten)
 
 		data := struct {
 			Base               string

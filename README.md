@@ -43,13 +43,13 @@ Preise (aktuell, werden pro Monat neu erfasst statt zentral versioniert):
 
 Ablese-Rhythmus: 1x/Monat. Verbrauch = aktueller Zählerstand minus Stand der chronologisch nächst-älteren Ablesung (einfache Differenz, funktioniert automatisch auch über Lücken hinweg).
 
-`strom_wallbox` fließt als dritte, rein informative Zuteilungsstufe in die Strom-Netzbezug-Zuteilung ein (siehe unten) - sie wird vom nach Wohnung 2/Wärmepumpe verbleibenden Netzbezug abgezogen, bevor der Rest implizit Wohnung 1 zufällt. Keine eigene Wohnungs-Zuteilung, kein eigener Wallbox-Tarif.
+`strom_wallbox` fließt als dritte Zuteilungsstufe in die Strom-Netzbezug-Zuteilung ein (siehe unten) - sie wird vom nach Wohnung 2/Wärmepumpe verbleibenden Netzbezug abgezogen, bevor der Rest implizit Wohnung 1 zufällt. Keine eigene Wohnungs-Zuteilung, kein eigener Wallbox-Tarif.
 
 ## Berechnungslogik
 
 ### Strom (PV-Netzbezug-Zuteilung)
 
-Netzbezug wird sequenziell zugeteilt: zuerst Wohnung 2 (gedeckelt auf ihren eigenen Verbrauch), dann die Wärmepumpe auf den verbleibenden Netzbezug, dann die Wallboxen auf den danach noch verbleibenden Netzbezug (rein informativ - keine eigene Wohnungs-Zuteilung, kein eigener Wallbox-Tarif, aber dieselbe Deckelung wie Wohnung 2/Wärmepumpe). Der Rest zählt implizit zu Wohnung 1 (keine eigene Kostenposition).
+Netzbezug wird sequenziell zugeteilt: zuerst Wohnung 2 (gedeckelt auf ihren eigenen Verbrauch), dann die Wärmepumpe auf den verbleibenden Netzbezug, dann die Wallboxen auf den danach noch verbleibenden Netzbezug (keine eigene Wohnungs-Zuteilung, kein eigener Wallbox-Tarif, aber dieselbe Deckelung wie Wohnung 2/Wärmepumpe). Der Rest zählt implizit zu Wohnung 1 (keine eigene Kostenposition).
 
 ```
 Netzbezug_Gesamt = Verbrauch(strom_gesamt)
@@ -62,7 +62,7 @@ Wallbox_Anteil_kWh = min(Rest2, Verbrauch(strom_wallbox))
 
 Kosten_Strom_W2  = W2_Anteil_kWh * Strompreis
 Kosten_WP_gesamt = WP_Anteil_kWh * Strompreis        (Basis für Heizungskosten, siehe unten)
-Kosten_Wallbox   = Wallbox_Anteil_kWh * Strompreis   (rein informativ)
+Kosten_Wallbox   = Wallbox_Anteil_kWh * Strompreis
 ```
 
 Bei PV-Überschuss (`Netzbezug_Gesamt = 0`) sind alle 3 Kosten 0. Alle Anteile über `min()` gedeckelt, nie negativ.

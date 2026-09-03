@@ -421,43 +421,61 @@ type dashboardSimpleSpalte struct {
 // ok=false skips the period entirely (no Ablesung/keine Vorperiode).
 type simpleWert func(k kosten) (kwh, eur float64, ok bool)
 
-// wallboxWert reads the Wallbox-Anteil from StromErgebnis - a third,
-// PV-Netzbezug-gedeckelte Zuteilungsstufe nach Wohnung 2 und Wärmepumpe
-// (Ticket #67 Nachtrag), nicht der rohe Zwischenzähler-Verbrauch.
-func wallboxWert(k kosten) (kwh, eur float64, ok bool) {
-	if k.Strom == nil {
-		return 0, 0, false
-	}
-	return k.Strom.WallboxAnteilKWh, k.Strom.KostenWallbox, true
+// simpleSeries bundles a Wallbox/PV-Anlage entity's identity (ID/Name/
+// IstErtrag) with its Wert-Extractor - the 2 call sites in handleDashboard
+// otherwise repeated the same id/name/istErtrag/wert-func quadruple twice
+// each, once per build* call.
+type simpleSeries struct {
+	ID        string
+	Name      string
+	IstErtrag bool
+	Wert      simpleWert
 }
 
-func einspeisungWert(k kosten) (kwh, eur float64, ok bool) {
-	if k.Einspeisung == nil {
-		return 0, 0, false
-	}
-	return k.Einspeisung.EinspeisungKWh, k.Einspeisung.Ertrag, true
+// wallboxSeries reads the Wallbox-Anteil from StromErgebnis - a third,
+// PV-Netzbezug-gedeckelte Zuteilungsstufe nach Wohnung 2 und Wärmepumpe
+// (Ticket #67 Nachtrag), nicht der rohe Zwischenzähler-Verbrauch.
+var wallboxSeries = simpleSeries{
+	ID: "wallbox", Name: "Wallboxen", IstErtrag: false,
+	Wert: func(k kosten) (kwh, eur float64, ok bool) {
+		if k.Strom == nil {
+			return 0, 0, false
+		}
+		return k.Strom.WallboxAnteilKWh, k.Strom.KostenWallbox, true
+	},
+}
+
+var pvSeries = simpleSeries{
+	ID: "pv", Name: "PV-Anlage", IstErtrag: true,
+	Wert: func(k kosten) (kwh, eur float64, ok bool) {
+		if k.Einspeisung == nil {
+			return 0, 0, false
+		}
+		return k.Einspeisung.EinspeisungKWh, k.Einspeisung.Ertrag, true
+	},
 }
 
 // buildSimpleJahresCard sums a Wallbox/PV-Anlage series over every period
 // whose ReadingDate falls in jahr.
-func buildSimpleJahresCard(name string, istErtrag bool, jahr int, periodenKosten []periodKosten, wert simpleWert) dashboardSimpleCard {
+func buildSimpleJahresCard(series simpleSeries, jahr int, periodenKosten []periodKosten) dashboardSimpleCard {
 	var sum float64
 	for _, pk := range periodenKosten {
 		t, err := time.Parse("2006-01-02", pk.ReadingDate)
 		if err != nil || t.Year() != jahr {
 			continue
 		}
-		if _, eur, ok := wert(pk.K); ok {
+		if _, eur, ok := series.Wert(pk.K); ok {
 			sum += eur
 		}
 	}
-	return dashboardSimpleCard{Name: name, GesamtEUR: calc.Round2(sum), IstErtrag: istErtrag}
+	return dashboardSimpleCard{Name: series.Name, GesamtEUR: calc.Round2(sum), IstErtrag: series.IstErtrag}
 }
 
 // buildSimpleVerlauf builds a Wallbox/PV-Anlage Monatsverlauf - one bar per
 // Ablesungs-Monat plus a Jahressumme-Trennzeile per Kalenderjahr, analog zu
 // buildDashboardVerlauf's Fixkosten-freier Fall.
-func buildSimpleVerlauf(id, name string, istErtrag bool, periodenKosten []periodKosten, wert simpleWert) dashboardSimpleSpalte {
+func buildSimpleVerlauf(series simpleSeries, periodenKosten []periodKosten) dashboardSimpleSpalte {
+	id, name, istErtrag, wert := series.ID, series.Name, series.IstErtrag, series.Wert
 	monate := make([]dashboardSimpleMonat, 0, len(periodenKosten))
 	for _, pk := range periodenKosten {
 		t, err := time.Parse("2006-01-02", pk.ReadingDate)

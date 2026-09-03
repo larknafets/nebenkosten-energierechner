@@ -201,7 +201,7 @@ func TestBuildSimpleVerlaufUndJahresCard(t *testing.T) {
 		{ReadingDate: "2026-09-01", K: ohneWallbox},
 	}
 
-	spalte := buildSimpleVerlauf("wallbox", "Wallboxen", false, periods, wallboxWert)
+	spalte := buildSimpleVerlauf(wallboxSeries, periods)
 	if spalte.ID != "wallbox" || spalte.Name != "Wallboxen" || spalte.IstErtrag {
 		t.Errorf("Spalte-Metadaten falsch: %+v", spalte)
 	}
@@ -237,21 +237,21 @@ func TestBuildSimpleVerlaufUndJahresCard(t *testing.T) {
 		t.Errorf("Jahreszeile = %+v, want 1 Eintrag mit Summe=18 (12+6, der Monat ohne Wert zaehlt 0)", jahreszeilen)
 	}
 
-	card := buildSimpleJahresCard("Wallboxen", false, 2026, periods, wallboxWert)
+	card := buildSimpleJahresCard(wallboxSeries, 2026, periods)
 	if card.GesamtEUR != 18 || card.IstErtrag {
 		t.Errorf("card = %+v, want GesamtEUR=18 IstErtrag=false", card)
 	}
 
 	t.Run("PV-Anlage nutzt Einspeisung statt Wallbox", func(t *testing.T) {
 		p := []periodKosten{{ReadingDate: "2026-11-15", K: kosten{Einspeisung: &calc.EinspeisungErgebnis{EinspeisungKWh: 100, Ertrag: 8}}}}
-		pvCard := buildSimpleJahresCard("PV-Anlage", true, 2026, p, einspeisungWert)
+		pvCard := buildSimpleJahresCard(pvSeries, 2026, p)
 		if pvCard.GesamtEUR != 8 || !pvCard.IstErtrag {
 			t.Errorf("pvCard = %+v, want GesamtEUR=8 IstErtrag=true", pvCard)
 		}
 	})
 
 	t.Run("leere Eintraege", func(t *testing.T) {
-		spalte := buildSimpleVerlauf("wallbox", "Wallboxen", false, nil, wallboxWert)
+		spalte := buildSimpleVerlauf(wallboxSeries, nil)
 		if spalte.Eintraege != nil {
 			t.Errorf("want nil Eintraege for empty input, got %+v", spalte.Eintraege)
 		}
