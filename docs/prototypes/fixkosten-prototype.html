@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE — WIRF MICH WEG. Kein Go, keine Server-Anbindung, keine Persistenz.
+  Beantwortet Ticket #57 (child von Wayfinder-Map #55, larknafets/nebenkostenrechner):
+  "Wie sehen Dashboard + neue Seiten (Fixkosten, Stammdaten) visuell aus?"
+
+  Dashboard-Layout ist die vom User aus den 3 Entwürfen zusammengestellte
+  Version: Jahresübersicht als KPI-Strip (Verbrauch/Fixkosten/Gesamt, ex-Variante
+  B), Monatsverlauf als eine Spalte mit Verbrauch/Fixkosten/Kombiniert-Umschalter
+  (ex-Variante C). Die anderen neuen Seiten (Stammdaten, Fixkosten-Liste/-Neu/
+  -Detail) sind mechanische Analogien zu den bestehenden Ablesungen-Seiten.
+
+  Fachliches Modell = Ticket #56 (bereits entschieden, hier nur visuell umgesetzt).
+  Doppelt öffnen: file://.../fixkosten-prototype.html
+-->
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE — Fixkosten/Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4f5f7; --panel: #ffffff; --border: #e0e2e7; --text: #1c1e21;
+    --muted: #6b7280; --accent: #2563eb; --accent-soft: #eef2ff; --success: #16a34a;
+    --danger: #b91c1c; --warning: #b45309;
+    --cat-strom: #f59e0b; --cat-heizung: #ef4444; --cat-wasser: #3b82f6; --cat-fix: #8b5cf6;
+    --logik-wohneinheit: #8b5cf6; --logik-flurstueck: #22c55e; --logik-qm: #ec4899; --logik-personen: #06b6d4;
+    --tooltip-bg: #1c1e21; --tooltip-text: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #14161a; --panel: #1c1f26; --border: #2e323c; --text: #e8eaed;
+      --muted: #9aa1ac; --accent: #5b9bf5; --accent-soft: #1e2a3f; --success: #16a34a;
+      --danger: #f87171; --warning: #fbbf24;
+      --cat-strom: #fbbf24; --cat-heizung: #f87171; --cat-wasser: #60a5fa; --cat-fix: #a78bfa;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #14161a; --panel: #1c1f26; --border: #2e323c; --text: #e8eaed;
+    --muted: #9aa1ac; --accent: #5b9bf5; --accent-soft: #1e2a3f; --success: #16a34a;
+    --danger: #f87171; --warning: #fbbf24;
+    --cat-strom: #fbbf24; --cat-heizung: #f87171; --cat-wasser: #60a5fa; --cat-fix: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  a { color: var(--accent); }
+  h1, h2, h3, h4 { margin: 0 0 .5rem; }
+  .app { max-width: 900px; margin: 0 auto; padding: 1.5rem 1.5rem 5rem; }
+  .app.narrow { max-width: 700px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; }
+  .muted { color: var(--muted); font-size: .85rem; }
+  label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: .25rem; }
+  input[type=number], input[type=date], input[type=text], select {
+    width: 100%; padding: .5rem .6rem; border: 1px solid var(--border); border-radius: 6px;
+    font-size: .95rem; background: var(--panel); color: var(--text);
+  }
+  input[disabled] { background: var(--bg); color: var(--muted); cursor: not-allowed; }
+  .field { margin-bottom: .9rem; }
+  .grid { display: grid; gap: 1rem; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  button, a.button { display: inline-block; border-radius: 6px; padding: .6rem 1.1rem; font-size: .9rem; cursor: pointer; text-decoration: none; line-height: 1.2; border: none; font-family: inherit; }
+  button.primary, a.button.primary { background: var(--accent); color: white; }
+  button.secondary, a.button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button.success, a.button.success { background: var(--success); color: white; }
+  button.danger, a.button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  button.tiny { padding: .3rem .6rem; font-size: .78rem; }
+  .btn-row { display: flex; gap: .75rem; justify-content: center; align-items: center; flex-wrap: wrap; margin-top: 1.25rem; }
+  table.letzte { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  table.letzte th, table.letzte td { padding: .4rem .5rem; text-align: left; border-bottom: 1px solid var(--border); }
+  .badge { display: inline-block; background: var(--accent-soft); color: var(--accent); font-size: .75rem; padding: .15rem .5rem; border-radius: 999px; }
+  .badge.warn { background: #fef3c7; color: #92400e; }
+  :root[data-theme="dark"] .badge.warn, @media (prefers-color-scheme: dark) { }
+  .stat-card .stat-value { font-size: 1.5rem; font-weight: 700; margin-top: .3rem; }
+  .stat-bar-track { display: flex; height: .5rem; border-radius: 999px; overflow: hidden; background: var(--border); margin-top: .5rem; }
+  .stat-bar-seg { height: 100%; }
+  .cat-strom { background: var(--cat-strom); }
+  .cat-heizung { background: var(--cat-heizung); }
+  .cat-wasser { background: var(--cat-wasser); }
+  .cat-fix { background: var(--cat-fix); }
+  .logik-wohneinheit { background: var(--logik-wohneinheit); }
+  .logik-flurstueck { background: var(--logik-flurstueck); }
+  .logik-qm { background: var(--logik-qm); }
+  .logik-personen { background: var(--logik-personen); }
+  .mini-legend { display: flex; align-items: center; gap: 1rem; font-size: .72rem; color: var(--muted); margin-bottom: .6rem; flex-wrap: wrap; }
+  .mini-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+  .seg-label { color: #fff; font-size: .66rem; font-weight: 600; white-space: nowrap; padding: 0 .3rem; text-shadow: 0 1px 1px rgba(0,0,0,.3); line-height: 22px; overflow: hidden; }
+  .menge-row { display: flex; align-items: center; gap: .5rem; padding: .3rem 0; font-size: .78rem; flex-wrap: wrap; }
+  .menge-row .month-label { width: 58px; }
+  .menge-row .menge-list { flex: 1; color: var(--text); }
+  .menge-row .menge-list i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
+  .menge-row .menge-list span { margin-right: .9rem; white-space: nowrap; }
+  .stat-kategorien { margin-top: .4rem; white-space: normal; overflow-wrap: break-word; }
+
+  nav.crumb { margin-bottom: .75rem; font-size: .85rem; color: var(--muted); }
+  nav.crumb a { margin-right: .25rem; }
+
+  .tabs { display: flex; gap: .4rem; margin: 1rem 0; }
+  .tab-btn { flex: 1; text-align: center; padding: .55rem; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: .85rem; border: 1px solid transparent; cursor: pointer; }
+  .tab-btn.active { background: var(--accent); color: #fff; }
+
+  .col-head { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .5rem; display: flex; align-items: center; gap: .4rem; }
+  .col-head i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+
+  .month-label { width: 58px; font-size: .72rem; color: var(--muted); flex-shrink: 0; }
+  .value-label { width: 62px; text-align: right; font-size: .78rem; font-weight: 600; flex-shrink: 0; }
+  .bar-track { flex: 1; min-width: 0; height: 18px; border-radius: 4px; background: var(--border); display: flex; overflow: hidden; }
+  .bar-track > div { height: 100%; flex-shrink: 0; }
+  .verlauf-row { display: flex; align-items: center; gap: .5rem; padding: .28rem 0; }
+  .verlauf-row.is-current .month-label { font-weight: 700; color: var(--text); }
+  .verlauf-year-sep { display: flex; align-items: center; gap: .6rem; margin: .55rem 0 .3rem; }
+  .verlauf-year-sep .line { flex: 1; height: 1px; background: var(--border); }
+  .verlauf-year-sep .label { font-size: .66rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; flex-shrink: 0; }
+  .verlauf-year-row { display: flex; justify-content: space-between; align-items: center; background: var(--accent-soft); border-radius: 6px; padding: .45rem .65rem; margin-bottom: .4rem; font-weight: 700; font-size: .82rem; color: var(--accent); }
+  .fix-value { font-size: .78rem; font-weight: 600; width: 100%; text-align: right; }
+  .fix-empty { color: var(--muted); font-size: .78rem; text-align: right; width: 100%; }
+
+  .dash-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .dash-two-col .panel { min-width: 0; }
+  .dash-row-grid { display: grid; grid-template-columns: subgrid; }
+
+  .kpi-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem; }
+  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; text-align: center; }
+  .kpi .kpi-label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .kpi .kpi-value { font-size: 1.4rem; font-weight: 700; margin-top: .25rem; }
+
+  .merged-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .merged-table td, .merged-table th { padding: .4rem .5rem; vertical-align: middle; }
+  .merged-table tr:not(.year-row) td { border-bottom: 1px solid var(--border); }
+  .merged-table td.m-month { width: 56px; color: var(--muted); font-size: .75rem; }
+  .merged-table td.m-bar { width: 40%; }
+  .merged-table td.m-num { text-align: right; width: 90px; font-weight: 600; }
+  .merged-table tr.year-row td { background: var(--accent-soft); font-weight: 700; color: var(--accent); padding: .5rem; }
+  .merged-table tr.is-current td.m-month { font-weight: 700; color: var(--text); }
+
+  .stacked-row { display: flex; align-items: center; gap: .5rem; padding: .3rem 0; }
+  .stacked-track { flex: 1; height: 22px; border-radius: 4px; background: var(--border); display: flex; overflow: hidden; }
+  .stacked-track > div { height: 100%; }
+  .stacked-track .fix-seg { border-left: 2px dashed rgba(255,255,255,.6); }
+  .mode-toggle { display: flex; gap: .3rem; margin-left: auto; }
+  .mode-toggle button { padding: .25rem .6rem; font-size: .72rem; background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .mode-toggle button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .stamm-year-block { border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  .stamm-year-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .75rem; }
+  .stamm-pos-row { display: grid; grid-template-columns: 1.6fr 1fr .9fr .9fr; gap: .5rem; align-items: end; padding: .4rem 0; border-bottom: 1px solid var(--border); }
+  .stamm-pos-row:last-child { border-bottom: none; }
+  .stamm-pos-name { font-size: .85rem; padding-bottom: .55rem; }
+
+
+  .theme-toggle { position: fixed; top: .75rem; right: 1rem; display: flex; gap: .25rem; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: .25rem; z-index: 40; }
+  .theme-btn { width: 28px; height: 28px; padding: 0; border: none; background: transparent; border-radius: 6px; color: var(--muted); }
+  .theme-btn.active { background: var(--accent-soft); color: var(--accent); }
+
+  .proto-banner { background: #fbbf24; color: #1c1e21; text-align: center; font-size: .78rem; font-weight: 600; padding: .3rem; }
+
+  @media (max-width: 720px) {
+    .dash-two-col, .grid-2, .grid-3, .grid-4, .kpi-strip { grid-template-columns: 1fr; }
+    .stamm-pos-row { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="proto-banner">🚧 PROTOTYPE — nicht speichern, keine echten Daten, Ticket #57</div>
+<div class="theme-toggle">
+  <button type="button" class="theme-btn" data-choice="light" title="Hell">☀</button>
+  <button type="button" class="theme-btn" data-choice="dark" title="Dunkel">☾</button>
+</div>
+<div id="app-root" class="app"></div>
+
+<script>
+"use strict";
+
+/* ---------------------------------------------------------------------- */
+/* Dummy-Daten                                                            */
+/* ---------------------------------------------------------------------- */
+
+var APARTMENTS = {
+  1: { id: 1, name: "Wohnung 1", qm: 95.4, flurstueck: 420 },
+  2: { id: 2, name: "Wohnung 2", qm: 78.2, flurstueck: 380 }
+};
+
+// 14 Kostenpositionen - Logik/Typ hier nur Platzhalter-Default fürs Prototyp,
+// fachlich final erst bei Umsetzung.
+var POSITIONEN = [
+  { id: "grundsteuer", name: "Grundsteuer", logik: "qm", typ: "jaehrlich" },
+  { id: "gebaeudevers", name: "Wohngebäudeversicherung", logik: "qm", typ: "jaehrlich" },
+  { id: "deich_grund", name: "Deichbeitrag Grund und Boden", logik: "flurstueck", typ: "jaehrlich" },
+  { id: "deich_bau", name: "Deichbeitrag Bauliche Anlagen", logik: "flurstueck", typ: "jaehrlich" },
+  { id: "kreisverband", name: "Kreisverband Wesermarsch der Wasser- und Bodenverbände", logik: "flurstueck", typ: "jaehrlich" },
+  { id: "abfall_haushalt", name: "Abfallwirtschaft Grundgebühr Haushalt", logik: "wohneinheit", typ: "jaehrlich" },
+  { id: "abfall_personen", name: "Abfallwirtschaft Grundgebühr Personen", logik: "personen", typ: "jaehrlich" },
+  { id: "abfall_biomuell", name: "Abfallwirtschaft Biomüll", logik: "wohneinheit", typ: "jaehrlich" },
+  { id: "abfall_restmuell", name: "Abfallwirtschaft Restmüll", logik: "wohneinheit", typ: "jaehrlich" },
+  { id: "strom_grundpreis", name: "Grundpreis Strom", logik: "wohneinheit", typ: "monatlich" },
+  { id: "trinkwasser", name: "Grundgebühr Trinkwasser", logik: "wohneinheit", typ: "monatlich" },
+  { id: "abwasser", name: "Grundgebühr Abwasser", logik: "wohneinheit", typ: "monatlich" },
+  { id: "internet", name: "Grundpreis Internet", logik: "wohneinheit", typ: "monatlich" },
+  { id: "wp_wartung", name: "Wartungskosten Wärmepumpe", logik: "wohneinheit", typ: "monatlich" }
+];
+
+var LOGIK_LABEL = {
+  wohneinheit: "Je Wohneinheit",
+  flurstueck: "Je anteiliges Flurstück",
+  qm: "Je anteilige Wohnungsgröße",
+  personen: "Je Anzahl Personen"
+};
+
+// Jahres-Stammdaten: nur für "jaehrlich"-Typ-Positionen ein Jahreswert je Jahr.
+var STAMMDATEN_JAHRE = {
+  2025: { grundsteuer: 640, gebaeudevers: 780, deich_grund: 210, deich_bau: 340, kreisverband: 95, abfall_haushalt: 260, abfall_personen: 180, abfall_biomuell: 140, abfall_restmuell: 220 },
+  2026: { grundsteuer: 655, gebaeudevers: 810, deich_grund: 215, deich_bau: 345, kreisverband: 98, abfall_haushalt: 265, abfall_personen: 185, abfall_biomuell: 145, abfall_restmuell: 228 }
+};
+
+function seededRand(seed) {
+  var x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+function monthKey(y, m) { return y + "-" + String(m).padStart(2, "0"); }
+
+// Monate 2025-01 .. 2026-08 (aktuelles Datum im Prototyp: 03.09.2026)
+var MONTHS = [];
+for (var y = 2025; y <= 2026; y++) {
+  var lastM = (y === 2026) ? 8 : 12;
+  for (var m = 1; m <= lastM; m++) MONTHS.push({ y: y, m: m, key: monthKey(y, m) });
+}
+
+// Verbrauch je Ablesemonat (dummy EUR je Kategorie je Wohnung)
+var VERBRAUCH = {};
+MONTHS.forEach(function (mo, i) {
+  var base = 60 + 20 * Math.sin(i / 3);
+  VERBRAUCH[mo.key] = {
+    1: {
+      strom: { eur: round2(30 + base * 0.6 + seededRand(i + 1) * 15), kwh: round2(90 + base * 2) },
+      heizung: { eur: round2(70 + base * 1.4 + seededRand(i + 7) * 25), kwh: round2(0.4 + base / 100) },
+      wasser: { eur: round2(18 + seededRand(i + 3) * 8), m3: round2(4 + seededRand(i + 4) * 2) }
+    },
+    2: {
+      strom: { eur: round2(22 + base * 0.4 + seededRand(i + 11) * 10), kwh: round2(60 + base * 1.3) },
+      heizung: { eur: round2(45 + base * 0.9 + seededRand(i + 17) * 18), kwh: round2(0.25 + base / 140) },
+      wasser: { eur: round2(12 + seededRand(i + 13) * 5), m3: round2(2.6 + seededRand(i + 14) * 1.3) }
+    }
+  };
+  // nicht jeder Monat hat eine Ablesung (Ablesungen sind unregelmäßig)
+  if (i % 5 === 4) VERBRAUCH[mo.key] = null;
+});
+
+// Fixkosten-Einträge je Monat: monatlich-Werte + Personen je Wohnung
+var FIXKOSTEN = {};
+MONTHS.forEach(function (mo, i) {
+  if (i % 4 === 3) { FIXKOSTEN[mo.key] = null; return; } // manche Monate noch nicht erfasst
+  var werte = {};
+  POSITIONEN.filter(function (p) { return p.typ === "monatlich"; }).forEach(function (p, pi) {
+    var basePrice = { strom_grundpreis: 14.5, trinkwasser: 9.2, abwasser: 11.8, internet: 39.9, wp_wartung: 18.5 }[p.id];
+    werte[p.id] = round2(basePrice + (i > 10 && p.id === "internet" ? 5 : 0)); // Anbieterwechsel-Sprung ab Monat 11
+  });
+  FIXKOSTEN[mo.key] = { werte: werte, personen: { 1: 3, 2: (i > 14 ? 1 : 2) } };
+});
+
+// Testweise: Wallboxen (nur Stromkosten, keine Fixkosten) und PV-Anlage (nur
+// Einspeisevergütung/Erstattung, keine Kosten) als zusätzliche Auswahl neben
+// den Wohnungen (analog strom_wallbox / strom_einspeisung, siehe CONTEXT.md).
+var WALLBOX_KOSTEN = {};
+var PV_ERSTATTUNG = {};
+MONTHS.forEach(function (mo, i) {
+  if (i % 6 === 5) { WALLBOX_KOSTEN[mo.key] = null; } else {
+    WALLBOX_KOSTEN[mo.key] = round2(35 + seededRand(i + 31) * 40 + (mo.m >= 11 || mo.m <= 2 ? 15 : 0));
+  }
+  if (i % 7 === 6) { PV_ERSTATTUNG[mo.key] = null; } else {
+    var saison = [0.3, 0.5, 0.8, 1.1, 1.4, 1.5, 1.5, 1.3, 1.0, 0.6, 0.35, 0.25][mo.m - 1];
+    PV_ERSTATTUNG[mo.key] = round2(40 * saison + seededRand(i + 41) * 8);
+  }
+});
+// Verbrauchswerte (kWh) zu den EUR-Reihen - grober Tarif-Rückrechnung fürs
+// Prototyp (Wallbox-Strompreis ~0,32 EUR/kWh, Einspeisevergütung ~0,08 EUR/kWh).
+var WALLBOX_KWH = {}, PV_EINSPEISUNG_KWH = {};
+MONTHS.forEach(function (mo) {
+  WALLBOX_KWH[mo.key] = WALLBOX_KOSTEN[mo.key] != null ? round2(WALLBOX_KOSTEN[mo.key] / 0.32) : null;
+  PV_EINSPEISUNG_KWH[mo.key] = PV_ERSTATTUNG[mo.key] != null ? round2(PV_ERSTATTUNG[mo.key] / 0.08) : null;
+});
+
+var ENTITY_META = {
+  1: { type: "wohnung", apartmentId: 1, name: "Wohnung 1" },
+  2: { type: "wohnung", apartmentId: 2, name: "Wohnung 2" },
+  wallbox: { type: "wallbox", name: "Wallboxen" },
+  pv: { type: "pv", name: "PV-Anlage" }
+};
+
+function round2(v) { return Math.round(v * 100) / 100; }
+
+function fmtEUR(v) {
+  if (v == null) return "–";
+  return v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtNum(v, d) {
+  if (v == null) return "–";
+  var digits = d == null ? 2 : d;
+  return v.toLocaleString("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+function monthLabel(mo) {
+  var names = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+  return names[mo.m - 1] + " " + mo.y;
+}
+
+function stammdatenForYear(year) {
+  return STAMMDATEN_JAHRE[year] || STAMMDATEN_JAHRE[Math.max.apply(null, Object.keys(STAMMDATEN_JAHRE).map(Number).filter(function (y) { return y <= year; })) ] || {};
+}
+
+// Monatswert einer Position für einen Monat berechnen (jaehrlich -> /12, monatlich -> Eintrag oder Fallback)
+function positionMonatswert(pos, mo, fixEintrag) {
+  if (pos.typ === "jaehrlich") {
+    var jd = stammdatenForYear(mo.y);
+    var jw = jd[pos.id];
+    return jw != null ? round2(jw / 12) : null;
+  }
+  if (fixEintrag && fixEintrag.werte[pos.id] != null) return fixEintrag.werte[pos.id];
+  return null;
+}
+
+// Aufteilung eines Betrags auf Wohnung 1/2 nach Berechnungslogik
+function allocate(pos, betrag, personenMonat) {
+  if (betrag == null) return { 1: null, 2: null };
+  var w1 = APARTMENTS[1], w2 = APARTMENTS[2];
+  var ratio1 = 0.5;
+  if (pos.logik === "wohneinheit") ratio1 = 0.5;
+  else if (pos.logik === "flurstueck") ratio1 = w1.flurstueck / (w1.flurstueck + w2.flurstueck);
+  else if (pos.logik === "qm") ratio1 = w1.qm / (w1.qm + w2.qm);
+  else if (pos.logik === "personen") {
+    var p1 = (personenMonat && personenMonat[1]) || 0, p2 = (personenMonat && personenMonat[2]) || 0;
+    ratio1 = (p1 + p2) > 0 ? p1 / (p1 + p2) : 0.5;
+  }
+  return { 1: round2(betrag * ratio1), 2: round2(betrag * (1 - ratio1)) };
+}
+
+function fixkostenSummeMonat(mo, apartmentId) {
+  var eintrag = FIXKOSTEN[mo.key];
+  if (!eintrag) return null;
+  var sum = 0;
+  POSITIONEN.forEach(function (pos) {
+    var betrag = positionMonatswert(pos, mo, eintrag);
+    var split = allocate(pos, betrag, eintrag.personen);
+    sum += split[apartmentId] || 0;
+  });
+  return round2(sum);
+}
+
+// Fixkosten eines Monats gruppiert nach Berechnungslogik (fürs Balken-Segment
+// im Fixkosten-Modus) - dieselben 4 Gruppen, die auch beim Aufteilen der
+// Kostenpositionen verwendet werden (siehe LOGIK_LABEL).
+function fixkostenGruppenMonat(mo, apartmentId) {
+  var eintrag = FIXKOSTEN[mo.key];
+  if (!eintrag) return null;
+  var sums = { wohneinheit: 0, flurstueck: 0, qm: 0, personen: 0 };
+  POSITIONEN.forEach(function (pos) {
+    var betrag = positionMonatswert(pos, mo, eintrag);
+    var split = allocate(pos, betrag, eintrag.personen);
+    sums[pos.logik] += split[apartmentId] || 0;
+  });
+  Object.keys(sums).forEach(function (k) { sums[k] = round2(sums[k]); });
+  return sums;
+}
+
+function verbrauchSummeMonat(mo, apartmentId) {
+  var v = VERBRAUCH[mo.key];
+  if (!v) return null;
+  var a = v[apartmentId];
+  return round2(a.strom.eur + a.heizung.eur + a.wasser.eur);
+}
+
+/* laufendes Jahr = Jahr des jüngsten vorhandenen Eintrags (Verbrauch oder Fixkosten) */
+function currentYear() {
+  var last = MONTHS[MONTHS.length - 1];
+  return last.y;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Router                                                                 */
+/* ---------------------------------------------------------------------- */
+
+var STATE = { entity: 1, fixMonatIndex: MONTHS.length - 1 };
+
+function navigate(hash) { location.hash = hash; }
+
+function currentPage() { return (location.hash || "#dashboard").replace("#", "").split("?")[0]; }
+
+window.addEventListener("hashchange", render);
+window.addEventListener("popstate", render);
+
+function crumb(current) {
+  var items = [
+    ["#dashboard", "Dashboard"],
+    ["#ablesungen", "Ablesungen"],
+    ["#fixkosten", "Fixkosten"],
+    ["#stammdaten", "Stammdaten"],
+    ["#berechnungslogik", "Wie wird gerechnet?"]
+  ];
+  return '<nav class="crumb">' + items.map(function (it) {
+    return (it[0] === "#" + current ? '<b>' + it[1] + '</b>' : '<a href="' + it[0] + '">' + it[1] + '</a>');
+  }).join(" · ") + '</nav>';
+}
+
+/* ---------------------------------------------------------------------- */
+/* Dashboard - 3 Varianten                                                */
+/* ---------------------------------------------------------------------- */
+
+function jahresSummen(year, apartmentId) {
+  var vSum = 0, fSum = 0;
+  MONTHS.filter(function (mo) { return mo.y === year; }).forEach(function (mo) {
+    var v = verbrauchSummeMonat(mo, apartmentId); if (v) vSum += v;
+    var f = fixkostenSummeMonat(mo, apartmentId); if (f) fSum += f;
+  });
+  return { verbrauch: round2(vSum), fixkosten: round2(fSum), gesamt: round2(vSum + fSum) };
+}
+
+// Wie jahresSummen, nur Verbrauch zusätzlich nach Strom/Heizung/Wasser
+// aufgeschlüsselt - für die Jahressummen-Karten oben im Dashboard.
+function jahresSummenDetail(year, apartmentId) {
+  var strom = 0, heizung = 0, wasser = 0, fix = 0;
+  MONTHS.filter(function (mo) { return mo.y === year; }).forEach(function (mo) {
+    var v = VERBRAUCH[mo.key] ? VERBRAUCH[mo.key][apartmentId] : null;
+    if (v) { strom += v.strom.eur; heizung += v.heizung.eur; wasser += v.wasser.eur; }
+    var f = fixkostenSummeMonat(mo, apartmentId); if (f) fix += f;
+  });
+  var gesamt = round2(strom + heizung + wasser + fix);
+  return { strom: round2(strom), heizung: round2(heizung), wasser: round2(wasser), fixkosten: round2(fix), gesamt: gesamt };
+}
+
+function jahresSummeSerie(year, serie) {
+  var sum = 0;
+  MONTHS.filter(function (mo) { return mo.y === year; }).forEach(function (mo) {
+    var v = serie[mo.key];
+    if (v) sum += v;
+  });
+  return round2(sum);
+}
+
+function renderDashboardHeader() {
+  var year = currentYear();
+  var ids = [1, 2, "wallbox", "pv"];
+  return '<h1>Nebenkostenrechner</h1>' + crumb("dashboard") +
+    '<h2 style="margin-top:.5rem">Jahressummen ' + year + ' <span class="badge">laufend</span> <span class="muted" style="font-size:.7rem">Wallboxen/PV testweise ergänzt</span></h2>' +
+    '<div class="grid grid-4">' +
+    ids.map(function (id) {
+      var meta = ENTITY_META[id];
+      if (meta.type === "wohnung") {
+        var s = jahresSummenDetail(year, meta.apartmentId);
+        return '<div class="panel stat-card"><div class="muted">' + meta.name + ' <span class="badge">' + fmtNum(APARTMENTS[meta.apartmentId].qm, 0) + ' m²</span></div>' +
+          '<div class="stat-value">' + fmtEUR(s.gesamt) + ' €</div>' +
+          '<div class="stat-bar-track">' +
+          '<div class="stat-bar-seg cat-fix" style="width:' + (s.fixkosten / s.gesamt * 100) + '%"></div>' +
+          '<div class="stat-bar-seg cat-strom" style="width:' + (s.strom / s.gesamt * 100) + '%"></div>' +
+          '<div class="stat-bar-seg cat-heizung" style="width:' + (s.heizung / s.gesamt * 100) + '%"></div>' +
+          '<div class="stat-bar-seg cat-wasser" style="width:' + (s.wasser / s.gesamt * 100) + '%"></div>' +
+          '</div>' +
+          '<div class="muted stat-kategorien">Fixkosten ' + fmtEUR(s.fixkosten) + ' € · Strom ' + fmtEUR(s.strom) + ' € · Heizung/WW ' + fmtEUR(s.heizung) + ' € · Wasser ' + fmtEUR(s.wasser) + ' €</div>' +
+          '</div>';
+      }
+      if (meta.type === "wallbox") {
+        var sum = jahresSummeSerie(year, WALLBOX_KOSTEN);
+        return '<div class="panel stat-card"><div class="muted">' + meta.name + '</div>' +
+          '<div class="stat-value">' + fmtEUR(sum) + ' €</div>' +
+          '<div class="stat-bar-track"><div class="stat-bar-seg cat-strom" style="width:100%"></div></div>' +
+          '<div class="muted stat-kategorien">Stromkosten</div></div>';
+      }
+      var erst = jahresSummeSerie(year, PV_ERSTATTUNG);
+      return '<div class="panel stat-card"><div class="muted">' + meta.name + '</div>' +
+        '<div class="stat-value" style="color:var(--success)">+' + fmtEUR(erst) + ' €</div>' +
+        '<div class="stat-bar-track"><div class="stat-bar-seg" style="width:100%;background:var(--success)"></div></div>' +
+        '<div class="muted stat-kategorien">Einspeisevergütung</div></div>';
+    }).join("") + '</div>' +
+    '<div class="btn-row">' +
+    '<a href="#ablesung-neu" class="button success">Neue Ablesung erfassen</a>' +
+    '<a href="#fixkosten-neu" class="button success">Neue Fixkosten-Eingabe erfassen</a>' +
+    '</div>' +
+    '<div class="tabs">' +
+    ids.map(function (id) {
+      return '<button class="tab-btn' + (STATE.entity === id ? ' active' : '') + '" data-entity="' + id + '">' + (ENTITY_META[id].tabName || ENTITY_META[id].name) + '</button>';
+    }).join("") + '</div>';
+}
+
+function renderDashboardBody() {
+  var meta = ENTITY_META[STATE.entity];
+  if (meta.type !== "wohnung") return renderSimpleSeriesBody(meta);
+  var wid = meta.apartmentId;
+  var mode = STATE.cMode || "kombiniert";
+  var year = currentYear();
+  var s = jahresSummen(year, wid);
+  var rows = [];
+  var lastYear = null;
+  function pushYearRow(y) {
+    var ys = jahresSummen(y, wid);
+    var suffix = y === year ? ' (laufend)' : '';
+    rows.push('<div class="verlauf-year-row"><span>Jahr ' + y + suffix + '</span><span>Verbrauch ' + fmtEUR(ys.verbrauch) + ' € · Fixkosten ' + fmtEUR(ys.fixkosten) + ' € · Gesamt ' + fmtEUR(ys.gesamt) + ' €</span></div>');
+  }
+  // Segment fürs Balken-Stück: eur-Wert, CSS-Klasse, Beschriftung. Text nur ab
+  // ~8% Breite - darunter zu schmal, um lesbar Platz zu haben (Prototyp-Näherung
+  // fürs echte JS-Fit-Verhalten der bestehenden App).
+  function seg(cls, eur, widthPct) {
+    if (!eur) return "";
+    var showText = widthPct >= 8;
+    return '<div class="' + cls + '" style="width:' + widthPct + '%">' +
+      (showText ? '<span class="seg-label">' + fmtEUR(eur) + ' €</span>' : '') + '</div>';
+  }
+
+  MONTHS.slice().reverse().forEach(function (mo, i) {
+    if (lastYear !== null && mo.y !== lastYear) {
+      pushYearRow(lastYear);
+    }
+    lastYear = mo.y;
+    var segmentsHtml = "", total = null;
+
+    if (mode === "verbrauchswerte") {
+      var vw2 = VERBRAUCH[mo.key] ? VERBRAUCH[mo.key][wid] : null;
+      if (vw2) {
+        var list = '<span><i class="cat-strom"></i>Strom ' + fmtNum(vw2.strom.kwh, 0) + ' kWh</span>' +
+          '<span><i class="cat-heizung"></i>Heizung/Warmwasser ' + fmtNum(vw2.heizung.kwh, 2) + ' kWh</span>' +
+          '<span><i class="cat-wasser"></i>Wasser ' + fmtNum(vw2.wasser.m3, 1) + ' m³</span>';
+        rows.push('<div class="menge-row"><span class="month-label">' + monthLabel(mo) + '</span><span class="menge-list">' + list + '</span></div>');
+      } else {
+        rows.push('<div class="menge-row"><span class="month-label">' + monthLabel(mo) + '</span><span class="menge-list muted">–</span></div>');
+      }
+      return;
+    }
+
+    if (mode === "verbrauch") {
+      var v = VERBRAUCH[mo.key] ? VERBRAUCH[mo.key][wid] : null;
+      if (v) {
+        total = round2(v.strom.eur + v.heizung.eur + v.wasser.eur);
+        segmentsHtml = seg("cat-strom", v.strom.eur, Math.min(100, v.strom.eur / 220 * 100)) +
+          seg("cat-heizung", v.heizung.eur, Math.min(100, v.heizung.eur / 220 * 100)) +
+          seg("cat-wasser", v.wasser.eur, Math.min(100, v.wasser.eur / 220 * 100));
+      }
+    } else if (mode === "fixkosten") {
+      var g = fixkostenGruppenMonat(mo, wid);
+      if (g) {
+        total = round2(g.wohneinheit + g.flurstueck + g.qm + g.personen);
+        segmentsHtml = seg("logik-wohneinheit", g.wohneinheit, Math.min(100, g.wohneinheit / 220 * 100)) +
+          seg("logik-flurstueck", g.flurstueck, Math.min(100, g.flurstueck / 220 * 100)) +
+          seg("logik-qm", g.qm, Math.min(100, g.qm / 220 * 100)) +
+          seg("logik-personen", g.personen, Math.min(100, g.personen / 220 * 100));
+      }
+    } else {
+      var vSum = verbrauchSummeMonat(mo, wid), fSum = fixkostenSummeMonat(mo, wid);
+      var vw = vSum ? Math.min(70, vSum / 220 * 100) : 0;
+      var fw = fSum ? Math.min(30, fSum / 100 * 30) : 0;
+      total = (vSum != null || fSum != null) ? (vSum || 0) + (fSum || 0) : null;
+      segmentsHtml = (vSum ? '<div class="cat-strom" style="width:' + vw + '%"></div>' : "") +
+        (fSum ? '<div class="cat-fix fix-seg" style="width:' + fw + '%"></div>' : "");
+    }
+
+    rows.push('<div class="stacked-row"><span class="month-label">' + monthLabel(mo) + '</span>' +
+      '<div class="stacked-track">' + segmentsHtml + '</div>' +
+      '<span class="value-label">' + (total != null ? fmtEUR(total) + ' €' : '–') + '</span></div>');
+  });
+  pushYearRow(lastYear);
+
+  var legend = "";
+  if (mode === "verbrauch" || mode === "verbrauchswerte") {
+    legend = '<div class="mini-legend"><span><i class="cat-strom"></i>Strom</span><span><i class="cat-heizung"></i>Heizung/Warmwasser</span><span><i class="cat-wasser"></i>Wasser</span></div>';
+  } else if (mode === "fixkosten") {
+    legend = '<div class="mini-legend"><span><i class="logik-wohneinheit"></i>Je Wohneinheit</span><span><i class="logik-flurstueck"></i>Je Flurstück</span><span><i class="logik-qm"></i>Je Wohnungsgröße</span><span><i class="logik-personen"></i>Je Personen</span></div>';
+  }
+
+  return '<div class="kpi-strip">' +
+    '<div class="kpi"><div class="kpi-label">Verbrauch ' + year + '</div><div class="kpi-value">' + fmtEUR(s.verbrauch) + ' €</div></div>' +
+    '<div class="kpi"><div class="kpi-label">Fixkosten ' + year + '</div><div class="kpi-value">' + fmtEUR(s.fixkosten) + ' €</div></div>' +
+    '<div class="kpi"><div class="kpi-label">Gesamt ' + year + '</div><div class="kpi-value">' + fmtEUR(s.gesamt) + ' €</div></div>' +
+    '</div>' +
+    '<div class="panel"><div class="col-head">Monatsverlauf <div class="mode-toggle">' +
+    ['verbrauch', 'verbrauchswerte', 'fixkosten', 'kombiniert'].map(function (mm) {
+      return '<button data-cmode="' + mm + '" class="' + (mode === mm ? "active" : "") + '">' + mm[0].toUpperCase() + mm.slice(1) + '</button>';
+    }).join("") + '</div></div>' + legend + rows.join("") + '</div>';
+}
+
+// Wallboxen/PV haben keine Fixkosten, also keinen Verbrauch/Fixkosten/
+// Kombiniert-Umschalter - nur eine Zeitreihe (Kosten bzw. Erstattung).
+function renderSimpleSeriesBody(meta) {
+  var isPV = meta.type === "pv";
+  var serie = isPV ? PV_ERSTATTUNG : WALLBOX_KOSTEN;
+  var kwhSerie = isPV ? PV_EINSPEISUNG_KWH : WALLBOX_KWH;
+  var cls = isPV ? "" : "cat-strom";
+  var year = currentYear();
+  var rows = [], lastYear = null;
+  function pushYearRow(y) {
+    var sum = jahresSummeSerie(y, serie);
+    var suffix = y === year ? ' (laufend)' : '';
+    rows.push('<div class="verlauf-year-row"><span>Jahr ' + y + suffix + '</span><span>' + (isPV ? '+' : '') + fmtEUR(sum) + ' €</span></div>');
+  }
+  MONTHS.slice().reverse().forEach(function (mo) {
+    if (lastYear !== null && mo.y !== lastYear) pushYearRow(lastYear);
+    lastYear = mo.y;
+    var val = serie[mo.key];
+    var kwh = kwhSerie[mo.key];
+    var width = val ? Math.min(100, val / 100 * 100) : 0;
+    var showText = width >= 12;
+    var bar = val ? '<div class="' + cls + '" style="width:' + width + '%;' + (isPV ? 'background:var(--success)' : '') + '">' +
+      (showText ? '<span class="seg-label">' + fmtNum(kwh, 0) + ' kWh</span>' : '') + '</div>' : '';
+    rows.push('<div class="stacked-row"><span class="month-label">' + monthLabel(mo) + '</span>' +
+      '<div class="stacked-track">' + bar + '</div>' +
+      '<span class="value-label">' + (val != null ? (isPV ? '+' : '') + fmtEUR(val) + ' €' : '–') + '</span></div>');
+  });
+  pushYearRow(lastYear);
+  var jahresSum = jahresSummeSerie(year, serie);
+  return '<div class="kpi-strip" style="grid-template-columns:1fr">' +
+    '<div class="kpi"><div class="kpi-label">' + (isPV ? 'Einspeisevergütung' : 'Stromkosten') + ' ' + year + '</div>' +
+    '<div class="kpi-value"' + (isPV ? ' style="color:var(--success)"' : '') + '>' + (isPV ? '+' : '') + fmtEUR(jahresSum) + ' €</div></div>' +
+    '</div>' +
+    '<div class="panel"><div class="col-head">Monatsverlauf</div>' + rows.join("") + '</div>';
+}
+
+function renderDashboard() {
+  var html = renderDashboardHeader() + renderDashboardBody();
+  document.getElementById("app-root").innerHTML = html;
+  bindDashboardEvents();
+}
+
+function bindDashboardEvents() {
+  document.querySelectorAll(".tab-btn[data-entity]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var v = btn.getAttribute("data-entity");
+      STATE.entity = (v === "wallbox" || v === "pv") ? v : Number(v);
+      renderDashboard();
+    });
+  });
+  document.querySelectorAll(".mode-toggle button[data-cmode]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      STATE.cMode = btn.getAttribute("data-cmode");
+      renderDashboard();
+    });
+  });
+}
+
+/* ---------------------------------------------------------------------- */
+/* Stammdaten-Seite                                                       */
+/* ---------------------------------------------------------------------- */
+
+function renderStammdaten() {
+  var years = Object.keys(STAMMDATEN_JAHRE).map(Number).sort(function (a, b) { return b - a; });
+  var html = '<h1>Stammdaten</h1>' + crumb("stammdaten") +
+    '<h3>Wohnungsgröße &amp; Flurstück</h3>' +
+    '<div class="panel"><table class="letzte"><thead><tr><th></th><th>Wohnfläche (m²)</th><th>Flurstücksgröße (m²)</th></tr></thead><tbody>' +
+    [1, 2].map(function (id) {
+      var a = APARTMENTS[id];
+      return '<tr><td>' + a.name + '</td>' +
+        '<td><input type="number" step="0.1" value="' + a.qm + '" data-qm="' + id + '"></td>' +
+        '<td><input type="number" step="1" value="' + a.flurstueck + '" data-flurstueck="' + id + '"></td></tr>';
+    }).join("") + '</tbody></table>' +
+    '<p class="muted" style="margin-top:.6rem">Einzelwerte, nicht historisiert — Änderung wirkt sofort auf alle Monate (analog zur bisherigen Wohnfläche-Pflege). Bisher Teil des Ablesung-Formulars, jetzt hierher umgezogen.</p></div>' +
+    '<h3 style="margin-top:1.5rem">Kostenpositionen je Jahr</h3>' +
+    '<p class="muted">Jährlich-Positionen haben hier ihren Betrag; monatlich-Positionen werden im jeweiligen Fixkosten-Monatseintrag gepflegt und tauchen hier nur mit ihrer Berechnungslogik auf.</p>' +
+    years.map(function (year) { return stammdatenYearBlock(year); }).join("") +
+    '<div class="btn-row"><button class="secondary" id="btn-neues-jahr">+ Jahr ' + (years[0] + 1) + ' anlegen (vorbelegt vom Vorjahr)</button></div>';
+  document.getElementById("app-root").innerHTML = html;
+  var btn = document.getElementById("btn-neues-jahr");
+  if (btn) btn.addEventListener("click", function () {
+    var nextYear = Math.max.apply(null, Object.keys(STAMMDATEN_JAHRE).map(Number)) + 1;
+    STAMMDATEN_JAHRE[nextYear] = Object.assign({}, STAMMDATEN_JAHRE[nextYear - 1]);
+    renderStammdaten();
+  });
+}
+
+function stammdatenYearBlock(year) {
+  var data = STAMMDATEN_JAHRE[year];
+  return '<div class="stamm-year-block"><div class="stamm-year-head"><h4>Jahr ' + year + '</h4>' +
+    (year === Math.max.apply(null, Object.keys(STAMMDATEN_JAHRE).map(Number)) ? '<button class="tiny danger">Jahr löschen</button>' : '<span class="badge">abgeschlossen</span>') +
+    '</div>' +
+    POSITIONEN.map(function (pos) {
+      var isJaehrlich = pos.typ === "jaehrlich";
+      return '<div class="stamm-pos-row">' +
+        '<div class="stamm-pos-name">' + pos.name + '</div>' +
+        '<div class="field"><label>Berechnungslogik</label><select>' +
+        Object.keys(LOGIK_LABEL).map(function (k) { return '<option' + (k === pos.logik ? ' selected' : '') + '>' + LOGIK_LABEL[k] + '</option>'; }).join("") +
+        '</select></div>' +
+        '<div class="field"><label>Typ</label><select>' +
+        '<option' + (isJaehrlich ? ' selected' : '') + '>jährlich</option><option' + (!isJaehrlich ? ' selected' : '') + '>monatlich</option>' +
+        '</select></div>' +
+        '<div class="field"><label>Jahreswert (EUR)</label>' +
+        (isJaehrlich ? '<input type="number" step="0.01" value="' + (data[pos.id] != null ? data[pos.id] : "") + '">' : '<input type="number" disabled placeholder="siehe Monatseintrag">') +
+        '</div>' +
+        '</div>';
+    }).join("") + '</div>';
+}
+
+/* ---------------------------------------------------------------------- */
+/* Fixkosten - Liste / Neu / Detail                                       */
+/* ---------------------------------------------------------------------- */
+
+function renderFixkostenListe() {
+  var entries = MONTHS.filter(function (mo) { return FIXKOSTEN[mo.key]; }).slice().reverse();
+  var html = '<h1>Fixkosten</h1>' + crumb("fixkosten") +
+    '<div class="panel"><table class="letzte"><thead><tr><th>Monat</th><th>Summe W1</th><th>Summe W2</th><th></th></tr></thead><tbody>' +
+    entries.map(function (mo) {
+      return '<tr><td>' + monthLabel(mo) + '</td><td>' + fmtEUR(fixkostenSummeMonat(mo, 1)) + ' €</td><td>' + fmtEUR(fixkostenSummeMonat(mo, 2)) + ' €</td>' +
+        '<td><a href="#fixkosten-detail?m=' + mo.key + '">Details</a></td></tr>';
+    }).join("") + '</tbody></table></div>' +
+    '<div class="btn-row"><a href="#fixkosten-neu" class="button success">Neue Fixkosten-Eingabe erfassen</a></div>';
+  document.getElementById("app-root").innerHTML = html;
+}
+
+function renderFixkostenForm(monatKey) {
+  var editing = !!monatKey;
+  var mo = editing ? MONTHS.find(function (m) { return m.key === monatKey; }) : MONTHS[MONTHS.length - 1];
+  var eintrag = editing ? FIXKOSTEN[monatKey] : null;
+  var prevIdx = MONTHS.findIndex(function (m) { return m.key === mo.key; }) - 1;
+  var prevEintrag = prevIdx >= 0 ? FIXKOSTEN[MONTHS[prevIdx].key] : null;
+
+  var html = '<h1>' + (editing ? "Fixkosten " + monthLabel(mo) + " bearbeiten" : "Neue Fixkosten-Eingabe") + '</h1>' + crumb("fixkosten") +
+    '<div class="panel">' +
+    '<div class="field" style="max-width:220px"><label>Monat</label><input type="text" value="' + monthLabel(mo) + '" disabled></div>' +
+    '<h3>Personen</h3>' +
+    '<div class="grid grid-2">' +
+    [1, 2].map(function (id) {
+      var val = (eintrag && eintrag.personen[id]) != null ? eintrag.personen[id] : (prevEintrag ? prevEintrag.personen[id] : "");
+      return '<div class="field"><label>' + APARTMENTS[id].name + '</label><input type="number" value="' + val + '"></div>';
+    }).join("") +
+    '</div>' +
+    '<h3 style="margin-top:1.25rem">Fixkosten</h3>' +
+    '<table class="letzte"><thead><tr><th>Position</th><th>Logik</th><th>Wert (EUR/Monat)</th></tr></thead><tbody>' +
+    POSITIONEN.map(function (pos) {
+      var jaehrlich = pos.typ === "jaehrlich";
+      var val = jaehrlich ? positionMonatswert(pos, mo, eintrag) : ((eintrag && eintrag.werte[pos.id]) != null ? eintrag.werte[pos.id] : (prevEintrag ? prevEintrag.werte[pos.id] : ""));
+      return '<tr><td>' + pos.name + (jaehrlich ? ' <span class="badge">Jahreswert · Stammdaten</span>' : '') + '</td>' +
+        '<td class="muted">' + LOGIK_LABEL[pos.logik] + '</td>' +
+        '<td style="max-width:140px">' +
+        (jaehrlich
+          ? '<input type="number" value="' + (val != null ? val : "") + '" disabled title="Kommt aus den Jahres-Stammdaten, dort ändern">'
+          : '<input type="number" step="0.01" value="' + (val !== "" ? val : "") + '">') +
+        '</td></tr>';
+    }).join("") + '</tbody></table>' +
+    '</div>' +
+    '<div class="btn-row"><button class="primary">Speichern</button><a href="#fixkosten" class="button secondary">Abbrechen</a></div>';
+  document.getElementById("app-root").innerHTML = html;
+}
+
+function renderFixkostenDetail(monatKey) {
+  var mo = MONTHS.find(function (m) { return m.key === monatKey; });
+  var eintrag = FIXKOSTEN[monatKey];
+  var html = '<h1>Fixkosten ' + monthLabel(mo) + '</h1>' + crumb("fixkosten") +
+    '<div class="field" style="max-width:260px"><label>Anderen Monat anzeigen</label><select id="sel-other-month">' +
+    MONTHS.filter(function (m) { return FIXKOSTEN[m.key]; }).map(function (m) {
+      return '<option value="' + m.key + '"' + (m.key === monatKey ? ' selected' : '') + '>' + monthLabel(m) + '</option>';
+    }).join("") + '</select></div>' +
+    '<div class="panel">' +
+    '<table class="letzte"><thead><tr><th></th><th>Wohnung 1</th><th>Wohnung 2</th></tr></thead><tbody>' +
+    '<tr><td>Personen</td><td>' + eintrag.personen[1] + '</td><td>' + eintrag.personen[2] + '</td></tr>' +
+    POSITIONEN.map(function (pos) {
+      var betrag = positionMonatswert(pos, mo, eintrag);
+      var split = allocate(pos, betrag, eintrag.personen);
+      return '<tr><td>' + pos.name + '</td><td>' + fmtEUR(split[1]) + ' €</td><td>' + fmtEUR(split[2]) + ' €</td></tr>';
+    }).join("") +
+    '<tr><td><strong>Summe</strong></td><td><strong>' + fmtEUR(fixkostenSummeMonat(mo, 1)) + ' €</strong></td><td><strong>' + fmtEUR(fixkostenSummeMonat(mo, 2)) + ' €</strong></td></tr>' +
+    '</tbody></table></div>' +
+    '<div class="btn-row"><a href="#fixkosten-neu?m=' + monatKey + '" class="button secondary">Diese Eingabe korrigieren</a><button class="danger">Diese Eingabe löschen</button></div>';
+  document.getElementById("app-root").innerHTML = html;
+  document.getElementById("sel-other-month").addEventListener("change", function (e) {
+    navigate("fixkosten-detail?m=" + e.target.value);
+  });
+}
+
+/* ---------------------------------------------------------------------- */
+/* Render-Dispatch                                                        */
+/* ---------------------------------------------------------------------- */
+
+function parseQuery() {
+  var q = (location.hash.split("?")[1]) || "";
+  return new URLSearchParams(q);
+}
+
+function render() {
+  var page = currentPage();
+  var q = parseQuery();
+  if (page === "dashboard") renderDashboard();
+  else if (page === "stammdaten") renderStammdaten();
+  else if (page === "fixkosten") renderFixkostenListe();
+  else if (page === "fixkosten-neu") renderFixkostenForm(q.get("m"));
+  else if (page === "fixkosten-detail") renderFixkostenDetail(q.get("m") || MONTHS[MONTHS.length - 1].key);
+  else if (page === "ablesung-neu") {
+    document.getElementById("app-root").innerHTML = '<h1>Neue Ablesung erfassen</h1>' + crumb("dashboard") + '<p class="muted">Unverändert gegenüber heute — nicht Teil dieses Prototyps. QM-Felder sind hier entfernt, siehe <a href="#stammdaten">Stammdaten</a>.</p><div class="btn-row"><a href="#dashboard" class="button secondary">Zurück</a></div>';
+  } else if (page === "ablesungen") {
+    document.getElementById("app-root").innerHTML = '<h1>Ablesungen</h1>' + crumb("ablesungen") + '<p class="muted">Unverändert gegenüber heute — nicht Teil dieses Prototyps. Nur die QM-Felder im Formular entfallen, siehe <a href="#stammdaten">Stammdaten</a>.</p><div class="btn-row"><a href="#dashboard" class="button secondary">Zurück</a></div>';
+  } else if (page === "berechnungslogik") {
+    document.getElementById("app-root").innerHTML = '<h1>Wie wird gerechnet?</h1>' + crumb("berechnungslogik") + '<p class="muted">Unverändert gegenüber heute — nicht Teil dieses Prototyps. Würde um die Fixkosten-Berechnungslogiken (Wohneinheit/Flurstück/Wohnungsgröße/Personen) ergänzt.</p><div class="btn-row"><a href="#dashboard" class="button secondary">Zurück</a></div>';
+  }
+}
+
+/* Theme toggle (vereinfachte Version) */
+document.querySelectorAll(".theme-btn").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    document.documentElement.setAttribute("data-theme", btn.getAttribute("data-choice"));
+  });
+});
+
+render();
+</script>
+</body>
+</html>
