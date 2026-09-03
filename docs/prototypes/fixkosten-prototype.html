@@ -89,6 +89,8 @@
   .mini-legend { display: flex; align-items: center; gap: 1rem; font-size: .72rem; color: var(--muted); margin-bottom: .6rem; flex-wrap: wrap; }
   .mini-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: .3rem; vertical-align: middle; }
   .seg-label { color: #fff; font-size: .66rem; font-weight: 600; white-space: nowrap; padding: 0 .3rem; text-shadow: 0 1px 1px rgba(0,0,0,.3); line-height: 22px; overflow: hidden; }
+  .stacked-track > div.text-hidden .seg-label { display: none; }
+  .verlauf-tooltip { display: none; position: fixed; background: var(--tooltip-bg, #1c1e21); color: var(--tooltip-text, #fff); font-size: .72rem; font-weight: 600; padding: .25rem .5rem; border-radius: 4px; pointer-events: none; z-index: 200; white-space: nowrap; }
   .menge-row { display: flex; align-items: center; gap: .5rem; padding: .3rem 0; font-size: .78rem; flex-wrap: wrap; }
   .menge-row .month-label { width: 58px; }
   .menge-row .menge-list { flex: 1; color: var(--text); }
@@ -497,14 +499,15 @@ function renderDashboardBody() {
     var suffix = y === year ? ' (laufend)' : '';
     rows.push('<div class="verlauf-year-row"><span>Jahr ' + y + suffix + '</span><span>Verbrauch ' + fmtEUR(ys.verbrauch) + ' € · Fixkosten ' + fmtEUR(ys.fixkosten) + ' € · Gesamt ' + fmtEUR(ys.gesamt) + ' €</span></div>');
   }
-  // Segment fürs Balken-Stück: eur-Wert, CSS-Klasse, Beschriftung. Text nur ab
-  // ~8% Breite - darunter zu schmal, um lesbar Platz zu haben (Prototyp-Näherung
-  // fürs echte JS-Fit-Verhalten der bestehenden App).
+  // Segment fürs Balken-Stück: eur-Wert, CSS-Klasse, Beschriftung. Text/Breite
+  // wird nach dem Rendern von fitBarText() dynamisch skaliert bzw. bei zu wenig
+  // Platz ausgeblendet (dann greift der Hover-Tooltip über data-eur) - siehe
+  // fitBarText()/bindBarTooltips() weiter unten, exakt wie im bestehenden
+  // Verlauf-Balken der echten App (Ticket #19 AC3).
   function seg(cls, eur, widthPct) {
     if (!eur) return "";
-    var showText = widthPct >= 8;
-    return '<div class="' + cls + '" style="width:' + widthPct + '%">' +
-      (showText ? '<span class="seg-label">' + fmtEUR(eur) + ' €</span>' : '') + '</div>';
+    var text = fmtEUR(eur) + ' €';
+    return '<div class="' + cls + '" style="width:' + widthPct + '%" data-eur="' + text + '"><span class="seg-label">' + text + '</span></div>';
   }
 
   MONTHS.slice().reverse().forEach(function (mo, i) {
@@ -549,8 +552,7 @@ function renderDashboardBody() {
       var vw = vSum ? Math.min(70, vSum / 220 * 100) : 0;
       var fw = fSum ? Math.min(30, fSum / 100 * 30) : 0;
       total = (vSum != null || fSum != null) ? (vSum || 0) + (fSum || 0) : null;
-      segmentsHtml = (vSum ? '<div class="cat-strom" style="width:' + vw + '%"></div>' : "") +
-        (fSum ? '<div class="cat-fix fix-seg" style="width:' + fw + '%"></div>' : "");
+      segmentsHtml = seg("cat-strom", vSum, vw) + seg("cat-fix fix-seg", fSum, fw);
     }
 
     rows.push('<div class="stacked-row"><span class="month-label">' + monthLabel(mo) + '</span>' +
@@ -597,9 +599,8 @@ function renderSimpleSeriesBody(meta) {
     var val = serie[mo.key];
     var kwh = kwhSerie[mo.key];
     var width = val ? Math.min(100, val / 100 * 100) : 0;
-    var showText = width >= 12;
-    var bar = val ? '<div class="' + cls + '" style="width:' + width + '%;' + (isPV ? 'background:var(--success)' : '') + '">' +
-      (showText ? '<span class="seg-label">' + fmtNum(kwh, 0) + ' kWh</span>' : '') + '</div>' : '';
+    var kwhText = fmtNum(kwh, 0) + ' kWh';
+    var bar = val ? '<div class="' + cls + '" style="width:' + width + '%;' + (isPV ? 'background:var(--success)' : '') + '" data-eur="' + kwhText + '"><span class="seg-label">' + kwhText + '</span></div>' : '';
     rows.push('<div class="stacked-row"><span class="month-label">' + monthLabel(mo) + '</span>' +
       '<div class="stacked-track">' + bar + '</div>' +
       '<span class="value-label">' + (val != null ? (isPV ? '+' : '') + fmtEUR(val) + ' €' : '–') + '</span></div>');
@@ -617,7 +618,67 @@ function renderDashboard() {
   var html = renderDashboardHeader() + renderDashboardBody();
   document.getElementById("app-root").innerHTML = html;
   bindDashboardEvents();
+  fitBarText();
+  bindBarTooltips();
 }
+
+// Balkentext schrumpfen bzw. ausblenden, falls er im Segment nicht passt -
+// 1:1 aus der bestehenden App übernommen (Ticket #19 AC3), nur auf
+// .stacked-track statt .bar-track. Läuft nach jedem Render neu, da hier per
+// innerHTML statt serverseitigem Template gerendert wird.
+function fitBarText() {
+  document.querySelectorAll(".stacked-track > div").forEach(function (seg) {
+    var span = seg.querySelector(".seg-label");
+    if (!span) return;
+    span.style.display = "";
+    seg.classList.remove("text-hidden");
+    var size = 11;
+    span.style.fontSize = size + "px";
+    while (span.scrollWidth > seg.clientWidth - 4 && size > 7) {
+      size -= 1;
+      span.style.fontSize = size + "px";
+    }
+    if (span.scrollWidth > seg.clientWidth - 4) {
+      seg.classList.add("text-hidden");
+    }
+  });
+}
+
+// Hover/Long-Press-Tooltip für Segmente, deren Text zu schmal für den Balken
+// ist (text-hidden) - liest den vollen Wert aus data-eur. Ebenfalls 1:1 aus
+// der bestehenden App übernommen.
+var barTooltipEl = null;
+function bindBarTooltips() {
+  if (!barTooltipEl) {
+    barTooltipEl = document.createElement("div");
+    barTooltipEl.className = "verlauf-tooltip";
+    document.body.appendChild(barTooltipEl);
+  }
+  function showTooltip(seg) {
+    var eur = seg.getAttribute("data-eur");
+    if (!eur) return;
+    barTooltipEl.textContent = eur;
+    barTooltipEl.style.display = "block";
+    var rect = seg.getBoundingClientRect();
+    var top = rect.top - barTooltipEl.offsetHeight - 6;
+    var left = rect.left + rect.width / 2 - barTooltipEl.offsetWidth / 2;
+    left = Math.max(4, Math.min(left, window.innerWidth - barTooltipEl.offsetWidth - 4));
+    barTooltipEl.style.top = top + "px";
+    barTooltipEl.style.left = left + "px";
+  }
+  function hideTooltip() { barTooltipEl.style.display = "none"; }
+  var longPressTimer = null;
+  document.querySelectorAll(".stacked-track > div").forEach(function (seg) {
+    seg.addEventListener("mouseenter", function () { if (seg.classList.contains("text-hidden")) showTooltip(seg); });
+    seg.addEventListener("mouseleave", hideTooltip);
+    seg.addEventListener("touchstart", function () {
+      longPressTimer = setTimeout(function () { if (seg.classList.contains("text-hidden")) showTooltip(seg); }, 500);
+    }, { passive: true });
+    seg.addEventListener("touchend", function () { clearTimeout(longPressTimer); hideTooltip(); });
+    seg.addEventListener("touchcancel", function () { clearTimeout(longPressTimer); hideTooltip(); });
+  });
+}
+window.addEventListener("resize", function () { if (currentPage() === "dashboard") fitBarText(); });
 
 function bindDashboardEvents() {
   document.querySelectorAll(".tab-btn[data-entity]").forEach(function (btn) {
