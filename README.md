@@ -1,17 +1,21 @@
 # Nebenkostenrechner
 
-Web-App zur monatlichen Nebenkostenabrechnung für ein Zweifamilienhaus mit Wärmepumpe und PV-Anlage. Berechnet Strom-, Heizung/Warmwasser- und Wasserkosten je Wohnung aus monatlich erfassten Zählerständen.
+Web-App zur monatlichen Nebenkostenabrechnung für ein Zweifamilienhaus mit Wärmepumpe und PV-Anlage. Berechnet Strom-, Heizung/Warmwasser- und Wasserkosten je Wohnung aus monatlich erfassten Zählerständen, sowie Fixkosten/Grundgebühren (Grundsteuer, Versicherung, Deichbeiträge, Abfallwirtschaft, Grundpreise, Wärmepumpen-Wartung) aus einer separaten monatlichen Erfassung.
 
 Details und Entscheidungshistorie: [Spec-Map (Issue #1)](https://github.com/larknafets/nebenkostenrechner/issues/1).
 
 ## Stammdaten
 
-| Wohnung | Wohnfläche | Personen (aktuell) |
-|---|---|---|
-| Wohnung 1 | 116,23 m² | 2 |
-| Wohnung 2 | 86 m² | 1 |
+Auf der `/stammdaten`-Seite gepflegt - aktuelle Einzelwerte, nicht pro Monat historisiert, wirken sofort auf alle Berechnungen:
 
-Wohnfläche ändert sich praktisch nie, wird aber pro Ablesung mit erfasst. Personenzahl ist variabel und wird pro Ablesezeitraum historisiert (nicht als feste Konstante).
+| Wohnung | Wohnungsgröße | Flurstücksgröße |
+|---|---|---|
+| Wohnung 1 | 116,23 m² | - |
+| Wohnung 2 | 86 m² | - |
+
+Dort auch die 14 Fixkosten-Kostenpositionen, jahresweise gepflegt (Berechnungslogik, Typ jährlich/monatlich, ggf. Jahreswert) - siehe [Fixkosten/Grundgebühren](#fixkostengrundgebühren) unten.
+
+Personenzahl ist variabel und wird separat pro Ablesung *und* pro Fixkosten-Eingabe erfasst (zwei unabhängige Werte, nicht gemeinsam versioniert).
 
 Preise (aktuell, werden pro Monat neu erfasst statt zentral versioniert):
 
@@ -62,7 +66,7 @@ Bei PV-Überschuss (`Netzbezug_Gesamt = 0`) sind beide Kosten 0. Alle Anteile ü
 
 ### Heizung/Warmwasser (konfigurierbarer Split, Default 70/30)
 
-Die Wärmepumpen-Stromkosten (siehe oben) werden nach Wärmemengenzähler-Verhältnis und Wohnflächen-Verhältnis auf die beiden Wohnungen verteilt. Die Gewichtung wird pro Periode im Wizard gewählt (70/30, 60/40 oder 50/50 - kein Freitext, siehe Issue #27) und ab dann für diese Periode eingefroren.
+Die Wärmepumpen-Stromkosten (siehe oben) werden nach Wärmemengenzähler-Verhältnis und Wohnungsgrößen-Verhältnis auf die beiden Wohnungen verteilt. Die Gewichtung wird pro Periode im Wizard gewählt (70/30, 60/40 oder 50/50 - kein Freitext, siehe Issue #27) und ab dann für diese Periode eingefroren. `qm_W1`/`qm_W2` kommen dagegen live von den Stammdaten, nicht von der Periode.
 
 ```
 Ratio_Waerme_W1  = Verbrauch(waerme_wohnung1) / (Verbrauch(waerme_wohnung1) + Verbrauch(waerme_wohnung2))
@@ -100,13 +104,36 @@ Rein informativ, unabhängig von der Kostenverteilung oben - keine Wohnungs-Zute
 Einspeisevergütung = Verbrauch(strom_einspeisung) * Einspeisung_Preis
 ```
 
+### Fixkosten/Grundgebühren
+
+Die 14 festen Kostenpositionen (Grundsteuer, Wohngebäudeversicherung, Deichbeitrag Grund und Boden, Deichbeitrag Bauliche Anlagen, Kreisverband Wesermarsch, Abfallwirtschaft Grundgebühr Haushalt/Personen/Biomüll/Restmüll, Grundpreis Strom, Grundgebühr Trinkwasser/Abwasser, Grundpreis Internet, Wärmepumpen-Wartung) werden unabhängig von Strom/Heizung/Wasser auf einer eigenen monatlichen Fixkosten-Eingabe erfasst und berechnet. Jede Position hat pro Jahr (Stammdaten) einen Typ:
+
+```
+Monatswert("jährlich")  = Jahreswert / 12                       (Stammdaten, im Formular nicht editierbar)
+Monatswert("monatlich") = expliziter Wert der Fixkosten-Eingabe  (fehlt er, z.B. nach Typwechsel:
+                                                                   letzter_bekannter_Jahreswert / 12, sonst 0)
+```
+
+Aufteilung auf Wohnung 1/2 je nach Berechnungslogik (ebenfalls pro Position/Jahr in den Stammdaten gewählt):
+
+```
+Je Wohneinheit             : 50 / 50
+Je anteiliges Flurstück    : flurstueck_W1 / (flurstueck_W1 + flurstueck_W2)   (Stammdaten)
+Je anteilige Wohnungsgröße : qm_W1 / (qm_W1 + qm_W2)                            (Stammdaten)
+Je Anzahl Personen         : Personen_W1 / (Personen_W1 + Personen_W2)         (Fixkosten-Eingabe)
+```
+
+Sind bei den letzten drei Logiken beide Werte 0, fällt die Aufteilung auf hälftig zurück (gleiche Regel wie bei der Heizungs-Wärme-Ratio).
+
 ### Rundung
 
-Jede Kostenposition (Strom, Heizung/Warmwasser, Frischwasser, Abwasser) wird einzeln je Wohnung **kaufmännisch auf Cent gerundet** (0,5 Cent immer aufgerundet), erst nach der vollständigen Berechnung mit float-Genauigkeit. Die angezeigte Gesamtsumme je Wohnung kann dadurch um 1-2 Cent von der rechnerisch exakten Summe abweichen - das ist akzeptiert, es gibt keinen Korrekturmechanismus.
+Jede Kostenposition (Strom, Heizung/Warmwasser, Frischwasser, Abwasser, jede der 14 Fixkosten-Positionen) wird einzeln je Wohnung **kaufmännisch auf Cent gerundet** (0,5 Cent immer aufgerundet), erst nach der vollständigen Berechnung mit float-Genauigkeit. Die angezeigte Gesamtsumme je Wohnung kann dadurch um 1-2 Cent von der rechnerisch exakten Summe abweichen - das ist akzeptiert, es gibt keinen Korrekturmechanismus.
 
 ### Preise & Personenzahl
 
 Es gibt kein zentrales Preishistorie-Konzept: Strompreis, Frischwasser- und Abwasserpreis sowie die Personenzahl je Wohnung werden direkt bei jeder monatlichen Ablesung mit erfasst (nicht separat versioniert). Ein einmal berechneter Monat bleibt dadurch automatisch "eingefroren", auch wenn sich Preise oder Personenzahl später ändern.
+
+Die Fixkosten-Eingabe hat ihre eigene, unabhängige Personenzahl je Wohnung (ebenfalls pro Monat eingefroren) - muss nicht mit der Ablesung übereinstimmen. Wohnungsgröße und Flurstücksgröße sind dagegen keine monatlichen Werte mehr, sondern aktuelle Stammdaten-Einzelwerte, die sofort auf alle Monate wirken.
 
 ### Fehlerbehandlung bei Zähleranomalien
 
@@ -121,11 +148,17 @@ Reine Warnhinweise, kein hartes Blockieren (Single-User-App ohne Vier-Augen-Prin
 SQLite, kein ORM (`modernc.org/sqlite` + `database/sql`):
 
 ```
-apartments(id, name, qm)
+apartments(id, name, qm, flurstueck_groesse)
 meters(id, key UNIQUE, type, unit, apartment_id NULLABLE -> apartments.id, label)
 periods(id, reading_date DATE, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis)
 meter_readings(id, period_id -> periods.id, meter_id -> meters.id, zaehlerstand, UNIQUE(period_id, meter_id))
 period_occupancy(id, period_id -> periods.id, apartment_id -> apartments.id, personen, UNIQUE(period_id, apartment_id))
+
+kostenpositionen(id, key UNIQUE, label)
+kostenpositionen_jahre(id, kostenposition_id -> kostenpositionen.id, jahr, logik, typ, jahreswert, UNIQUE(kostenposition_id, jahr))
+fixkosten_eingaben(id, monat DATE)
+fixkosten_werte(id, fixkosten_eingabe_id -> fixkosten_eingaben.id, kostenposition_id -> kostenpositionen.id, wert, UNIQUE(fixkosten_eingabe_id, kostenposition_id))
+fixkosten_personen(id, fixkosten_eingabe_id -> fixkosten_eingaben.id, apartment_id -> apartments.id, personen, UNIQUE(fixkosten_eingabe_id, apartment_id))
 ```
 
 Berechnete Kosten werden nicht persistiert, sondern bei jedem Aufruf live aus den Rohdaten berechnet.

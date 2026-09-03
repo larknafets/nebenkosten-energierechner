@@ -26,7 +26,7 @@ Ratio_Flaeche_W2 = qm_W2 / (qm_W1 + qm_W2)
 
 Kosten_Heizung_W1 = Kosten_WP_gesamt * (Gewichtung_Waerme * Ratio_Waerme_W1 + Gewichtung_Flaeche * Ratio_Flaeche_W1)
 Kosten_Heizung_W2 = Kosten_WP_gesamt * (Gewichtung_Waerme * Ratio_Waerme_W2 + Gewichtung_Flaeche * Ratio_Flaeche_W2)</pre>
-  <p class="muted">Sind in einer Periode beide Wärmeverbräuche 0 (z.B. Sommer, Wärmepumpe lief nur für Warmwasser), fällt die Wärme-Ratio auf eine hälftige Verteilung zurück statt den Kostenanteil verschwinden zu lassen.</p>
+  <p class="muted">Sind in einer Periode beide Wärmeverbräuche 0 (z.B. Sommer, Wärmepumpe lief nur für Warmwasser), fällt die Wärme-Ratio auf eine hälftige Verteilung zurück statt den Kostenanteil verschwinden zu lassen. qm_W1/qm_W2 kommen von der <a href="{{.Base}}/stammdaten">Stammdaten-Seite</a> - aktuelle Einzelwerte, nicht pro Ablesung eingefroren (anders als Strompreis/Personen unten).</p>
 </div>
 
 <div class="panel" style="margin-top:1rem">
@@ -53,13 +53,29 @@ Kosten_Abwasser_X     = Abwasser_X * Abwasserpreis</pre>
 </div>
 
 <div class="panel" style="margin-top:1rem">
+  <h2>Fixkosten/Grundgebühren</h2>
+  <p>Die 14 festen <a href="{{.Base}}/stammdaten">Kostenpositionen</a> (Grundsteuer, Wohngebäudeversicherung, Deichbeiträge, Abfallwirtschaft, Grundpreise Strom/Wasser/Abwasser/Internet, Wärmepumpen-Wartung) werden getrennt von Strom/Heizung/Wasser berechnet, auf der monatlichen <a href="{{.Base}}/fixkosten">Fixkosten-Eingabe</a>. Jede Position hat pro Jahr einen Typ:</p>
+  <pre class="formula">Monatswert("jährlich")  = Jahreswert / 12                       (aus den Stammdaten, im Formular nicht editierbar)
+Monatswert("monatlich") = expliziter Wert der Fixkosten-Eingabe  (fehlt er, z.B. nach Typwechsel:
+                                                                   letzter_bekannter_Jahreswert / 12, sonst 0)</pre>
+  <p>Die Aufteilung auf Wohnung 1/2 hängt von der je Position/Jahr gewählten Berechnungslogik ab:</p>
+  <pre class="formula">Je Wohneinheit          : 50 / 50
+Je anteiliges Flurstück : flurstueck_W1 / (flurstueck_W1 + flurstueck_W2)   (Stammdaten)
+Je anteilige Wohnungsgröße : qm_W1 / (qm_W1 + qm_W2)                        (Stammdaten)
+Je Anzahl Personen      : Personen_W1 / (Personen_W1 + Personen_W2)         (aus der Fixkosten-Eingabe)</pre>
+  <p class="muted">Sind bei "Je anteiliges Flurstück"/"Je anteilige Wohnungsgröße"/"Je Anzahl Personen" beide Werte 0, fällt die Aufteilung auf hälftig zurück statt zu verschwinden - gleiche Regel wie bei der Heizungs-Wärme-Ratio oben. Jede Position wird einzeln je Wohnung kaufmännisch gerundet, siehe Rundung unten.</p>
+</div>
+
+<div class="panel" style="margin-top:1rem">
   <h2>Rundung</h2>
-  <p>Jede Kostenposition (Strom, Heizung/Warmwasser, Frischwasser, Abwasser) wird einzeln je Wohnung kaufmännisch auf Cent gerundet (0,5 Cent immer aufgerundet), erst nach der vollständigen Berechnung mit float-Genauigkeit. Die angezeigte Gesamtsumme je Wohnung kann dadurch um 1-2 Cent von der rechnerisch exakten Summe abweichen - das ist akzeptiert, es gibt keinen Korrekturmechanismus.</p>
+  <p>Jede Kostenposition (Strom, Heizung/Warmwasser, Frischwasser, Abwasser, jede der 14 Fixkosten-Positionen) wird einzeln je Wohnung kaufmännisch auf Cent gerundet (0,5 Cent immer aufgerundet), erst nach der vollständigen Berechnung mit float-Genauigkeit. Die angezeigte Gesamtsumme je Wohnung kann dadurch um 1-2 Cent von der rechnerisch exakten Summe abweichen - das ist akzeptiert, es gibt keinen Korrekturmechanismus.</p>
 </div>
 
 <div class="panel" style="margin-top:1rem">
   <h2>Preise &amp; Personenzahl</h2>
   <p>Es gibt kein zentrales Preishistorie-Konzept: Strompreis, Frischwasser-, Abwasser- und Einspeisung-Preis, Personenzahl je Wohnung und die Heizungs-Gewichtung werden direkt bei jeder monatlichen Ablesung erfasst (nicht separat versioniert). Ein einmal berechneter Monat bleibt dadurch automatisch eingefroren, auch wenn sich diese Werte später ändern.</p>
+  <p>Die Fixkosten-Eingabe hat ihre eigene, unabhängige Personenzahl je Wohnung (ebenfalls pro Monat eingefroren) - sie muss nicht mit der Personenzahl der Ablesung übereinstimmen, falls sich die Belegung zwischen zwei Ablesungen ändert.</p>
+  <p>Wohnungsgröße und Flurstücksgröße sind keine monatlichen Werte mehr: sie werden auf der <a href="{{.Base}}/stammdaten">Stammdaten-Seite</a> gepflegt und wirken als aktuelle Einzelwerte sofort auf alle Monate - nicht eingefroren.</p>
 </div>
 
 <div class="panel" style="margin-top:1rem">
