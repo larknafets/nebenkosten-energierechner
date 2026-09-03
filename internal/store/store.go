@@ -173,6 +173,38 @@ type meterSeed struct {
 
 func apartmentID(id int64) *int64 { return &id }
 
+// KostenpositionDefault is one of the 14 fixed Kostenpositionen (Issue #60)
+// - id/key/label are app-fixed structure, seeded like meters. Logik/Typ are
+// only the starting values for a brand-new Kostenpositionen-Jahr that has no
+// previous year to copy from (see web's "Jahr anlegen" handler) - every
+// year afterwards is user-editable data in kostenpositionen_jahre, not
+// reseeded from here.
+type KostenpositionDefault struct {
+	ID    int64
+	Key   string
+	Label string
+	Logik string
+	Typ   string
+}
+
+// KostenpositionDefaults is the fixed, ordered list of the 14 Kostenpositionen.
+var KostenpositionDefaults = []KostenpositionDefault{
+	{ID: 1, Key: "grundsteuer", Label: "Grundsteuer", Logik: LogikQM, Typ: TypJaehrlich},
+	{ID: 2, Key: "gebaeudevers", Label: "Wohngebäudeversicherung", Logik: LogikQM, Typ: TypJaehrlich},
+	{ID: 3, Key: "deich_grund", Label: "Deichbeitrag Grund und Boden", Logik: LogikFlurstueck, Typ: TypJaehrlich},
+	{ID: 4, Key: "deich_bau", Label: "Deichbeitrag Bauliche Anlagen", Logik: LogikFlurstueck, Typ: TypJaehrlich},
+	{ID: 5, Key: "kreisverband", Label: "Kreisverband Wesermarsch der Wasser- und Bodenverbände", Logik: LogikFlurstueck, Typ: TypJaehrlich},
+	{ID: 6, Key: "abfall_haushalt", Label: "Abfallwirtschaft Grundgebühr Haushalt", Logik: LogikWohneinheit, Typ: TypJaehrlich},
+	{ID: 7, Key: "abfall_personen", Label: "Abfallwirtschaft Grundgebühr Personen", Logik: LogikPersonen, Typ: TypJaehrlich},
+	{ID: 8, Key: "abfall_biomuell", Label: "Abfallwirtschaft Biomüll", Logik: LogikWohneinheit, Typ: TypJaehrlich},
+	{ID: 9, Key: "abfall_restmuell", Label: "Abfallwirtschaft Restmüll", Logik: LogikWohneinheit, Typ: TypJaehrlich},
+	{ID: 10, Key: "strom_grundpreis", Label: "Grundpreis Strom", Logik: LogikWohneinheit, Typ: TypMonatlich},
+	{ID: 11, Key: "trinkwasser", Label: "Grundgebühr Trinkwasser", Logik: LogikWohneinheit, Typ: TypMonatlich},
+	{ID: 12, Key: "abwasser", Label: "Grundgebühr Abwasser", Logik: LogikWohneinheit, Typ: TypMonatlich},
+	{ID: 13, Key: "internet", Label: "Grundpreis Internet", Logik: LogikWohneinheit, Typ: TypMonatlich},
+	{ID: 14, Key: "wp_wartung", Label: "Wartungskosten Wärmepumpe", Logik: LogikWohneinheit, Typ: TypMonatlich},
+}
+
 // seed inserts the fixed master data for the 2 apartments and 9 meters if
 // they're not already present. Keyed on `apartments.id` / `meters.key` so
 // it's safe to run on every startup.
@@ -215,6 +247,19 @@ func seed(db *sql.DB) error {
 			m.id, m.key, m.meterType, m.unit, m.apartmentID, m.label,
 		); err != nil {
 			return fmt.Errorf("seed meter %q: %w", m.key, err)
+		}
+	}
+
+	// kostenpositionen (Issue #60) - only id/key/label are fixed structure;
+	// Logik/Typ/Jahreswert are user-editable per year in
+	// kostenpositionen_jahre, not seeded here.
+	for _, kp := range KostenpositionDefaults {
+		if _, err := db.Exec(
+			`INSERT INTO kostenpositionen (id, key, label) VALUES (?, ?, ?)
+			 ON CONFLICT(id) DO NOTHING`,
+			kp.ID, kp.Key, kp.Label,
+		); err != nil {
+			return fmt.Errorf("seed kostenposition %q: %w", kp.Key, err)
 		}
 	}
 
