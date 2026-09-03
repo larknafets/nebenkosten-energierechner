@@ -24,7 +24,8 @@
     --bg: #f4f5f7; --panel: #ffffff; --border: #e0e2e7; --text: #1c1e21;
     --muted: #6b7280; --accent: #2563eb; --accent-soft: #eef2ff; --success: #16a34a;
     --danger: #b91c1c; --warning: #b45309;
-    --cat-strom: #f59e0b; --cat-heizung: #ef4444; --cat-wasser: #3b82f6;
+    --cat-strom: #f59e0b; --cat-heizung: #ef4444; --cat-wasser: #3b82f6; --cat-fix: #8b5cf6;
+    --logik-wohneinheit: #8b5cf6; --logik-flurstueck: #22c55e; --logik-qm: #ec4899; --logik-personen: #06b6d4;
     --tooltip-bg: #1c1e21; --tooltip-text: #ffffff;
   }
   @media (prefers-color-scheme: dark) {
@@ -33,7 +34,8 @@
       --bg: #14161a; --panel: #1c1f26; --border: #2e323c; --text: #e8eaed;
       --muted: #9aa1ac; --accent: #5b9bf5; --accent-soft: #1e2a3f; --success: #16a34a;
       --danger: #f87171; --warning: #fbbf24;
-      --cat-strom: #fbbf24; --cat-heizung: #f87171; --cat-wasser: #60a5fa;
+      --cat-strom: #fbbf24; --cat-heizung: #f87171; --cat-wasser: #60a5fa; --cat-fix: #a78bfa;
+      --logik-wohneinheit: #a78bfa; --logik-flurstueck: #4ade80; --logik-qm: #f472b6; --logik-personen: #22d3ee;
       --tooltip-bg: #e8eaed; --tooltip-text: #14161a;
     }
   }
@@ -42,7 +44,8 @@
     --bg: #14161a; --panel: #1c1f26; --border: #2e323c; --text: #e8eaed;
     --muted: #9aa1ac; --accent: #5b9bf5; --accent-soft: #1e2a3f; --success: #16a34a;
     --danger: #f87171; --warning: #fbbf24;
-    --cat-strom: #fbbf24; --cat-heizung: #f87171; --cat-wasser: #60a5fa;
+    --cat-strom: #fbbf24; --cat-heizung: #f87171; --cat-wasser: #60a5fa; --cat-fix: #a78bfa;
+    --logik-wohneinheit: #a78bfa; --logik-flurstueck: #4ade80; --logik-qm: #f472b6; --logik-personen: #22d3ee;
     --tooltip-bg: #e8eaed; --tooltip-text: #14161a;
   }
   * { box-sizing: border-box; }
@@ -85,29 +88,47 @@
   .cat-strom { background: var(--cat-strom); }
   .cat-heizung { background: var(--cat-heizung); }
   .cat-wasser { background: var(--cat-wasser); }
+  .cat-fix { background: var(--cat-fix); }
+  .cat-verbrauch-gesamt { background: var(--accent); }
+  .logik-wohneinheit { background: var(--logik-wohneinheit); }
+  .logik-flurstueck { background: var(--logik-flurstueck); }
+  .logik-qm { background: var(--logik-qm); }
+  .logik-personen { background: var(--logik-personen); }
   .stat-kategorien { margin-top: .4rem; white-space: normal; overflow-wrap: break-word; }
+
+  .wohnung-tabs { display: flex; gap: .5rem; margin: 1.5rem 0 1rem; }
+  .wohnung-tab { flex: 1; text-align: center; padding: .55rem; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: .85rem; font-weight: 600; border: none; cursor: pointer; }
+  .wohnung-tab.active { background: var(--accent); color: white; }
+  .wohnung-panel { display: none; }
+  .wohnung-panel.active { display: block; }
+
+  .kpi-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.25rem; }
+  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; text-align: center; }
+  .kpi-label { font-size: .75rem; color: var(--muted); }
+  .kpi-value { font-size: 1.3rem; font-weight: 700; margin-top: .25rem; }
 
   .verlauf-legend { display: flex; align-items: center; gap: 1.25rem; font-size: .75rem; color: var(--muted); margin-bottom: .9rem; flex-wrap: wrap; }
   .verlauf-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .35rem; vertical-align: middle; }
-  .verlauf-modus-toggle { margin-left: auto; padding: .3rem .7rem; font-size: .75rem; }
-  .verbrauch-liste { display: none; font-size: .72rem; color: var(--muted); }
-  .verlauf-panel.modus-verbrauch .bar-track { display: none; }
-  .verlauf-panel.modus-verbrauch .verbrauch-liste { display: block; }
+  .mode-toggle { margin-left: auto; display: flex; gap: .3rem; flex-wrap: wrap; }
+  .mode-toggle button { padding: .3rem .6rem; font-size: .72rem; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; }
+  .mode-toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .verbrauch-liste { font-size: .72rem; color: var(--muted); }
+  [data-modus] { display: none; } /* JS setzt die aktive Modus-Variante wieder sichtbar (leerer inline style, siehe applyModus) */
   .verlauf-tooltip { display: none; position: fixed; background: var(--tooltip-bg); color: var(--tooltip-text); font-size: .72rem; font-weight: 600; padding: .25rem .5rem; border-radius: 4px; pointer-events: none; z-index: 30; white-space: nowrap; }
-  .verlauf-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-  .verlauf-col h4 { font-size: .8rem; color: var(--muted); margin: 0 0 .5rem; }
   .verlauf-row { display: flex; align-items: center; gap: .5rem; padding: .3rem 0; }
   .verlauf-row.is-current .month-label { font-weight: 700; color: var(--text); }
   .month-label { width: 60px; font-size: .72rem; color: var(--muted); flex-shrink: 0; }
   .value-label { width: 60px; text-align: right; font-size: .78rem; font-weight: 600; flex-shrink: 0; }
-  .bar-track { flex: 1; min-width: 0; height: 20px; border-radius: 4px; background: var(--border); display: flex; overflow: hidden; }
+  .bar-track { flex: 1; min-width: 0; height: 20px; border-radius: 4px; background: var(--border); overflow: hidden; }
   .bar-track > div { height: 100%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .bar-track > div span { color: #fff; font-size: .68rem; font-weight: 600; white-space: nowrap; padding: 0 .2rem; text-shadow: 0 1px 1px rgba(0,0,0,.25); }
+  .bar-track > div.fix-seg { border-left: 2px dashed rgba(255,255,255,.6); }
   .verlauf-row.is-current .bar-track { box-shadow: 0 0 0 2px var(--accent); }
+  .verlauf-none { flex: 1; font-size: .72rem; color: var(--muted); }
   .verlauf-year-sep { display: flex; align-items: center; gap: .6rem; margin: .6rem 0 .35rem; }
   .verlauf-year-sep .line { flex: 1; height: 1px; background: var(--border); }
   .verlauf-year-sep .label { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; flex-shrink: 0; }
-  .verlauf-year-row { display: flex; justify-content: space-between; align-items: center; background: var(--accent-soft); border-radius: 6px; padding: .5rem .7rem; margin-bottom: .5rem; font-weight: 700; font-size: .85rem; color: var(--accent); }
+  .verlauf-year-row { display: flex; justify-content: space-between; align-items: center; background: var(--accent-soft); border-radius: 6px; padding: .5rem .7rem; margin-bottom: .5rem; font-weight: 700; font-size: .85rem; color: var(--accent); gap: 1rem; }
 
   .footer-version { position: fixed; bottom: .85rem; right: 1rem; display: flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .78rem; z-index: 40; }
   .footer-version a { color: var(--muted); display: flex; align-items: center; }
@@ -125,7 +146,7 @@
     .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
     .c-steps { flex-wrap: wrap; }
     .c-step-dot { flex: 1 1 45%; font-size: .75rem; }
-    .verlauf-wrap { grid-template-columns: 1fr; }
+    .kpi-strip { grid-template-columns: 1fr; }
     .verlauf-row { flex-wrap: wrap; row-gap: .2rem; }
     .month-label { order: 1; }
     .value-label { order: 2; margin-left: auto; }

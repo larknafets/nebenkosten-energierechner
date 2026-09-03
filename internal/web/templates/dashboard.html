@@ -1,82 +1,98 @@
 {{define "content"}}
 <h1>Nebenkostenrechner</h1>
 
-{{if not .Period}}
-<p class="muted">Noch keine Ablesung erfasst. <a href="{{.Base}}/ablesungen/neu">Jetzt erfassen</a>.</p>
+{{if not .HasAnyData}}
+<p class="muted">Noch keine Ablesung oder Fixkosten-Eingabe erfasst. <a href="{{.Base}}/ablesungen/neu">Ablesung erfassen</a> oder <a href="{{.Base}}/fixkosten/neu">Fixkosten-Eingabe erfassen</a>.</p>
 {{else}}
-<h2>{{.PeriodLabel}}</h2>
-
-{{if .KostenNote}}
-<p class="muted">{{.KostenNote}}</p>
-{{else}}
+<h2>Jahressummen {{.AnzeigeJahr}}</h2>
 <div class="grid grid-2">
   {{range .Cards}}
   <div class="panel stat-card">
-    <div class="muted">{{.ApartmentName}} <span class="badge">{{de .QM}} m² · {{.Personen}} Pers.</span></div>
-    <div class="stat-value">{{deEUR .Gesamtbetrag}} €</div>
+    <div class="muted">{{.ApartmentName}}</div>
+    <div class="stat-value">{{deEUR .GesamtEUR}} €</div>
     <div class="stat-bar-track">
-      {{range .Kategorien}}
-      <div class="stat-bar-seg cat-{{.Farbe}}" style="width:{{.ProzentGesamt}}%"></div>
+      {{range .Segmente}}
+      <div class="stat-bar-seg cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%"></div>
       {{end}}
     </div>
     <div class="muted stat-kategorien">
-      {{range $i, $kat := .Kategorien}}{{if $i}} · {{end}}{{$kat.Label}} {{deEUR $kat.Kosten}} € ({{de $kat.Verbrauch}} {{$kat.Einheit}}){{end}}
+      {{range $i, $seg := .Segmente}}{{if $i}} · {{end}}{{$seg.Label}} {{deEUR $seg.Kosten}} €{{end}}
     </div>
   </div>
   {{end}}
 </div>
-{{end}}
 
 <div class="btn-row">
   <a href="{{.Base}}/ablesungen/neu" class="button success">Neue Ablesung erfassen</a>
   <a href="{{.Base}}/fixkosten/neu" class="button success">Neue Fixkosten-Eingabe erfassen</a>
   <span class="muted">· <a href="{{.Base}}/ablesungen">Ablesungen</a> · <a href="{{.Base}}/fixkosten">Fixkosten</a> · <a href="{{.Base}}/stammdaten">Stammdaten</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></span>
 </div>
-{{end}}
 
-{{if .HasVerlauf}}
-<h2 style="margin-top:1.5rem">Verlauf</h2>
-<div class="panel verlauf-panel" id="verlauf-panel" style="margin-top:1rem">
-  <div class="verlauf-legend">
-    <span><i class="cat-strom"></i>Strom</span>
-    <span><i class="cat-heizung"></i>Heizung/Warmwasser</span>
-    <span><i class="cat-wasser"></i>Wasser</span>
-    <button type="button" class="secondary verlauf-modus-toggle" id="verlauf-modus-toggle">Verbrauch anzeigen</button>
+<div class="wohnung-tabs" id="wohnung-tabs">
+  {{range .Cards}}
+  <button type="button" class="wohnung-tab" data-wohnung="{{.ApartmentID}}">{{.ApartmentName}}</button>
+  {{end}}
+</div>
+
+{{range $i, $card := .Cards}}
+{{$spalte := index $.VerlaufSpalten $i}}
+<div class="wohnung-panel" data-wohnung="{{$card.ApartmentID}}">
+  <div class="kpi-strip">
+    <div class="kpi"><div class="kpi-label">Verbrauch {{$.AnzeigeJahr}}</div><div class="kpi-value">{{deEUR $card.VerbrauchEUR}} €</div></div>
+    <div class="kpi"><div class="kpi-label">Fixkosten {{$.AnzeigeJahr}}</div><div class="kpi-value">{{deEUR $card.FixkostenEUR}} €</div></div>
+    <div class="kpi"><div class="kpi-label">Gesamt {{$.AnzeigeJahr}}</div><div class="kpi-value">{{deEUR $card.GesamtEUR}} €</div></div>
   </div>
-  <div class="verlauf-wrap">
-    {{range .VerlaufSpalten}}
-    <div class="verlauf-col">
-      <h4>{{.ApartmentName}}</h4>
-      {{range .Eintraege}}
-      {{if .Jahrestrenner}}
-      <div class="verlauf-year-sep"><span class="line"></span><span class="label">Jahr {{.Jahrestrenner.Jahr}}</span><span class="line"></span></div>
-      <div class="verlauf-year-row"><span>Jahreswert {{.Jahrestrenner.Jahr}}</span><span>{{deEUR .Jahrestrenner.Jahreswert}} €</span></div>
-      {{else}}
-      <div class="verlauf-row{{if .Monat.IsCurrent}} is-current{{end}}">
-        <span class="month-label">{{.Monat.Label}}</span>
-        <div class="bar-track">
-          {{range .Monat.Segmente}}
-          <div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>
-          {{end}}
-        </div>
-        <div class="verbrauch-liste">
-          {{range $i, $seg := .Monat.Segmente}}{{if $i}} · {{end}}{{$seg.Label}} {{de $seg.Verbrauch}} {{$seg.Einheit}}{{end}}
-        </div>
-        <span class="value-label">{{deEUR .Monat.Gesamtbetrag}} €</span>
+
+  <div class="panel verlauf-panel" id="verlauf-panel">
+    <div class="verlauf-legend">
+      <span><i class="cat-strom"></i>Strom</span>
+      <span><i class="cat-heizung"></i>Heizung/Warmwasser</span>
+      <span><i class="cat-wasser"></i>Wasser</span>
+      <div class="mode-toggle">
+        <button type="button" data-modus-btn="verbrauch">Verbrauch</button>
+        <button type="button" data-modus-btn="verbrauchswerte">Verbrauchswerte</button>
+        <button type="button" data-modus-btn="fixkosten">Fixkosten</button>
+        <button type="button" data-modus-btn="kombiniert">Kombiniert</button>
       </div>
-      {{end}}
-      {{end}}
     </div>
+
+    {{range $spalte.Eintraege}}
+    {{if .Jahreszeile}}
+    <div class="verlauf-year-sep"><div class="line"></div><div class="label">Jahr {{.Jahreszeile.Jahr}}{{if .Jahreszeile.IstLaufend}} (laufend){{end}}</div><div class="line"></div></div>
+    <div class="verlauf-year-row"><span>Verbrauch {{deEUR .Jahreszeile.VerbrauchSumme}} € · Fixkosten {{deEUR .Jahreszeile.FixkostenSumme}} €</span><span>Gesamt {{deEUR .Jahreszeile.GesamtSumme}} €</span></div>
+    {{else}}
+    {{$m := .Monat}}
+    <div class="verlauf-row {{if $m.IsCurrent}}is-current{{end}}">
+      <span class="month-label">{{$m.Label}}</span>
+
+      <div class="bar-track" data-modus="verbrauch">
+        {{if $m.HasVerbrauch}}{{range $m.VerbrauchSegmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="verbrauch">– keine Ablesung</span>{{end}}
+      </div>
+      <div class="verbrauch-liste" data-modus="verbrauchswerte">
+        {{if $m.HasVerbrauch}}{{range $i2, $seg := $m.VerbrauchSegmente}}{{if $i2}} · {{end}}{{$seg.Label}} {{de $seg.Verbrauch}} {{$seg.Einheit}}{{end}}{{else}}– keine Ablesung{{end}}
+      </div>
+      <div class="bar-track" data-modus="fixkosten">
+        {{if $m.HasFixkosten}}{{range $m.FixkostenSegmente}}<div class="{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="fixkosten">– keine Fixkosten-Eingabe</span>{{end}}
+      </div>
+      <div class="bar-track" data-modus="kombiniert">
+        {{if $m.HasKombiniert}}{{range $m.KombiniertSegmente}}<div class="cat-{{.Farbe}}{{if eq .Farbe "fix"}} fix-seg{{end}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="kombiniert">–</span>{{end}}
+      </div>
+
+      <span class="value-label" data-modus="verbrauch">{{if $m.HasVerbrauch}}{{deEUR $m.VerbrauchGesamt}} €{{end}}</span>
+      <span class="value-label" data-modus="fixkosten">{{if $m.HasFixkosten}}{{deEUR $m.FixkostenGesamt}} €{{end}}</span>
+      <span class="value-label" data-modus="kombiniert">{{if $m.HasKombiniert}}{{deEUR $m.KombiniertGesamt}} €{{end}}</span>
+    </div>
+    {{end}}
     {{end}}
   </div>
 </div>
+{{end}}
+
 <script>
-  // Balkentext schrumpfen bzw. ausblenden, falls er im Segment nicht passt
-  // (Ticket #19 AC3) - Segmentbreite haengt vom Viewport ab, daher nach
-  // Render + Resize neu berechnen statt serverseitig zu schaetzen. Passt
-  // der Text auch verkleinert nicht, wird das Segment als "text-hidden"
-  // markiert - der EUR-Betrag ist dann per Hover/Long-Press abrufbar
-  // (siehe Tooltip-IIFE unten).
+  // Balkentext schrumpfen bzw. ausblenden, falls er im Segment nicht passt,
+  // mit Hover/Long-Press-Tooltip-Fallback - unverändert aus dem bisherigen
+  // Verlauf übernommen (Ticket #19 AC3), gilt jetzt für alle Modus-Varianten
+  // (".bar-track > div" bleibt für Verbrauch/Fixkosten/Kombiniert identisch).
   function fitVerlaufBarText() {
     document.querySelectorAll(".bar-track > div").forEach(function (seg) {
       var span = seg.querySelector("span");
@@ -98,78 +114,99 @@
   window.addEventListener("load", fitVerlaufBarText);
   window.addEventListener("resize", fitVerlaufBarText);
 
-  // Tooltip fuer zu schmale Balkensegmente (Ticket #19 AC3 Nachtrag): der
-  // EUR-Betrag erscheint bei Hover oder Long-Press ausserhalb des
-  // "overflow:hidden"-Balkens, daher als eigenes, fixed-positioniertes
-  // Element statt als Kind des Segments.
   (function () {
-    var tooltip = document.createElement("div");
-    tooltip.className = "verlauf-tooltip";
-    document.body.appendChild(tooltip);
-
+    var tooltipEl = null;
     function showTooltip(seg) {
       var eur = seg.getAttribute("data-eur");
       if (!eur) return;
-      tooltip.textContent = eur;
-      tooltip.style.display = "block";
+      if (!tooltipEl) {
+        tooltipEl = document.createElement("div");
+        tooltipEl.className = "verlauf-tooltip";
+        document.body.appendChild(tooltipEl);
+      }
+      tooltipEl.textContent = eur;
+      tooltipEl.style.display = "block";
       var rect = seg.getBoundingClientRect();
-      var top = rect.top - tooltip.offsetHeight - 6;
-      var left = rect.left + rect.width / 2 - tooltip.offsetWidth / 2;
-      left = Math.max(4, Math.min(left, window.innerWidth - tooltip.offsetWidth - 4));
-      tooltip.style.top = top + "px";
-      tooltip.style.left = left + "px";
+      var top = rect.top - tooltipEl.offsetHeight - 6;
+      var left = rect.left + rect.width / 2 - tooltipEl.offsetWidth / 2;
+      left = Math.max(4, Math.min(left, window.innerWidth - tooltipEl.offsetWidth - 4));
+      tooltipEl.style.top = top + "px";
+      tooltipEl.style.left = left + "px";
     }
-    function hideTooltip() {
-      tooltip.style.display = "none";
-    }
-
+    function hideTooltip() { if (tooltipEl) tooltipEl.style.display = "none"; }
     var longPressTimer = null;
     document.querySelectorAll(".bar-track > div").forEach(function (seg) {
-      seg.addEventListener("mouseenter", function () {
-        if (seg.classList.contains("text-hidden")) showTooltip(seg);
-      });
+      seg.addEventListener("mouseenter", function () { if (seg.classList.contains("text-hidden")) showTooltip(seg); });
       seg.addEventListener("mouseleave", hideTooltip);
       seg.addEventListener("touchstart", function () {
-        longPressTimer = setTimeout(function () {
-          if (seg.classList.contains("text-hidden")) showTooltip(seg);
-        }, 500);
+        longPressTimer = setTimeout(function () { if (seg.classList.contains("text-hidden")) showTooltip(seg); }, 500);
       }, { passive: true });
-      seg.addEventListener("touchend", function () {
-        clearTimeout(longPressTimer);
-        hideTooltip();
+      seg.addEventListener("touchend", function () { clearTimeout(longPressTimer); hideTooltip(); });
+      seg.addEventListener("touchcancel", function () { clearTimeout(longPressTimer); hideTooltip(); });
+    });
+  })();
+
+  // Monatsverlauf-Modus (Verbrauch/Verbrauchswerte/Fixkosten/Kombiniert,
+  // Ticket #60 Story 24) - jede Zeile rendert alle 4 Varianten serverseitig
+  // (data-modus="..."), JS zeigt nur die aktive per inline style; das leere
+  // style="" lässt die Elemente auf ihr eigenes CSS (flex/block) zurückfallen.
+  (function () {
+    var MODI = ["verbrauch", "verbrauchswerte", "fixkosten", "kombiniert"];
+    var STORAGE_KEY = "dashboardModus";
+
+    function applyModus(modus) {
+      document.querySelectorAll("[data-modus]").forEach(function (el) {
+        el.style.display = el.getAttribute("data-modus") === modus ? "" : "none";
       });
-      seg.addEventListener("touchcancel", function () {
-        clearTimeout(longPressTimer);
-        hideTooltip();
+      document.querySelectorAll("[data-modus-btn]").forEach(function (btn) {
+        btn.classList.toggle("active", btn.getAttribute("data-modus-btn") === modus);
+      });
+      fitVerlaufBarText();
+    }
+
+    var modus = "verbrauch";
+    try {
+      var saved = localStorage.getItem(STORAGE_KEY);
+      if (saved && MODI.indexOf(saved) !== -1) modus = saved;
+    } catch (e) {}
+    applyModus(modus);
+
+    document.querySelectorAll("[data-modus-btn]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        modus = btn.getAttribute("data-modus-btn");
+        applyModus(modus);
+        try { localStorage.setItem(STORAGE_KEY, modus); } catch (e) {}
       });
     });
   })();
 
-  // EUR/Verbrauch-Umschalter (Ticket #39) - Wahl wird im Browser gemerkt,
-  // damit sie bei erneutem Besuch erhalten bleibt.
+  // Wohnung-Umschalter (Ticket #60 Story 23) - beide Wohnungen sind
+  // serverseitig gerendert, JS blendet nur die gewählte ein.
   (function () {
-    var STORAGE_KEY = "verlaufModus";
-    var panel = document.getElementById("verlauf-panel");
-    var btn = document.getElementById("verlauf-modus-toggle");
-    if (!panel || !btn) return;
+    var STORAGE_KEY = "dashboardWohnung";
+    var tabs = document.querySelectorAll(".wohnung-tab");
+    var panels = document.querySelectorAll(".wohnung-panel");
+    if (!tabs.length) return;
 
-    function apply(modus) {
-      panel.classList.toggle("modus-verbrauch", modus === "verbrauch");
-      btn.textContent = modus === "verbrauch" ? "EUR anzeigen" : "Verbrauch anzeigen";
+    function applyWohnung(id) {
+      tabs.forEach(function (btn) { btn.classList.toggle("active", btn.getAttribute("data-wohnung") === id); });
+      panels.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-wohnung") === id); });
+      fitVerlaufBarText();
     }
 
-    var gespeichert = "eur";
+    var id = tabs[0].getAttribute("data-wohnung");
     try {
-      gespeichert = localStorage.getItem(STORAGE_KEY) || "eur";
+      var saved = localStorage.getItem(STORAGE_KEY);
+      if (saved && document.querySelector('.wohnung-tab[data-wohnung="' + saved + '"]')) id = saved;
     } catch (e) {}
-    apply(gespeichert);
+    applyWohnung(id);
 
-    btn.addEventListener("click", function () {
-      var neu = panel.classList.contains("modus-verbrauch") ? "eur" : "verbrauch";
-      apply(neu);
-      try {
-        localStorage.setItem(STORAGE_KEY, neu);
-      } catch (e) {}
+    tabs.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        id = btn.getAttribute("data-wohnung");
+        applyWohnung(id);
+        try { localStorage.setItem(STORAGE_KEY, id); } catch (e) {}
+      });
     });
   })();
 </script>

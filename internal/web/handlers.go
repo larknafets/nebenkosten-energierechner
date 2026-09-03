@@ -1066,22 +1066,10 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// dashboardCard is one apartment's stat card on the Dashboard (Grundansicht
-// #17 + Detailanzeige #18): its Gesamtbetrag and the badge showing that
-// period's Wohnungsgröße + Personenzahl, plus the Strom/Heizung/Wasser
-// breakdown the bar and per-category text are rendered from.
-type dashboardCard struct {
-	ApartmentName string
-	QM            float64
-	Personen      int64
-	Gesamtbetrag  float64
-	Kategorien    []kategorie
-}
-
-// kategorie is one cost position (Strom, Heizung, or Wasser) on a
-// dashboardCard's bar, together with its share of that apartment's
-// Gesamtbetrag (ProzentGesamt, the bar segment's width) and the raw
-// consumption shown in brackets next to the EUR amount (Ticket #18).
+// kategorie is one cost position (Strom, Heizung, or Wasser), together with
+// its share of that apartment's total (ProzentGesamt, the bar segment's
+// width) and the raw consumption shown in brackets next to the EUR amount
+// (Ticket #18).
 type kategorie struct {
 	Label     string
 	Kosten    float64
@@ -1130,178 +1118,24 @@ func kategorien(apartmentID int64, k kosten) []kategorie {
 	return list
 }
 
-// periodKosten is one period's already-computed kosten, for the Verlauf
-// view (Ticket #19). ReadingDate stays in its raw "YYYY-MM-DD" form (not
-// pre-formatted) because verlaufMonate needs it for the month label and
-// mitJahrestrennern needs it to detect calendar-year boundaries (#20).
+// periodKosten is one period's already-computed kosten, for the
+// Jahressummen-Karten and Monatsverlauf. ReadingDate stays in its raw
+// "YYYY-MM-DD" form (not pre-formatted) since downstream needs it for both
+// the month label and calendar-year grouping.
 type periodKosten struct {
 	ReadingDate string
 	K           kosten
 }
 
-// verlaufSegment is one Verlauf bar's Strom/Heizung/Wasser slice, scaled
-// against the newest period's Gesamtbetrag rather than its own (see
-// verlaufMonate). Label/Verbrauch/Einheit carry the same category's raw
-// consumption (Ticket #39's Verbrauchs-Ansicht) alongside Kosten - the bar
-// itself always stays EUR-scaled (ProzentNeuestesGesamt), since kWh/MWh/m³
-// can't be stacked into one meaningful width.
-type verlaufSegment struct {
-	Farbe                 string
-	Label                 string
-	Kosten                float64
-	Verbrauch             float64
-	Einheit               string
-	ProzentNeuestesGesamt float64
-}
-
-// verlaufMonat is one row of the Verlauf bar-per-month view.
-type verlaufMonat struct {
-	Label        string
-	IsCurrent    bool
-	Gesamtbetrag float64
-	Segmente     []verlaufSegment
-}
-
-// verlaufJahrestrenner is the "Jahreswert" separator inserted right before
-// a calendar year's December row (Ticket #20).
-type verlaufJahrestrenner struct {
-	Jahr       int
-	Jahreswert float64
-}
-
-// verlaufEintrag is one row of a Verlauf column: either a Monat or (if
-// Jahrestrenner is set) a year separator. Exactly one of the two is set.
-type verlaufEintrag struct {
-	Monat         *verlaufMonat
-	Jahrestrenner *verlaufJahrestrenner
-}
-
-// verlaufColumn is one apartment's Verlauf column: its Eintraege, newest
-// first.
-type verlaufColumn struct {
-	ApartmentName string
-	Eintraege     []verlaufEintrag
-}
-
-// verlaufMonate builds the given apartment's Verlauf rows, newest first
-// (periodenKosten is assumed already in that order - its first entry is
-// "current"). Every bar is scaled against the *newest* period's
-// Gesamtbetrag, not its own: an older, more expensive month's segments then
-// add up past 100% instead of the scale compressing to fit it (Ticket #19 -
-// the newest month is the reference to measure/save against).
-func verlaufMonate(apartmentID int64, periodenKosten []periodKosten) []verlaufMonat {
-	if len(periodenKosten) == 0 {
-		return nil
-	}
-
-	var neuestesGesamt float64
-	for _, kat := range kategorien(apartmentID, periodenKosten[0].K) {
-		neuestesGesamt += kat.Kosten
-	}
-
-	out := make([]verlaufMonat, 0, len(periodenKosten))
-	for i, pk := range periodenKosten {
-		kats := kategorien(apartmentID, pk.K)
-		segmente := make([]verlaufSegment, 0, len(kats))
-		var gesamtbetrag float64
-		for _, kat := range kats {
-			gesamtbetrag += kat.Kosten
-			var pct float64
-			if neuestesGesamt > 0 {
-				pct = kat.Kosten / neuestesGesamt * 100
-			}
-			segmente = append(segmente, verlaufSegment{
-				Farbe:                 kat.Farbe,
-				Label:                 kat.Label,
-				Kosten:                kat.Kosten,
-				Verbrauch:             kat.Verbrauch,
-				Einheit:               kat.Einheit,
-				ProzentNeuestesGesamt: pct,
-			})
-		}
-		out = append(out, verlaufMonat{
-			Label:        germanPeriodLabelShort(pk.ReadingDate),
-			IsCurrent:    i == 0,
-			Gesamtbetrag: calc.Round2(gesamtbetrag),
-			Segmente:     segmente,
-		})
-	}
-	return out
-}
-
-// mitJahrestrennern inserts a verlaufJahrestrenner right before each
-// calendar year's December row (Ticket #20): "sobald beim rückwärts
-// iterieren ein Dezember-Eintrag ansteht, wird davor ein Trenner +
-// Jahreswert eingefügt". A year with no recorded December period (e.g. the
-// current, still-running year) gets no separator at all - its Jahreswert
-// would be incomplete. monate and periodenKosten must be the same length
-// and in the same order (verlaufMonate's output paired with its input).
-func mitJahrestrennern(monate []verlaufMonat, periodenKosten []periodKosten) []verlaufEintrag {
-	if len(monate) == 0 {
-		return nil
-	}
-
-	out := make([]verlaufEintrag, 0, len(monate))
-	for i, pk := range periodenKosten {
-		t, err := time.Parse("2006-01-02", pk.ReadingDate)
-		if err == nil && t.Month() == time.December {
-			var jahreswert float64
-			for j, pk2 := range periodenKosten {
-				if t2, err2 := time.Parse("2006-01-02", pk2.ReadingDate); err2 == nil && t2.Year() == t.Year() {
-					jahreswert += monate[j].Gesamtbetrag
-				}
-			}
-			out = append(out, verlaufEintrag{Jahrestrenner: &verlaufJahrestrenner{Jahr: t.Year(), Jahreswert: calc.Round2(jahreswert)}})
-		}
-		m := monate[i]
-		out = append(out, verlaufEintrag{Monat: &m})
-	}
-	return out
-}
-
+// handleDashboard serves the redesigned Dashboard (Issue #60): Jahressummen-
+// Karten je Wohnung for the auto-following Anzeigejahr, then a Wohnung-
+// Umschalter with a combined Verbrauch+Fixkosten Monatsverlauf (4 Modi).
 func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		period, err := store.GetLatestPeriod(db)
-		if err != nil {
-			http.Error(w, "latest period: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
 		apartments, err := store.Apartments(db)
 		if err != nil {
 			http.Error(w, "apartments: "+err.Error(), http.StatusInternalServerError)
 			return
-		}
-
-		var periodLabel string
-		var cards []dashboardCard
-		var kostenNote string
-		if period != nil {
-			periodLabel = germanPeriodLabel(period.ReadingDate)
-
-			k, err := berechneKosten(db, period.ID)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			kostenNote = k.KostenNote
-
-			if k.KostenNote == "" {
-				for _, a := range apartments {
-					kats := kategorien(a.ID, k)
-					var total float64
-					for _, kat := range kats {
-						total += kat.Kosten
-					}
-					cards = append(cards, dashboardCard{
-						ApartmentName: a.Name,
-						QM:            a.QM,
-						Personen:      period.PersonenByApartment[a.ID],
-						Gesamtbetrag:  calc.Round2(total),
-						Kategorien:    kats,
-					})
-				}
-			}
 		}
 
 		allPeriods, err := store.AllPeriods(db)
@@ -1309,10 +1143,28 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 			http.Error(w, "all periods: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
+		fixkostenEintraege, err := store.AllFixkostenEintraege(db)
+		if err != nil {
+			http.Error(w, "fixkosten eintraege: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 
-		// Verlauf (Ticket #19) walks newest -> oldest and stops at the first
-		// period without a Vorperiode - that's always the very first period
-		// ever recorded (every later one has an earlier neighbour to diff
+		if len(allPeriods) == 0 && len(fixkostenEintraege) == 0 {
+			data := struct {
+				Base       string
+				HasAnyData bool
+				Version    string
+				BuildDate  string
+			}{Base: requestBase(r), Version: version, BuildDate: buildDate}
+			if err := dashboardTemplate.ExecuteTemplate(w, "layout", data); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+
+		// Verbrauch walks newest -> oldest and stops at the first period
+		// without a Vorperiode - that's always the very first period ever
+		// recorded (every later one has an earlier neighbour to diff
 		// against), so it's the natural end of the available history.
 		var periodenKosten []periodKosten
 		for _, p := range allPeriods {
@@ -1327,31 +1179,34 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 			periodenKosten = append(periodenKosten, periodKosten{ReadingDate: p.ReadingDate, K: pk})
 		}
 
-		var verlaufSpalten []verlaufColumn
+		fixkostenListe, err := alleFixkostenKosten(db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		jahr := anzeigeJahr(allPeriods, fixkostenEintraege)
+
+		var cards []dashboardJahresCard
+		var verlaufSpalten []dashboardVerlaufSpalte
 		for _, a := range apartments {
-			verlaufSpalten = append(verlaufSpalten, verlaufColumn{
-				ApartmentName: a.Name,
-				Eintraege:     mitJahrestrennern(verlaufMonate(a.ID, periodenKosten), periodenKosten),
-			})
+			cards = append(cards, buildJahresCard(a.ID, a.Name, jahr, periodenKosten, fixkostenListe))
+			verlaufSpalten = append(verlaufSpalten, buildDashboardVerlauf(a.ID, a.Name, periodenKosten, fixkostenListe))
 		}
 
 		data := struct {
 			Base           string
-			Period         *store.LatestPeriod
-			PeriodLabel    string
-			Cards          []dashboardCard
-			KostenNote     string
-			HasVerlauf     bool
-			VerlaufSpalten []verlaufColumn
+			HasAnyData     bool
+			AnzeigeJahr    int
+			Cards          []dashboardJahresCard
+			VerlaufSpalten []dashboardVerlaufSpalte
 			Version        string
 			BuildDate      string
 		}{
 			Base:           requestBase(r),
-			Period:         period,
-			PeriodLabel:    periodLabel,
+			HasAnyData:     true,
+			AnzeigeJahr:    jahr,
 			Cards:          cards,
-			KostenNote:     kostenNote,
-			HasVerlauf:     len(periodenKosten) > 0,
 			VerlaufSpalten: verlaufSpalten,
 			Version:        version,
 			BuildDate:      buildDate,

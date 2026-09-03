@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/larknafets/nebenkostenrechner/internal/calc"
 	"github.com/larknafets/nebenkostenrechner/internal/store"
@@ -107,7 +108,7 @@ func TestGermanPeriodLabelShort(t *testing.T) {
 	}
 }
 
-func TestVerlaufMonate(t *testing.T) {
+func TestBuildDashboardVerlauf_Skalierung(t *testing.T) {
 	// Neueste Periode (index 0) hat den kleineren Gesamtbetrag - eine
 	// aeltere, teurere Periode muss ueber 100% hinauslaufen (Ticket #19:
 	// Skala ist relativ zum neuesten Monat, nicht gestaucht).
@@ -126,7 +127,13 @@ func TestVerlaufMonate(t *testing.T) {
 		{ReadingDate: "2026-10-01", K: alt},
 	}
 
-	monate := verlaufMonate(2, periods)
+	spalte := buildDashboardVerlauf(2, "Wohnung 2", periods, nil)
+	var monate []dashboardMonat
+	for _, e := range spalte.Eintraege {
+		if e.Monat != nil {
+			monate = append(monate, *e.Monat)
+		}
+	}
 	if len(monate) != 2 {
 		t.Fatalf("want 2 Monate, got %d", len(monate))
 	}
@@ -136,41 +143,42 @@ func TestVerlaufMonate(t *testing.T) {
 	if !monate[0].IsCurrent || monate[1].IsCurrent {
 		t.Errorf("nur der erste (neueste) Monat soll IsCurrent sein, got %+v / %+v", monate[0], monate[1])
 	}
-	if monate[0].Gesamtbetrag != 40 {
-		t.Errorf("neuester Gesamtbetrag = %v, want 40", monate[0].Gesamtbetrag)
+	if monate[0].VerbrauchGesamt != 40 {
+		t.Errorf("neuester VerbrauchGesamt = %v, want 40", monate[0].VerbrauchGesamt)
 	}
-	if monate[1].Gesamtbetrag != 80 {
-		t.Errorf("aelterer Gesamtbetrag = %v, want 80", monate[1].Gesamtbetrag)
+	if monate[1].VerbrauchGesamt != 80 {
+		t.Errorf("aelterer VerbrauchGesamt = %v, want 80", monate[1].VerbrauchGesamt)
 	}
 
-	// Segmente tragen Label/Verbrauch/Einheit fuer die Verbrauchs-Ansicht
+	// Segmente tragen Label/Verbrauch/Einheit fuer die Verbrauchswerte-Ansicht
 	// (Ticket #39) - Strom ist bei Wohnung 2 immer das erste Segment.
-	strom := monate[0].Segmente[0]
+	strom := monate[0].VerbrauchSegmente[0]
 	if strom.Label != "Strom" || strom.Verbrauch != 123 || strom.Einheit != "kWh" {
 		t.Errorf("Strom-Segment = %+v, want Label=Strom Verbrauch=123 Einheit=kWh", strom)
 	}
 
-	// Skala = neuester Gesamtbetrag (40). Der aeltere Monat kostet doppelt
-	// so viel -> jedes Segment soll auf 200% seines eigenen Kosten-Anteils
-	// an 40 EUR kommen, nicht auf 100% gestaucht werden.
+	// Skala = neuester VerbrauchGesamt (40). Der aeltere Monat kostet
+	// doppelt so viel -> jedes Segment soll auf 200% seines eigenen
+	// Kosten-Anteils an 40 EUR kommen, nicht auf 100% gestaucht werden.
 	var altSum float64
-	for _, seg := range monate[1].Segmente {
+	for _, seg := range monate[1].VerbrauchSegmente {
 		altSum += seg.ProzentNeuestesGesamt
 	}
 	if altSum < 199 || altSum > 201 {
 		t.Errorf("Summe der Prozentanteile des aelteren Monats = %v, want ~200 (laeuft ueber den Rand)", altSum)
 	}
 
-	t.Run("leere Periodenliste", func(t *testing.T) {
-		if got := verlaufMonate(2, nil); got != nil {
-			t.Errorf("want nil for empty input, got %+v", got)
+	t.Run("leere Eingaben", func(t *testing.T) {
+		spalte := buildDashboardVerlauf(2, "Wohnung 2", nil, nil)
+		if spalte.Eintraege != nil {
+			t.Errorf("want nil Eintraege for empty input, got %+v", spalte.Eintraege)
 		}
 	})
 
-	t.Run("neuester Gesamtbetrag 0 erzeugt kein NaN", func(t *testing.T) {
+	t.Run("neuester VerbrauchGesamt 0 erzeugt kein NaN", func(t *testing.T) {
 		zero := kosten{Strom: &calc.StromErgebnis{}, Wasser: &calc.WasserErgebnis{}, Heizung: &calc.HeizungErgebnis{}}
-		monate := verlaufMonate(2, []periodKosten{{ReadingDate: "2026-11-15", K: zero}})
-		for _, seg := range monate[0].Segmente {
+		spalte := buildDashboardVerlauf(2, "Wohnung 2", []periodKosten{{ReadingDate: "2026-11-15", K: zero}}, nil)
+		for _, seg := range spalte.Eintraege[0].Monat.VerbrauchSegmente {
 			if seg.ProzentNeuestesGesamt != 0 {
 				t.Errorf("ProzentNeuestesGesamt = %v, want 0", seg.ProzentNeuestesGesamt)
 			}
@@ -178,63 +186,167 @@ func TestVerlaufMonate(t *testing.T) {
 	})
 }
 
-func TestMitJahrestrennern(t *testing.T) {
+func TestBuildDashboardVerlauf_KombiniertModus(t *testing.T) {
+	verbrauch := kosten{
+		Strom:   &calc.StromErgebnis{KostenW2: 20},
+		Wasser:  &calc.WasserErgebnis{KostenFrischwasserW2: 5, KostenAbwasserW2: 5},
+		Heizung: &calc.HeizungErgebnis{KostenHeizungW2: 10},
+	}
+	fix := &calc.FixkostenErgebnis{
+		Positionen: []calc.FixkostenPosition{{Key: "abfall_haushalt", Label: "Abfallwirtschaft Grundgebühr Haushalt", Logik: store.LogikWohneinheit, KostenW1: 15, KostenW2: 25}},
+		KostenW1:   15, KostenW2: 25,
+	}
+
+	periods := []periodKosten{{ReadingDate: "2026-09-01", K: verbrauch}}
+	fixkostenListe := []fixkostenKosten{{Monat: "2026-09-01", Erg: fix}}
+
+	spalte := buildDashboardVerlauf(2, "Wohnung 2", periods, fixkostenListe)
+	if len(spalte.Eintraege) != 2 { // 1 Monat + 1 Jahreszeile
+		t.Fatalf("want 2 Eintraege, got %d: %+v", len(spalte.Eintraege), spalte.Eintraege)
+	}
+	m := spalte.Eintraege[0].Monat
+	if m == nil {
+		t.Fatal("Eintraege[0] should be a Monat")
+	}
+	if !m.HasVerbrauch || !m.HasFixkosten || !m.HasKombiniert {
+		t.Fatalf("Has* = %v/%v/%v, want alle true", m.HasVerbrauch, m.HasFixkosten, m.HasKombiniert)
+	}
+	if m.VerbrauchGesamt != 40 {
+		t.Errorf("VerbrauchGesamt = %v, want 40", m.VerbrauchGesamt)
+	}
+	if m.FixkostenGesamt != 25 {
+		t.Errorf("FixkostenGesamt = %v, want 25 (Wohnung 2 -> KostenW2)", m.FixkostenGesamt)
+	}
+	if m.KombiniertGesamt != 65 {
+		t.Errorf("KombiniertGesamt = %v, want 65 (40+25)", m.KombiniertGesamt)
+	}
+	if len(m.KombiniertSegmente) != 2 {
+		t.Fatalf("want 2 Kombiniert-Segmente, got %d", len(m.KombiniertSegmente))
+	}
+}
+
+func TestBuildDashboardVerlauf_NurFixkosten(t *testing.T) {
+	fix := &calc.FixkostenErgebnis{
+		Positionen: []calc.FixkostenPosition{{Key: "abfall_haushalt", Label: "Abfallwirtschaft Grundgebühr Haushalt", Logik: store.LogikWohneinheit, KostenW1: 15, KostenW2: 25}},
+		KostenW1:   15, KostenW2: 25,
+	}
+	spalte := buildDashboardVerlauf(1, "Wohnung 1", nil, []fixkostenKosten{{Monat: "2026-09-01", Erg: fix}})
+	m := spalte.Eintraege[0].Monat
+	if m == nil {
+		t.Fatal("Eintraege[0] should be a Monat")
+	}
+	if m.HasVerbrauch {
+		t.Error("HasVerbrauch = true, want false (keine Ablesung fuer diesen Monat)")
+	}
+	if !m.HasFixkosten || m.FixkostenGesamt != 15 {
+		t.Errorf("HasFixkosten/FixkostenGesamt = %v/%v, want true/15", m.HasFixkosten, m.FixkostenGesamt)
+	}
+	if !m.HasKombiniert || m.KombiniertGesamt != 15 {
+		t.Errorf("HasKombiniert/KombiniertGesamt = %v/%v, want true/15 (nur Fixkosten vorhanden)", m.HasKombiniert, m.KombiniertGesamt)
+	}
+}
+
+func TestMitJahreszeilen(t *testing.T) {
 	leer := kosten{Strom: &calc.StromErgebnis{}, Wasser: &calc.WasserErgebnis{KostenFrischwasserW2: 10}, Heizung: &calc.HeizungErgebnis{}}
 
-	t.Run("Dezember-Eintrag bekommt davor einen Jahrestrenner mit Jahreswert", func(t *testing.T) {
+	t.Run("jedes Jahr bekommt eine Summenzeile, auch das laufende", func(t *testing.T) {
 		periods := []periodKosten{
 			{ReadingDate: "2026-01-15", K: leer}, // 10
-			{ReadingDate: "2025-12-15", K: leer}, // 10 - Dezember 2025
+			{ReadingDate: "2025-12-15", K: leer}, // 10
 			{ReadingDate: "2025-11-15", K: leer}, // 10
 		}
-		monate := verlaufMonate(2, periods)
-		eintraege := mitJahrestrennern(monate, periods)
+		spalte := buildDashboardVerlauf(2, "Wohnung 2", periods, nil)
+		eintraege := spalte.Eintraege
 
-		if len(eintraege) != 4 {
-			t.Fatalf("want 4 Eintraege (3 Monate + 1 Trenner), got %d: %+v", len(eintraege), eintraege)
+		if len(eintraege) != 5 { // 3 Monate + 2 Jahreszeilen (2026 und 2025)
+			t.Fatalf("want 5 Eintraege, got %d: %+v", len(eintraege), eintraege)
 		}
-		if eintraege[0].Monat == nil || eintraege[0].Jahrestrenner != nil {
+		if eintraege[0].Monat == nil || eintraege[0].Monat.Label != "Jan 2026" {
 			t.Errorf("Eintrag 0 soll Jan 2026 (Monat) sein, got %+v", eintraege[0])
 		}
-		if eintraege[1].Jahrestrenner == nil {
-			t.Fatalf("Eintrag 1 soll der Jahrestrenner vor Dezember 2025 sein, got %+v", eintraege[1])
+		if eintraege[1].Jahreszeile == nil {
+			t.Fatalf("Eintrag 1 soll die Jahreszeile 2026 sein, got %+v", eintraege[1])
 		}
-		if eintraege[1].Jahrestrenner.Jahr != 2025 {
-			t.Errorf("Jahrestrenner.Jahr = %d, want 2025", eintraege[1].Jahrestrenner.Jahr)
+		if eintraege[1].Jahreszeile.Jahr != 2026 || !eintraege[1].Jahreszeile.IstLaufend {
+			t.Errorf("Jahreszeile 1 = %+v, want Jahr:2026 IstLaufend:true (neuestes Jahr)", eintraege[1].Jahreszeile)
 		}
-		// Jahreswert 2025 = Dez (10) + Nov (10) = 20 - Januar 2026 gehoert
-		// nicht zu Kalenderjahr 2025.
-		if eintraege[1].Jahrestrenner.Jahreswert != 20 {
-			t.Errorf("Jahrestrenner.Jahreswert = %v, want 20", eintraege[1].Jahrestrenner.Jahreswert)
+		if eintraege[1].Jahreszeile.VerbrauchSumme != 10 {
+			t.Errorf("Jahreszeile 2026 VerbrauchSumme = %v, want 10 (nur Januar)", eintraege[1].Jahreszeile.VerbrauchSumme)
 		}
 		if eintraege[2].Monat == nil || eintraege[2].Monat.Label != "Dez 2025" {
-			t.Errorf("Eintrag 2 soll Dez 2025 (Monat) sein, got %+v", eintraege[2])
+			t.Errorf("Eintrag 2 soll Dez 2025 sein, got %+v", eintraege[2])
 		}
 		if eintraege[3].Monat == nil || eintraege[3].Monat.Label != "Nov 2025" {
-			t.Errorf("Eintrag 3 soll Nov 2025 (Monat) sein, got %+v", eintraege[3])
+			t.Errorf("Eintrag 3 soll Nov 2025 sein, got %+v", eintraege[3])
+		}
+		if eintraege[4].Jahreszeile == nil {
+			t.Fatalf("Eintrag 4 soll die Jahreszeile 2025 sein, got %+v", eintraege[4])
+		}
+		if eintraege[4].Jahreszeile.Jahr != 2025 || eintraege[4].Jahreszeile.IstLaufend {
+			t.Errorf("Jahreszeile 4 = %+v, want Jahr:2025 IstLaufend:false", eintraege[4].Jahreszeile)
+		}
+		// VerbrauchSumme 2025 = Dez (10) + Nov (10) = 20 - Januar 2026 gehoert
+		// nicht zu Kalenderjahr 2025.
+		if eintraege[4].Jahreszeile.VerbrauchSumme != 20 {
+			t.Errorf("Jahreszeile 2025 VerbrauchSumme = %v, want 20", eintraege[4].Jahreszeile.VerbrauchSumme)
 		}
 	})
 
-	t.Run("kein Dezember im Jahr -> kein Trenner", func(t *testing.T) {
-		periods := []periodKosten{
-			{ReadingDate: "2026-02-15", K: leer},
-			{ReadingDate: "2026-01-15", K: leer},
-		}
-		monate := verlaufMonate(2, periods)
-		eintraege := mitJahrestrennern(monate, periods)
-		if len(eintraege) != 2 {
-			t.Fatalf("want 2 Eintraege, keine Trenner, got %d: %+v", len(eintraege), eintraege)
-		}
-		for _, e := range eintraege {
-			if e.Jahrestrenner != nil {
-				t.Errorf("kein Dezember vorhanden -> es sollte kein Jahrestrenner erscheinen, got %+v", e)
-			}
-		}
-	})
-
-	t.Run("leere Liste", func(t *testing.T) {
-		if got := mitJahrestrennern(nil, nil); got != nil {
+	t.Run("leere Eingaben", func(t *testing.T) {
+		if got := mitJahreszeilen(nil); got != nil {
 			t.Errorf("want nil, got %+v", got)
+		}
+	})
+}
+
+func TestBuildJahresCard(t *testing.T) {
+	verbrauch2026 := kosten{
+		Strom:   &calc.StromErgebnis{KostenW2: 20},
+		Wasser:  &calc.WasserErgebnis{KostenFrischwasserW2: 5, KostenAbwasserW2: 5},
+		Heizung: &calc.HeizungErgebnis{KostenHeizungW2: 10},
+	}
+	verbrauch2025 := kosten{
+		Strom:   &calc.StromErgebnis{KostenW2: 999},
+		Wasser:  &calc.WasserErgebnis{},
+		Heizung: &calc.HeizungErgebnis{},
+	}
+	periods := []periodKosten{
+		{ReadingDate: "2026-09-01", K: verbrauch2026},
+		{ReadingDate: "2025-09-01", K: verbrauch2025}, // anderes Jahr, muss ausgeschlossen werden
+	}
+	fixkostenListe := []fixkostenKosten{
+		{Monat: "2026-09-01", Erg: &calc.FixkostenErgebnis{KostenW1: 15, KostenW2: 25}},
+		{Monat: "2025-09-01", Erg: &calc.FixkostenErgebnis{KostenW1: 999, KostenW2: 999}}, // anderes Jahr
+	}
+
+	card := buildJahresCard(2, "Wohnung 2", 2026, periods, fixkostenListe)
+	if card.StromEUR != 20 || card.HeizungEUR != 10 || card.WasserEUR != 10 {
+		t.Errorf("Strom/Heizung/Wasser = %v/%v/%v, want 20/10/10", card.StromEUR, card.HeizungEUR, card.WasserEUR)
+	}
+	if card.FixkostenEUR != 25 {
+		t.Errorf("FixkostenEUR = %v, want 25 (2025er Eintrag ausgeschlossen)", card.FixkostenEUR)
+	}
+	if card.VerbrauchEUR != 40 {
+		t.Errorf("VerbrauchEUR = %v, want 40", card.VerbrauchEUR)
+	}
+	if card.GesamtEUR != 65 {
+		t.Errorf("GesamtEUR = %v, want 65", card.GesamtEUR)
+	}
+}
+
+func TestAnzeigeJahr(t *testing.T) {
+	t.Run("folgt dem neueren der beiden Serien", func(t *testing.T) {
+		periods := []store.PeriodSummary{{ReadingDate: "2026-01-15"}}
+		fixkosten := []store.FixkostenEintragSummary{{Monat: "2027-03-01"}}
+		if got := anzeigeJahr(periods, fixkosten); got != 2027 {
+			t.Errorf("anzeigeJahr = %d, want 2027 (Fixkosten ist neuer)", got)
+		}
+	})
+
+	t.Run("faellt ohne jegliche Daten auf das echte aktuelle Jahr zurueck", func(t *testing.T) {
+		got := anzeigeJahr(nil, nil)
+		if got != time.Now().Year() {
+			t.Errorf("anzeigeJahr(nil, nil) = %d, want %d", got, time.Now().Year())
 		}
 	})
 }
