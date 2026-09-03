@@ -117,6 +117,7 @@ func anzeigeJahr(allPeriods []store.PeriodSummary, fixkostenEingaben []store.Fix
 type dashboardJahresCard struct {
 	ApartmentID   int64
 	ApartmentName string
+	ApartmentQM   float64
 	FixkostenEUR  float64
 	StromEUR      float64
 	HeizungEUR    float64
@@ -128,7 +129,7 @@ type dashboardJahresCard struct {
 
 // buildJahresCard sums the given apartment's Verbrauch- and Fixkosten-Kosten
 // over every period/Eingabe whose date falls in jahr.
-func buildJahresCard(apartmentID int64, apartmentName string, jahr int, periodenKosten []periodKosten, fixkostenListe []fixkostenKosten) dashboardJahresCard {
+func buildJahresCard(apartmentID int64, apartmentName string, apartmentQM float64, jahr int, periodenKosten []periodKosten, fixkostenListe []fixkostenKosten) dashboardJahresCard {
 	var strom, heizung, wasser, fix float64
 	for _, pk := range periodenKosten {
 		t, err := time.Parse("2006-01-02", pk.ReadingDate)
@@ -139,7 +140,7 @@ func buildJahresCard(apartmentID int64, apartmentName string, jahr int, perioden
 			switch kat.Label {
 			case "Strom":
 				strom += kat.Kosten
-			case "Heizung":
+			case "Heizung/Warmwasser":
 				heizung += kat.Kosten
 			case "Wasser":
 				wasser += kat.Kosten
@@ -162,13 +163,13 @@ func buildJahresCard(apartmentID int64, apartmentName string, jahr int, perioden
 		segs = append(segs, dashboardSegment{Farbe: "strom", Label: "Strom", Kosten: strom})
 	}
 	segs = append(segs,
-		dashboardSegment{Farbe: "heizung", Label: "Heizung", Kosten: heizung},
+		dashboardSegment{Farbe: "heizung", Label: "Heizung/Ww", Kosten: heizung},
 		dashboardSegment{Farbe: "wasser", Label: "Wasser", Kosten: wasser},
 	)
 	setSegmentPct(segs, gesamt)
 
 	return dashboardJahresCard{
-		ApartmentID: apartmentID, ApartmentName: apartmentName,
+		ApartmentID: apartmentID, ApartmentName: apartmentName, ApartmentQM: apartmentQM,
 		FixkostenEUR: fix, StromEUR: strom, HeizungEUR: heizung, WasserEUR: wasser,
 		VerbrauchEUR: verbrauch, GesamtEUR: gesamt, Segmente: segs,
 	}
@@ -371,4 +372,149 @@ func mitJahreszeilen(monate []dashboardMonat) []dashboardVerlaufEintrag {
 		}
 	}
 	return out
+}
+
+// dashboardSimpleCard is Wallbox/PV-Anlage's Jahressummen-Karte (Ticket
+// #67) - a single EUR figure, unlike dashboardJahresCard: whole-house, no
+// Wohnungs-Aufteilung and no Fixkosten-Anteil (rein informativ, siehe
+// StromErgebnis.WallboxAnteilKWh/calc.Einspeisung).
+type dashboardSimpleCard struct {
+	Name      string
+	GesamtEUR float64
+	IstErtrag bool // true for PV-Anlage: "+" prefix, success color (Vergütung statt Kosten)
+}
+
+// dashboardSimpleMonat is one calendar month's row in a Wallbox/PV-Anlage
+// Monatsverlauf - a single bar segment, unlike dashboardMonat's 4 Modus-
+// Varianten (there's no Fixkosten/Kombiniert distinction for these).
+type dashboardSimpleMonat struct {
+	Label                 string
+	Jahr                  int
+	IsCurrent             bool
+	HasWert               bool
+	KWh                   float64
+	EUR                   float64
+	ProzentNeuestesGesamt float64
+}
+
+type dashboardSimpleJahreszeile struct {
+	Jahr       int
+	IstLaufend bool
+	Summe      float64
+}
+
+type dashboardSimpleEintrag struct {
+	Monat       *dashboardSimpleMonat
+	Jahreszeile *dashboardSimpleJahreszeile
+}
+
+// dashboardSimpleSpalte is Wallbox/PV-Anlage's Monatsverlauf, newest first -
+// analog zu dashboardVerlaufSpalte, aber ohne Wohnungs-Aufteilung.
+type dashboardSimpleSpalte struct {
+	ID        string
+	Name      string
+	IstErtrag bool
+	Eintraege []dashboardSimpleEintrag
+}
+
+// simpleWert extracts one period's kWh/EUR for a Wallbox/PV-Anlage series -
+// ok=false skips the period entirely (no Ablesung/keine Vorperiode).
+type simpleWert func(k kosten) (kwh, eur float64, ok bool)
+
+// wallboxWert reads the Wallbox-Anteil from StromErgebnis - a third,
+// PV-Netzbezug-gedeckelte Zuteilungsstufe nach Wohnung 2 und Wärmepumpe
+// (Ticket #67 Nachtrag), nicht der rohe Zwischenzähler-Verbrauch.
+func wallboxWert(k kosten) (kwh, eur float64, ok bool) {
+	if k.Strom == nil {
+		return 0, 0, false
+	}
+	return k.Strom.WallboxAnteilKWh, k.Strom.KostenWallbox, true
+}
+
+func einspeisungWert(k kosten) (kwh, eur float64, ok bool) {
+	if k.Einspeisung == nil {
+		return 0, 0, false
+	}
+	return k.Einspeisung.EinspeisungKWh, k.Einspeisung.Ertrag, true
+}
+
+// buildSimpleJahresCard sums a Wallbox/PV-Anlage series over every period
+// whose ReadingDate falls in jahr.
+func buildSimpleJahresCard(name string, istErtrag bool, jahr int, periodenKosten []periodKosten, wert simpleWert) dashboardSimpleCard {
+	var sum float64
+	for _, pk := range periodenKosten {
+		t, err := time.Parse("2006-01-02", pk.ReadingDate)
+		if err != nil || t.Year() != jahr {
+			continue
+		}
+		if _, eur, ok := wert(pk.K); ok {
+			sum += eur
+		}
+	}
+	return dashboardSimpleCard{Name: name, GesamtEUR: calc.Round2(sum), IstErtrag: istErtrag}
+}
+
+// buildSimpleVerlauf builds a Wallbox/PV-Anlage Monatsverlauf - one bar per
+// Ablesungs-Monat plus a Jahressumme-Trennzeile per Kalenderjahr, analog zu
+// buildDashboardVerlauf's Fixkosten-freier Fall.
+func buildSimpleVerlauf(id, name string, istErtrag bool, periodenKosten []periodKosten, wert simpleWert) dashboardSimpleSpalte {
+	monate := make([]dashboardSimpleMonat, 0, len(periodenKosten))
+	for _, pk := range periodenKosten {
+		t, err := time.Parse("2006-01-02", pk.ReadingDate)
+		if err != nil {
+			continue
+		}
+		dm := dashboardSimpleMonat{Label: germanPeriodLabelShort(pk.ReadingDate), Jahr: t.Year()}
+		if kwh, eur, ok := wert(pk.K); ok {
+			dm.HasWert = true
+			dm.KWh = kwh
+			dm.EUR = calc.Round2(eur)
+		}
+		monate = append(monate, dm)
+	}
+	if len(monate) > 0 {
+		monate[0].IsCurrent = true
+	}
+
+	var neuestesEUR float64
+	for _, m := range monate {
+		if m.HasWert {
+			neuestesEUR = m.EUR
+			break
+		}
+	}
+	if neuestesEUR > 0 {
+		for i := range monate {
+			if monate[i].HasWert {
+				monate[i].ProzentNeuestesGesamt = monate[i].EUR / neuestesEUR * 100
+			}
+		}
+	}
+
+	var eintraege []dashboardSimpleEintrag
+	if len(monate) > 0 {
+		neuestesJahr := monate[0].Jahr
+		currentJahr := monate[0].Jahr
+		var summe float64
+		flush := func() {
+			eintraege = append(eintraege, dashboardSimpleEintrag{Jahreszeile: &dashboardSimpleJahreszeile{
+				Jahr: currentJahr, IstLaufend: currentJahr == neuestesJahr, Summe: calc.Round2(summe),
+			}})
+		}
+		for i, m := range monate {
+			if m.Jahr != currentJahr {
+				flush()
+				currentJahr = m.Jahr
+				summe = 0
+			}
+			summe += m.EUR
+			mm := m
+			eintraege = append(eintraege, dashboardSimpleEintrag{Monat: &mm})
+			if i == len(monate)-1 {
+				flush()
+			}
+		}
+	}
+
+	return dashboardSimpleSpalte{ID: id, Name: name, IstErtrag: istErtrag, Eintraege: eintraege}
 }

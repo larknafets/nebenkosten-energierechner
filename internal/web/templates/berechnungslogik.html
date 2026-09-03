@@ -1,19 +1,22 @@
 {{define "content"}}
 <h1>Berechnungslogik</h1>
-{{template "crumbBack" .}}
+{{template "nav" .}}
 
 <div class="panel">
   <h2>Strom (PV-Netzbezug-Zuteilung)</h2>
-  <p>Netzbezug wird sequenziell zugeteilt: zuerst Wohnung 2 (gedeckelt auf ihren eigenen Verbrauch), dann die Wärmepumpe auf den verbleibenden Netzbezug. Der Rest zählt implizit zu Wohnung 1 - keine eigene Kostenposition.</p>
+  <p>Netzbezug wird sequenziell zugeteilt: zuerst Wohnung 2 (gedeckelt auf ihren eigenen Verbrauch), dann die Wärmepumpe auf den verbleibenden Netzbezug, dann die Wallboxen auf den danach noch verbleibenden Netzbezug. Der Rest zählt implizit zu Wohnung 1 - keine eigene Kostenposition. Die Wallbox-Stufe ist rein informativ (keine eigene Wohnungs-Zuteilung, kein eigener Wallbox-Tarif), läuft aber über dieselbe Deckelung wie Wohnung 2/Wärmepumpe, damit ihr Wert konsistent zum übrigen Netzbezug bleibt.</p>
   <pre class="formula">Netzbezug_Gesamt = Verbrauch(strom_gesamt)
 
-W2_Anteil_kWh = min(Netzbezug_Gesamt, Verbrauch(strom_wohnung2))
-Rest1         = Netzbezug_Gesamt - W2_Anteil_kWh
-WP_Anteil_kWh = min(Rest1, Verbrauch(strom_waermepumpe))
+W2_Anteil_kWh      = min(Netzbezug_Gesamt, Verbrauch(strom_wohnung2))
+Rest1              = Netzbezug_Gesamt - W2_Anteil_kWh
+WP_Anteil_kWh      = min(Rest1, Verbrauch(strom_waermepumpe))
+Rest2              = Rest1 - WP_Anteil_kWh
+Wallbox_Anteil_kWh = min(Rest2, Verbrauch(strom_wallbox))
 
 Kosten_Strom_W2  = W2_Anteil_kWh * Strompreis
-Kosten_WP_gesamt = WP_Anteil_kWh * Strompreis   (Basis für Heizungskosten, siehe unten)</pre>
-  <p class="muted">Bei PV-Überschuss (Netzbezug_Gesamt = 0) sind beide Kosten 0. Alle Anteile über min() gedeckelt, nie negativ.</p>
+Kosten_WP_gesamt = WP_Anteil_kWh * Strompreis        (Basis für Heizungskosten, siehe unten)
+Kosten_Wallbox   = Wallbox_Anteil_kWh * Strompreis   (rein informativ)</pre>
+  <p class="muted">Bei PV-Überschuss (Netzbezug_Gesamt = 0) sind alle 3 Kosten 0. Alle Anteile über min() gedeckelt, nie negativ.</p>
 </div>
 
 <div class="panel" style="margin-top:1rem">

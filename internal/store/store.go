@@ -198,10 +198,10 @@ var KostenpositionDefaults = []KostenpositionDefault{
 	{ID: 7, Key: "abfall_personen", Label: "Abfallwirtschaft Grundgebühr Personen", Logik: LogikPersonen, Typ: TypJaehrlich},
 	{ID: 8, Key: "abfall_biomuell", Label: "Abfallwirtschaft Biomüll", Logik: LogikWohneinheit, Typ: TypJaehrlich},
 	{ID: 9, Key: "abfall_restmuell", Label: "Abfallwirtschaft Restmüll", Logik: LogikWohneinheit, Typ: TypJaehrlich},
-	{ID: 10, Key: "strom_grundpreis", Label: "Grundpreis Strom", Logik: LogikWohneinheit, Typ: TypMonatlich},
+	{ID: 10, Key: "strom_grundpreis", Label: "Grundgebühr Strom", Logik: LogikWohneinheit, Typ: TypMonatlich},
 	{ID: 11, Key: "trinkwasser", Label: "Grundgebühr Trinkwasser", Logik: LogikWohneinheit, Typ: TypMonatlich},
 	{ID: 12, Key: "abwasser", Label: "Grundgebühr Abwasser", Logik: LogikWohneinheit, Typ: TypMonatlich},
-	{ID: 13, Key: "internet", Label: "Grundpreis Internet", Logik: LogikWohneinheit, Typ: TypMonatlich},
+	{ID: 13, Key: "internet", Label: "Grundgebühr Internet", Logik: LogikWohneinheit, Typ: TypMonatlich},
 	{ID: 14, Key: "wp_wartung", Label: "Wartungskosten Wärmepumpe", Logik: LogikWohneinheit, Typ: TypMonatlich},
 }
 

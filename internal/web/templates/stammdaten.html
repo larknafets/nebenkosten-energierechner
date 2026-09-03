@@ -1,6 +1,6 @@
 {{define "content"}}
 <h1>Stammdaten</h1>
-{{template "crumbBack" .}}
+{{template "nav" .}}
 
 <form method="post" action="{{.Base}}/stammdaten" class="panel">
   {{range .Apartments}}
@@ -16,7 +16,7 @@
 </form>
 
 <h3 style="margin-top:1.5rem">Kostenpositionen je Jahr</h3>
-<p class="muted">Jahresgebühren und Grundpreise, jahresweise gepflegt. Jahreswert-Positionen werden für die Fixkosten-Eingabe automatisch durch 12 geteilt.</p>
+<p class="muted">Jahresgebühren und Grundpreise, jahresweise gepflegt. Der Jahreswert greift nur bei Typ "jährlich" - er wird für die Fixkosten-Eingabe automatisch durch 12 geteilt und ist dort nicht editierbar. Bei Typ "monatlich" wird der Wert stattdessen direkt in der jeweiligen monatlichen Fixkosten-Eingabe gepflegt (dort frei überschreibbar); der Jahreswert hier dient dann nur noch als Fallback für Monate ohne eigenen Wert.</p>
 
 {{range .JahrBloecke}}
 <form method="post" action="{{$.Base}}/stammdaten/jahre/{{.Jahr}}" class="panel" style="margin-top:1rem">

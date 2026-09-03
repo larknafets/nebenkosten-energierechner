@@ -94,6 +94,60 @@ func TestStrom_SequentialAllocation(t *testing.T) {
 	}
 }
 
+func TestStrom_WallboxDritteZuteilungsstufe(t *testing.T) {
+	db := openTestDB(t)
+	mustCreatePeriod(t, db, "2026-10-01", 0.30, baseReadings(nil))
+	// Netzbezug 1000, Wohnung2 400, Waermepumpe 300 -> Rest2 = 300 fuer die
+	// Wallbox, obwohl sie selbst 500 kWh verbraucht haette.
+	p2 := mustCreatePeriod(t, db, "2026-11-01", 0.30, baseReadings(map[string]float64{
+		"strom_gesamt":      1000,
+		"strom_wohnung2":    400,
+		"strom_waermepumpe": 300,
+		"strom_wallbox":     500,
+	}))
+
+	got, err := calc.Strom(db, p2)
+	if err != nil {
+		t.Fatalf("calc.Strom: %v", err)
+	}
+	if got.WallboxAnteilKWh != 300 {
+		t.Errorf("WallboxAnteilKWh = %v, want 300 (gedeckelt auf Rest-Netzbezug nach W2+WP)", got.WallboxAnteilKWh)
+	}
+	if got.PVAnteilWallboxKWh != 200 {
+		t.Errorf("PVAnteilWallboxKWh = %v, want 200 (500 Verbrauch - 300 angerechnet, durch PV gedeckt)", got.PVAnteilWallboxKWh)
+	}
+	if got.KostenWallbox != 90.00 {
+		t.Errorf("KostenWallbox = %v, want 90.00 (300 * 0.30)", got.KostenWallbox)
+	}
+}
+
+func TestStrom_WallboxKeinRestUebrig(t *testing.T) {
+	db := openTestDB(t)
+	mustCreatePeriod(t, db, "2026-10-01", 0.30, baseReadings(nil))
+	// W2+WP verbrauchen bereits den gesamten Netzbezug - Wallbox-Nutzung
+	// muss dann vollstaendig durch PV gedeckt sein, Kosten 0.
+	p2 := mustCreatePeriod(t, db, "2026-11-01", 0.30, baseReadings(map[string]float64{
+		"strom_gesamt":      500,
+		"strom_wohnung2":    300,
+		"strom_waermepumpe": 200,
+		"strom_wallbox":     150,
+	}))
+
+	got, err := calc.Strom(db, p2)
+	if err != nil {
+		t.Fatalf("calc.Strom: %v", err)
+	}
+	if got.WallboxAnteilKWh != 0 {
+		t.Errorf("WallboxAnteilKWh = %v, want 0", got.WallboxAnteilKWh)
+	}
+	if got.PVAnteilWallboxKWh != 150 {
+		t.Errorf("PVAnteilWallboxKWh = %v, want 150 (kompletter Wallbox-Verbrauch durch PV gedeckt)", got.PVAnteilWallboxKWh)
+	}
+	if got.KostenWallbox != 0 {
+		t.Errorf("KostenWallbox = %v, want 0", got.KostenWallbox)
+	}
+}
+
 func TestStrom_WaermepumpeGedeckeltAufRest(t *testing.T) {
 	db := openTestDB(t)
 	mustCreatePeriod(t, db, "2026-10-01", 0.22, baseReadings(nil))

@@ -1,6 +1,6 @@
 {{define "content"}}
 <h1>Ablesung {{deDatum .Period.ReadingDate}}</h1>
-{{template "crumbBack" .}}
+{{template "nav" .}}
 
 <div class="field" style="max-width:220px">
   <label>Andere Ablesung anzeigen</label>
@@ -47,6 +47,9 @@
       <tr><td>Wärmepumpe Anteil</td><td>{{de .Strom.WPAnteilKWh}} kWh</td></tr>
       <tr><td>Nicht dem Netzbezug zugeordnet (PV)</td><td>{{de .Strom.PVAnteilWPKWh}} kWh</td></tr>
       <tr><td>Kosten Wärmepumpe gesamt (Basis Heizungskosten)</td><td>{{deEUR .Strom.KostenWPGesamtUnrounded}} EUR</td></tr>
+      <tr><td>Wallbox Anteil</td><td>{{de .Strom.WallboxAnteilKWh}} kWh</td></tr>
+      <tr><td>Nicht dem Netzbezug zugeordnet (PV)</td><td>{{de .Strom.PVAnteilWallboxKWh}} kWh</td></tr>
+      <tr><td>Kosten Wallbox</td><td>{{deEUR .Strom.KostenWallbox}} EUR</td></tr>
     </tbody>
   </table>
   {{end}}

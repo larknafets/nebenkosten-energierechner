@@ -24,7 +24,7 @@ func TestKostenpositionDefaultsByID(t *testing.T) {
 func TestParseKostenpositionenJahrInput(t *testing.T) {
 	kostenpositionen := []store.Kostenposition{
 		{ID: 1, Key: "grundsteuer", Label: "Grundsteuer"},
-		{ID: 10, Key: "strom_grundpreis", Label: "Grundpreis Strom"},
+		{ID: 10, Key: "strom_grundpreis", Label: "Grundgebühr Strom"},
 	}
 
 	form := url.Values{

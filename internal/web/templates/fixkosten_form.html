@@ -1,6 +1,6 @@
 {{define "content"}}
 <h1>{{if .IsEdit}}Fixkosten-Eingabe korrigieren{{else}}Fixkosten-Eingabe erfassen{{end}}</h1>
-{{template "crumbBack" .}}
+{{template "nav" .}}
 
 {{if .JahrNotAngelegt}}
 <div class="panel" style="border-color:#e6a700">
@@ -22,7 +22,7 @@
   </div>
 
   <h3>Fixkosten</h3>
-  <p class="muted">Positionen mit Jahreswert (Badge) sind Jahresgesamtkosten aus den Stammdaten, hier bereits durch 12 geteilt und nicht editierbar - Änderungen dafür auf der Stammdaten-Seite.</p>
+  <p class="muted">Positionen mit Jahreswert (Badge) sind Jahresgesamtkosten aus den Stammdaten, hier bereits durch 12 geteilt und nicht editierbar - Änderungen dafür auf der Stammdaten-Seite. Alle anderen Positionen sind vorbelegt (letzter erfasster Wert bzw. letzter bekannter Jahreswert/12), aber jeden Monat frei überschreibbar.</p>
   <table class="letzte">
     <thead><tr><th>Position</th><th>Logik</th><th>Wert (EUR/Monat)</th></tr></thead>
     <tbody>

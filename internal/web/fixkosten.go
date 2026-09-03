@@ -72,6 +72,7 @@ type fixkostenPositionRow struct {
 // wizardData for Ablesungen.
 type fixkostenFormData struct {
 	Base             string
+	Aktuell          string
 	FormAction       string
 	IsEdit           bool
 	Monat            string // "YYYY-MM", <input type="month"> value
@@ -86,7 +87,14 @@ type fixkostenFormData struct {
 // given Jahr, using values (explizite Werte, keyed by kostenposition id) to
 // prefill monatlich rows - the latest Eingabe's Werte in "neu" mode, the
 // Eingabe's own Werte in "bearbeiten" mode.
-func buildFixkostenPositionRows(kostenpositionen []store.Kostenposition, jahresdaten map[int64]store.KostenpositionJahr, values map[int64]float64) []fixkostenPositionRow {
+//
+// A monatlich Position without an explicit Wert in values (Issue #69: the
+// Position was jährlich at the time that Eingabe was saved, so
+// parseFixkostenInput never wrote a Wert for it) falls back to the letzter
+// bekannter Jahreswert/12 - the same fallback calc.Fixkosten already uses
+// for the actual Berechnung, previously missing here in the Formular-
+// Prefill, which silently showed 0 instead.
+func buildFixkostenPositionRows(db *sql.DB, kostenpositionen []store.Kostenposition, jahresdaten map[int64]store.KostenpositionJahr, values map[int64]float64, jahr int) ([]fixkostenPositionRow, error) {
 	rows := make([]fixkostenPositionRow, 0, len(kostenpositionen))
 	for _, kp := range kostenpositionen {
 		kj, ok := jahresdaten[kp.ID]
@@ -101,12 +109,20 @@ func buildFixkostenPositionRows(kostenpositionen []store.Kostenposition, jahresd
 		}
 		if row.IsJaehrlich {
 			row.Value = kj.Jahreswert / 12
+		} else if wert, ok := values[kp.ID]; ok {
+			row.Value = wert
 		} else {
-			row.Value = values[kp.ID]
+			letzterJahreswert, ok, err := store.LatestJaehrlichWert(db, kp.ID, jahr)
+			if err != nil {
+				return nil, fmt.Errorf("latest jaehrlich wert for %s: %w", kp.Label, err)
+			}
+			if ok {
+				row.Value = letzterJahreswert / 12
+			}
 		}
 		rows = append(rows, row)
 	}
-	return rows
+	return rows, nil
 }
 
 // handleFixkostenForm serves the "neu" Fixkosten-Formular, prefilled from
@@ -143,18 +159,24 @@ func handleFixkostenForm(db *sql.DB) http.HandlerFunc {
 
 		data := fixkostenFormData{
 			Base:            requestBase(r),
+			Aktuell:         "fixkosten",
 			FormAction:      requestBase(r) + "/fixkosten",
 			Monat:           monat,
 			Apartments:      apartments,
 			JahrNotAngelegt: len(jahresdaten) == 0,
 			Jahr:            jahr,
 		}
+		var werte map[int64]float64
 		if latest != nil {
 			data.PreviousPersonen = latest.Personen
-			data.Positionen = buildFixkostenPositionRows(kostenpositionen, jahresdaten, latest.Werte)
-		} else {
-			data.Positionen = buildFixkostenPositionRows(kostenpositionen, jahresdaten, nil)
+			werte = latest.Werte
 		}
+		positionen, err := buildFixkostenPositionRows(db, kostenpositionen, jahresdaten, werte, jahr)
+		if err != nil {
+			http.Error(w, "fixkosten position rows: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		data.Positionen = positionen
 
 		if err := fixkostenFormTemplate.ExecuteTemplate(w, "layout", data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -204,14 +226,21 @@ func handleFixkostenEditForm(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		positionen, err := buildFixkostenPositionRows(db, kostenpositionen, jahresdaten, target.Werte, jahr)
+		if err != nil {
+			http.Error(w, "fixkosten position rows: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		data := fixkostenFormData{
 			Base:             requestBase(r),
+			Aktuell:          "fixkosten",
 			FormAction:       fmt.Sprintf("%s/fixkosten/%d", requestBase(r), target.ID),
 			IsEdit:           true,
 			Monat:            monatForInput(target.Monat),
 			Apartments:       apartments,
 			PreviousPersonen: target.Personen,
-			Positionen:       buildFixkostenPositionRows(kostenpositionen, jahresdaten, target.Werte),
+			Positionen:       positionen,
 			JahrNotAngelegt:  len(jahresdaten) == 0,
 			Jahr:             jahr,
 		}
@@ -406,9 +435,11 @@ func handleFixkostenListe(db *sql.DB) http.HandlerFunc {
 
 		data := struct {
 			Base     string
+			Aktuell  string
 			Eingaben []fixkostenListItem
 		}{
 			Base:     requestBase(r),
+			Aktuell:  "fixkosten",
 			Eingaben: items,
 		}
 
@@ -489,6 +520,7 @@ func handleFixkostenDetail(db *sql.DB) http.HandlerFunc {
 
 		data := struct {
 			Base        string
+			Aktuell     string
 			Eingabe     *store.FixkostenEingabeDetails
 			MonatLabel  string
 			AllEingaben []fixkostenListItem
@@ -499,6 +531,7 @@ func handleFixkostenDetail(db *sql.DB) http.HandlerFunc {
 			KostenNote  string
 		}{
 			Base:        requestBase(r),
+			Aktuell:     "fixkosten",
 			Eingabe:     eingabe,
 			MonatLabel:  germanPeriodLabel(eingabe.Monat),
 			AllEingaben: allItems,

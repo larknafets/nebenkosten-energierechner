@@ -186,6 +186,78 @@ func TestBuildDashboardVerlauf_Skalierung(t *testing.T) {
 	})
 }
 
+func TestBuildSimpleVerlaufUndJahresCard(t *testing.T) {
+	// Wallboxen/PV-Anlage (Ticket #67) - whole-house, rein informativ, kein
+	// Fixkosten-Anteil, keine Wohnungs-Zuteilung. Wallbox-Anteil kommt aus
+	// StromErgebnis (dritte, PV-Netzbezug-gedeckelte Zuteilungsstufe nach
+	// Wohnung 2 und Wärmepumpe, Ticket #67 Nachtrag).
+	neu := kosten{Strom: &calc.StromErgebnis{WallboxAnteilKWh: 40, KostenWallbox: 12}}
+	alt := kosten{Strom: &calc.StromErgebnis{WallboxAnteilKWh: 20, KostenWallbox: 6}}
+	ohneWallbox := kosten{} // Strom nil - erste Periode ohne Vorperiode
+
+	periods := []periodKosten{
+		{ReadingDate: "2026-11-15", K: neu},
+		{ReadingDate: "2026-10-01", K: alt},
+		{ReadingDate: "2026-09-01", K: ohneWallbox},
+	}
+
+	spalte := buildSimpleVerlauf("wallbox", "Wallboxen", false, periods, wallboxWert)
+	if spalte.ID != "wallbox" || spalte.Name != "Wallboxen" || spalte.IstErtrag {
+		t.Errorf("Spalte-Metadaten falsch: %+v", spalte)
+	}
+
+	var monate []dashboardSimpleMonat
+	var jahreszeilen []dashboardSimpleJahreszeile
+	for _, e := range spalte.Eintraege {
+		if e.Monat != nil {
+			monate = append(monate, *e.Monat)
+		}
+		if e.Jahreszeile != nil {
+			jahreszeilen = append(jahreszeilen, *e.Jahreszeile)
+		}
+	}
+	if len(monate) != 3 {
+		t.Fatalf("want 3 Monate, got %d: %+v", len(monate), monate)
+	}
+	if !monate[0].IsCurrent || monate[1].IsCurrent || monate[2].IsCurrent {
+		t.Errorf("nur der erste (neueste) Monat soll IsCurrent sein, got %+v", monate)
+	}
+	if !monate[0].HasWert || monate[0].EUR != 12 || monate[0].KWh != 40 {
+		t.Errorf("neuester Monat = %+v, want HasWert EUR=12 KWh=40", monate[0])
+	}
+	if monate[2].HasWert {
+		t.Errorf("Monat ohne Wallbox-Ergebnis soll HasWert=false sein, got %+v", monate[2])
+	}
+	// Skala = neuester EUR-Wert (12) - der aeltere Monat kostet halb so
+	// viel, muss also bei 50% liegen (analog TestBuildDashboardVerlauf_Skalierung).
+	if want := 50.0; monate[1].ProzentNeuestesGesamt < want-0.01 || monate[1].ProzentNeuestesGesamt > want+0.01 {
+		t.Errorf("aelterer ProzentNeuestesGesamt = %v, want ~50", monate[1].ProzentNeuestesGesamt)
+	}
+	if len(jahreszeilen) != 1 || jahreszeilen[0].Summe != 18 {
+		t.Errorf("Jahreszeile = %+v, want 1 Eintrag mit Summe=18 (12+6, der Monat ohne Wert zaehlt 0)", jahreszeilen)
+	}
+
+	card := buildSimpleJahresCard("Wallboxen", false, 2026, periods, wallboxWert)
+	if card.GesamtEUR != 18 || card.IstErtrag {
+		t.Errorf("card = %+v, want GesamtEUR=18 IstErtrag=false", card)
+	}
+
+	t.Run("PV-Anlage nutzt Einspeisung statt Wallbox", func(t *testing.T) {
+		p := []periodKosten{{ReadingDate: "2026-11-15", K: kosten{Einspeisung: &calc.EinspeisungErgebnis{EinspeisungKWh: 100, Ertrag: 8}}}}
+		pvCard := buildSimpleJahresCard("PV-Anlage", true, 2026, p, einspeisungWert)
+		if pvCard.GesamtEUR != 8 || !pvCard.IstErtrag {
+			t.Errorf("pvCard = %+v, want GesamtEUR=8 IstErtrag=true", pvCard)
+		}
+	})
+
+	t.Run("leere Eintraege", func(t *testing.T) {
+		spalte := buildSimpleVerlauf("wallbox", "Wallboxen", false, nil, wallboxWert)
+		if spalte.Eintraege != nil {
+			t.Errorf("want nil Eintraege for empty input, got %+v", spalte.Eintraege)
+		}
+	})
+}
+
 func TestBuildDashboardVerlauf_KombiniertModus(t *testing.T) {
 	verbrauch := kosten{
 		Strom:   &calc.StromErgebnis{KostenW2: 20},
@@ -319,7 +391,7 @@ func TestBuildJahresCard(t *testing.T) {
 		{Monat: "2025-09-01", Erg: &calc.FixkostenErgebnis{KostenW1: 999, KostenW2: 999}}, // anderes Jahr
 	}
 
-	card := buildJahresCard(2, "Wohnung 2", 2026, periods, fixkostenListe)
+	card := buildJahresCard(2, "Wohnung 2", 86, 2026, periods, fixkostenListe)
 	if card.StromEUR != 20 || card.HeizungEUR != 10 || card.WasserEUR != 10 {
 		t.Errorf("Strom/Heizung/Wasser = %v/%v/%v, want 20/10/10", card.StromEUR, card.HeizungEUR, card.WasserEUR)
 	}

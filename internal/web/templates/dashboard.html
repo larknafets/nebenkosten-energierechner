@@ -1,15 +1,15 @@
 {{define "content"}}
 <h1>Nebenkostenrechner</h1>
-{{template "crumb" .}}
+{{template "nav" .}}
 
 {{if not .HasAnyData}}
 <p class="muted">Noch keine Ablesung oder Fixkosten-Eingabe erfasst. <a href="{{.Base}}/ablesungen/neu">Ablesung erfassen</a> oder <a href="{{.Base}}/fixkosten/neu">Fixkosten-Eingabe erfassen</a>.</p>
 {{else}}
-<h2>Jahressummen {{.AnzeigeJahr}}</h2>
-<div class="grid grid-2">
+<h2>Jahressummen {{.AnzeigeJahr}}{{if .AnzeigeJahrLaufend}} <span class="badge">laufend</span>{{end}}</h2>
+<div class="grid jahressummen-grid">
   {{range .Cards}}
   <div class="panel stat-card">
-    <div class="muted">{{.ApartmentName}}</div>
+    <div class="muted">{{.ApartmentName}} <span class="badge">{{de .ApartmentQM}} m²</span></div>
     <div class="stat-value">{{deEUR .GesamtEUR}} €</div>
     <div class="stat-bar-track">
       {{range .Segmente}}
@@ -17,10 +17,22 @@
       {{end}}
     </div>
     <div class="muted stat-kategorien">
-      {{range $i, $seg := .Segmente}}{{if $i}} · {{end}}{{$seg.Label}} {{deEUR $seg.Kosten}} €{{end}}
+      {{range .Segmente}}<div>{{.Label}} {{deEUR .Kosten}} €</div>{{end}}
     </div>
   </div>
   {{end}}
+  <div class="panel stat-card">
+    <div class="muted">Wallboxen</div>
+    <div class="stat-value">{{deEUR .WallboxCard.GesamtEUR}} €</div>
+    <div class="stat-bar-track"><div class="stat-bar-seg cat-strom" style="width:100%"></div></div>
+    <div class="muted stat-kategorien">Stromkosten</div>
+  </div>
+  <div class="panel stat-card">
+    <div class="muted">PV-Anlage</div>
+    <div class="stat-value" style="color:var(--success)">+{{deEUR .PVCard.GesamtEUR}} €</div>
+    <div class="stat-bar-track"><div class="stat-bar-seg" style="width:100%;background:var(--success)"></div></div>
+    <div class="muted stat-kategorien">Einspeisevergütung</div>
+  </div>
 </div>
 
 <div class="btn-row">
@@ -32,6 +44,8 @@
   {{range .Cards}}
   <button type="button" class="wohnung-tab" data-wohnung="{{.ApartmentID}}">{{.ApartmentName}}</button>
   {{end}}
+  <button type="button" class="wohnung-tab" data-wohnung="{{.WallboxVerlauf.ID}}">{{.WallboxVerlauf.Name}}</button>
+  <button type="button" class="wohnung-tab" data-wohnung="{{.PVVerlauf.ID}}">{{.PVVerlauf.Name}}</button>
 </div>
 
 {{range $i, $card := .Cards}}
@@ -58,8 +72,7 @@
 
     {{range $spalte.Eintraege}}
     {{if .Jahreszeile}}
-    <div class="verlauf-year-sep"><div class="line"></div><div class="label">Jahr {{.Jahreszeile.Jahr}}{{if .Jahreszeile.IstLaufend}} (laufend){{end}}</div><div class="line"></div></div>
-    <div class="verlauf-year-row"><span>Verbrauch {{deEUR .Jahreszeile.VerbrauchSumme}} € · Fixkosten {{deEUR .Jahreszeile.FixkostenSumme}} €</span><span>Gesamt {{deEUR .Jahreszeile.GesamtSumme}} €</span></div>
+    <div class="verlauf-year-row"><span>Jahr {{.Jahreszeile.Jahr}}{{if .Jahreszeile.IstLaufend}} (laufend){{end}}</span><span>Verbrauch {{deEUR .Jahreszeile.VerbrauchSumme}} € · Fixkosten {{deEUR .Jahreszeile.FixkostenSumme}} € · Gesamt {{deEUR .Jahreszeile.GesamtSumme}} €</span></div>
     {{else}}
     {{$m := .Monat}}
     <div class="verlauf-row {{if $m.IsCurrent}}is-current{{end}}">
@@ -81,6 +94,56 @@
       <span class="value-label" data-modus="verbrauch">{{if $m.HasVerbrauch}}{{deEUR $m.VerbrauchGesamt}} €{{end}}</span>
       <span class="value-label" data-modus="fixkosten">{{if $m.HasFixkosten}}{{deEUR $m.FixkostenGesamt}} €{{end}}</span>
       <span class="value-label" data-modus="kombiniert">{{if $m.HasKombiniert}}{{deEUR $m.KombiniertGesamt}} €{{end}}</span>
+    </div>
+    {{end}}
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+{{with $.WallboxVerlauf}}
+<div class="wohnung-panel" data-wohnung="{{.ID}}">
+  <div class="kpi-strip" style="grid-template-columns:1fr">
+    <div class="kpi"><div class="kpi-label">Stromkosten {{$.AnzeigeJahr}}</div><div class="kpi-value">{{deEUR $.WallboxCard.GesamtEUR}} €</div></div>
+  </div>
+  <div class="panel verlauf-panel">
+    <div class="verlauf-legend"><span><i class="cat-strom"></i>Stromkosten</span></div>
+    {{range .Eintraege}}
+    {{if .Jahreszeile}}
+    <div class="verlauf-year-row"><span>Jahr {{.Jahreszeile.Jahr}}{{if .Jahreszeile.IstLaufend}} (laufend){{end}}</span><span>{{deEUR .Jahreszeile.Summe}} €</span></div>
+    {{else}}
+    {{$m := .Monat}}
+    <div class="verlauf-row {{if $m.IsCurrent}}is-current{{end}}">
+      <span class="month-label">{{$m.Label}}</span>
+      <div class="bar-track">
+        {{if $m.HasWert}}<div class="cat-strom" style="width:{{$m.ProzentNeuestesGesamt}}%" data-eur="{{de $m.KWh}} kWh"><span>{{de $m.KWh}} kWh</span></div>{{else}}<span class="verlauf-none">– keine Ablesung</span>{{end}}
+      </div>
+      <span class="value-label">{{if $m.HasWert}}{{deEUR $m.EUR}} €{{end}}</span>
+    </div>
+    {{end}}
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+{{with $.PVVerlauf}}
+<div class="wohnung-panel" data-wohnung="{{.ID}}">
+  <div class="kpi-strip" style="grid-template-columns:1fr">
+    <div class="kpi"><div class="kpi-label">Einspeisevergütung {{$.AnzeigeJahr}}</div><div class="kpi-value" style="color:var(--success)">+{{deEUR $.PVCard.GesamtEUR}} €</div></div>
+  </div>
+  <div class="panel verlauf-panel">
+    <div class="verlauf-legend"><span><i style="background:var(--success)"></i>Einspeisevergütung</span></div>
+    {{range .Eintraege}}
+    {{if .Jahreszeile}}
+    <div class="verlauf-year-row"><span>Jahr {{.Jahreszeile.Jahr}}{{if .Jahreszeile.IstLaufend}} (laufend){{end}}</span><span>+{{deEUR .Jahreszeile.Summe}} €</span></div>
+    {{else}}
+    {{$m := .Monat}}
+    <div class="verlauf-row {{if $m.IsCurrent}}is-current{{end}}">
+      <span class="month-label">{{$m.Label}}</span>
+      <div class="bar-track">
+        {{if $m.HasWert}}<div style="width:{{$m.ProzentNeuestesGesamt}}%;background:var(--success)" data-eur="{{de $m.KWh}} kWh"><span>{{de $m.KWh}} kWh</span></div>{{else}}<span class="verlauf-none">– keine Ablesung</span>{{end}}
+      </div>
+      <span class="value-label">{{if $m.HasWert}}+{{deEUR $m.EUR}} €{{end}}</span>
     </div>
     {{end}}
     {{end}}

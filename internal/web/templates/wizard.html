@@ -1,6 +1,6 @@
 {{define "content"}}
 <h1>{{if .IsEdit}}Ablesung korrigieren{{else}}Ablesung erfassen{{end}}</h1>
-{{template "crumbBack" .}}
+{{template "nav" .}}
 
 {{if .NoPeriods}}
 <form method="post" action="{{.Base}}/ablesungen/import" enctype="multipart/form-data" class="panel" style="margin-bottom:1rem">

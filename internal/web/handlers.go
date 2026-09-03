@@ -236,6 +236,7 @@ func handleIndex(db *sql.DB) http.HandlerFunc {
 // values are checked against - never the Ablesung being edited itself.
 type wizardData struct {
 	Base                string
+	Aktuell             string
 	FormAction          string
 	IsEdit              bool
 	ReadingDate         string
@@ -317,6 +318,7 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 
 		data := wizardData{
 			Base:                      requestBase(r),
+			Aktuell:                   "ablesungen",
 			FormAction:                requestBase(r) + "/ablesungen",
 			ReadingDate:               time.Now().Format("2006-01-02"),
 			Apartments:                apartments,
@@ -382,6 +384,7 @@ func handleEditWizardForm(db *sql.DB) http.HandlerFunc {
 
 		data := wizardData{
 			Base:                      requestBase(r),
+			Aktuell:                   "ablesungen",
 			FormAction:                fmt.Sprintf("%s/ablesungen/%d", requestBase(r), target.ID),
 			IsEdit:                    true,
 			ReadingDate:               target.ReadingDate,
@@ -687,11 +690,13 @@ func handleAblesungenListe(db *sql.DB) http.HandlerFunc {
 
 		data := struct {
 			Base          string
+			Aktuell       string
 			Periods       []periodOverviewRow
 			ImportedCount int
 			Warnings      []string
 		}{
 			Base:          requestBase(r),
+			Aktuell:       "ablesungen",
 			Periods:       periodOverviewRows(periods),
 			ImportedCount: importedCount,
 			Warnings:      r.URL.Query()["warning"],
@@ -1030,6 +1035,7 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 
 		data := struct {
 			Base          string
+			Aktuell       string
 			Period        *store.LatestPeriod
 			AllPeriods    []periodListItem
 			Apartments    []store.Apartment
@@ -1047,6 +1053,7 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 			KostenNote  string
 		}{
 			Base:          requestBase(r),
+			Aktuell:       "ablesungen",
 			Period:        period,
 			AllPeriods:    periodListItems(allPeriods),
 			Apartments:    apartments,
@@ -1102,7 +1109,7 @@ func kategorien(apartmentID int64, k kosten) []kategorie {
 		frischwasserKosten, abwasserKosten, wasserM3 = k.Wasser.KostenFrischwasserW2, k.Wasser.KostenAbwasserW2, k.Wasser.FrischwasserW2
 	}
 	list = append(list,
-		kategorie{"Heizung", heizungKosten, waermeMWh, "MWh", "heizung", 0},
+		kategorie{"Heizung/Warmwasser", heizungKosten, waermeMWh, "MWh", "heizung", 0},
 		kategorie{"Wasser", calc.Round2(frischwasserKosten + abwasserKosten), wasserM3, "m³", "wasser", 0},
 	)
 
@@ -1152,10 +1159,11 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 		if len(allPeriods) == 0 && len(fixkostenEingaben) == 0 {
 			data := struct {
 				Base       string
+				Aktuell    string
 				HasAnyData bool
 				Version    string
 				BuildDate  string
-			}{Base: requestBase(r), Version: version, BuildDate: buildDate}
+			}{Base: requestBase(r), Aktuell: "dashboard", Version: version, BuildDate: buildDate}
 			if err := dashboardTemplate.ExecuteTemplate(w, "layout", data); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
@@ -1190,26 +1198,47 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 		var cards []dashboardJahresCard
 		var verlaufSpalten []dashboardVerlaufSpalte
 		for _, a := range apartments {
-			cards = append(cards, buildJahresCard(a.ID, a.Name, jahr, periodenKosten, fixkostenListe))
+			cards = append(cards, buildJahresCard(a.ID, a.Name, a.QM, jahr, periodenKosten, fixkostenListe))
 			verlaufSpalten = append(verlaufSpalten, buildDashboardVerlauf(a.ID, a.Name, periodenKosten, fixkostenListe))
 		}
 
+		// Wallboxen/PV-Anlage (Ticket #67) - whole-house, rein informative
+		// Entities neben den Wohnung-Tabs, analog zum Prototyp
+		// (docs/prototypes/fixkosten-prototype.html): eigene Jahressumme +
+		// Monatsverlauf, kein Fixkosten-Anteil, keine Wohnungs-Zuteilung.
+		wallboxCard := buildSimpleJahresCard("Wallboxen", false, jahr, periodenKosten, wallboxWert)
+		wallboxVerlauf := buildSimpleVerlauf("wallbox", "Wallboxen", false, periodenKosten, wallboxWert)
+		pvCard := buildSimpleJahresCard("PV-Anlage", true, jahr, periodenKosten, einspeisungWert)
+		pvVerlauf := buildSimpleVerlauf("pv", "PV-Anlage", true, periodenKosten, einspeisungWert)
+
 		data := struct {
-			Base           string
-			HasAnyData     bool
-			AnzeigeJahr    int
-			Cards          []dashboardJahresCard
-			VerlaufSpalten []dashboardVerlaufSpalte
-			Version        string
-			BuildDate      string
+			Base               string
+			Aktuell            string
+			HasAnyData         bool
+			AnzeigeJahr        int
+			AnzeigeJahrLaufend bool
+			Cards              []dashboardJahresCard
+			VerlaufSpalten     []dashboardVerlaufSpalte
+			WallboxCard        dashboardSimpleCard
+			WallboxVerlauf     dashboardSimpleSpalte
+			PVCard             dashboardSimpleCard
+			PVVerlauf          dashboardSimpleSpalte
+			Version            string
+			BuildDate          string
 		}{
-			Base:           requestBase(r),
-			HasAnyData:     true,
-			AnzeigeJahr:    jahr,
-			Cards:          cards,
-			VerlaufSpalten: verlaufSpalten,
-			Version:        version,
-			BuildDate:      buildDate,
+			Base:               requestBase(r),
+			Aktuell:            "dashboard",
+			HasAnyData:         true,
+			AnzeigeJahr:        jahr,
+			AnzeigeJahrLaufend: jahr == time.Now().Year(),
+			Cards:              cards,
+			VerlaufSpalten:     verlaufSpalten,
+			WallboxCard:        wallboxCard,
+			WallboxVerlauf:     wallboxVerlauf,
+			PVCard:             pvCard,
+			PVVerlauf:          pvVerlauf,
+			Version:            version,
+			BuildDate:          buildDate,
 		}
 
 		if err := dashboardTemplate.ExecuteTemplate(w, "layout", data); err != nil {
@@ -1223,7 +1252,7 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 // any period's data.
 func handleBerechnungslogik() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		data := struct{ Base string }{Base: requestBase(r)}
+		data := struct{ Base, Aktuell string }{Base: requestBase(r), Aktuell: "berechnungslogik"}
 		if err := berechnungslogikTemplate.ExecuteTemplate(w, "layout", data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -1254,12 +1283,14 @@ func handleStammdatenForm(db *sql.DB) http.HandlerFunc {
 
 		data := struct {
 			Base         string
+			Aktuell      string
 			Apartments   []store.Apartment
 			LogikOptions []logikOption
 			JahrBloecke  []stammdatenJahrBlock
 			NextJahr     int
 		}{
 			Base:         requestBase(r),
+			Aktuell:      "stammdaten",
 			Apartments:   apartments,
 			LogikOptions: logikOptions,
 			JahrBloecke:  jahrBloecke,

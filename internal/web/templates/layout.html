@@ -66,6 +66,7 @@
   .grid-2 { grid-template-columns: 1fr 1fr; }
   .grid-3 { grid-template-columns: repeat(3, 1fr); }
   .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  .jahressummen-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
   button, a.button { display: inline-block; border-radius: 6px; padding: .6rem 1.1rem; font-size: .9rem; cursor: pointer; text-decoration: none; line-height: 1.2; }
   button.primary, a.button.primary { background: var(--accent); color: white; border: none; }
   button.secondary, a.button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
@@ -104,13 +105,13 @@
 
   .kpi-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.25rem; }
   .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; text-align: center; }
-  .kpi-label { font-size: .75rem; color: var(--muted); }
+  .kpi-label { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
   .kpi-value { font-size: 1.3rem; font-weight: 700; margin-top: .25rem; }
 
   .verlauf-legend { display: flex; align-items: center; gap: 1.25rem; font-size: .75rem; color: var(--muted); margin-bottom: .9rem; flex-wrap: wrap; }
   .verlauf-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .35rem; vertical-align: middle; }
   .mode-toggle { margin-left: auto; display: flex; gap: .3rem; flex-wrap: wrap; }
-  .mode-toggle button { padding: .3rem .6rem; font-size: .72rem; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; }
+  .mode-toggle button { padding: .25rem .6rem; font-size: .72rem; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; }
   .mode-toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
   [data-modus] { display: none; } /* JS setzt die aktive Modus-Variante wieder sichtbar (leerer inline style, siehe applyModus) - jede Regel unten fuer ein data-modus-Element muss ihr eigenes display deklarieren, sonst gewinnt diese Regel per Cascade weiter */
   .verbrauch-liste { display: block; font-size: .72rem; color: var(--muted); }
@@ -125,9 +126,6 @@
   .bar-track > div.fix-seg { border-left: 2px dashed rgba(255,255,255,.6); }
   .verlauf-row.is-current .bar-track { box-shadow: 0 0 0 2px var(--accent); }
   .verlauf-none { display: block; flex: 1; font-size: .72rem; color: var(--muted); }
-  .verlauf-year-sep { display: flex; align-items: center; gap: .6rem; margin: .6rem 0 .35rem; }
-  .verlauf-year-sep .line { flex: 1; height: 1px; background: var(--border); }
-  .verlauf-year-sep .label { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; flex-shrink: 0; }
   .verlauf-year-row { display: flex; justify-content: space-between; align-items: center; background: var(--accent-soft); border-radius: 6px; padding: .5rem .7rem; margin-bottom: .5rem; font-weight: 700; font-size: .85rem; color: var(--accent); gap: 1rem; }
 
   .footer-version { position: fixed; bottom: .85rem; right: 1rem; display: flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .78rem; z-index: 40; }
@@ -208,9 +206,10 @@
 </html>
 {{end}}
 
-{{/* crumb/crumbBack are the top nav every page shows right under its <h1>
-     (Prototyp-Vorbild) - crumb on the Dashboard itself (no self-link),
-     crumbBack everywhere else ("← Zurück zum Dashboard" instead of a bare
-     "Dashboard" link). */}}
-{{define "crumb"}}<p class="muted"><a href="{{.Base}}/ablesungen">Ablesungen</a> · <a href="{{.Base}}/fixkosten">Fixkosten</a> · <a href="{{.Base}}/stammdaten">Stammdaten</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></p>{{end}}
-{{define "crumbBack"}}<p class="muted"><a href="{{.Base}}/dashboard">&larr; Zurück zum Dashboard</a> · <a href="{{.Base}}/ablesungen">Ablesungen</a> · <a href="{{.Base}}/fixkosten">Fixkosten</a> · <a href="{{.Base}}/stammdaten">Stammdaten</a> · <a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a></p>{{end}}
+{{/* nav is the top nav every page shows right under its <h1> (Prototyp-
+     Vorbild) - the current page's own item is bold, not a self-link, so
+     it's always visible which page you're on (unlike the old crumb/
+     crumbBack, where every page showed the same 4 links regardless of
+     where you were). .Aktuell is one of "dashboard"/"ablesungen"/
+     "fixkosten"/"stammdaten"/"berechnungslogik", set by each handler. */}}
+{{define "nav"}}<p class="muted">{{if eq .Aktuell "dashboard"}}<strong>Dashboard</strong>{{else}}<a href="{{.Base}}/dashboard">Dashboard</a>{{end}} · {{if eq .Aktuell "ablesungen"}}<strong>Ablesungen</strong>{{else}}<a href="{{.Base}}/ablesungen">Ablesungen</a>{{end}} · {{if eq .Aktuell "fixkosten"}}<strong>Fixkosten</strong>{{else}}<a href="{{.Base}}/fixkosten">Fixkosten</a>{{end}} · {{if eq .Aktuell "stammdaten"}}<strong>Stammdaten</strong>{{else}}<a href="{{.Base}}/stammdaten">Stammdaten</a>{{end}} · {{if eq .Aktuell "berechnungslogik"}}<strong>Wie wird gerechnet?</strong>{{else}}<a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a>{{end}}</p>{{end}}
