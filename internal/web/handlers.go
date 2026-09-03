@@ -149,7 +149,7 @@ var meterDisplays = []meterDisplay{
 // and import (Ticket #54) - reading_date, every meter key (Zählerstände,
 // not Verbrauch), the period-level prices/Gewichtung, then Personen per
 // apartment (fixed ids 1/2, see store's seed()). No qm_1/qm_2 columns
-// (Issue #61 moved Wohnungsgröße off the Ablesung onto /stammdaten - hard
+// (Issue #61 moved Wohnfläche off the Ablesung onto /stammdaten - hard
 // cut, no backward compatibility with the old format).
 var csvHeader = append(append([]string{"reading_date"}, store.MeterKeys...),
 	"strompreis", "frischwasser_preis", "abwasser_preis", "heizung_gewichtung", "einspeisung_preis",
@@ -160,6 +160,17 @@ var csvHeader = append(append([]string{"reading_date"}, store.MeterKeys...),
 // ("25,33") to float64. CSV cells always use this convention (Ticket #54).
 func parseDecimalDE(s string) (float64, error) {
 	return strconv.ParseFloat(strings.ReplaceAll(strings.TrimSpace(s), ",", "."), 64)
+}
+
+// parseFormFloat reads and parses one form field, returning a German
+// user-facing error naming fieldLabel/apartmentID on failure - shared by
+// /stammdaten's per-apartment Wohnfläche/Flurstücksgröße fields.
+func parseFormFloat(r *http.Request, name, fieldLabel, apartmentID string) (float64, error) {
+	v, err := strconv.ParseFloat(r.FormValue(name), 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s for apartment %s", fieldLabel, apartmentID)
+	}
+	return v, nil
 }
 
 // NewMux wires up the wizard and read routes.
@@ -1351,7 +1362,7 @@ func handleBerechnungslogik() http.HandlerFunc {
 }
 
 // handleStammdatenForm serves the /stammdaten page (Issue #61): each
-// apartment's current Wohnungsgröße/Flurstücksgröße, editable as live
+// apartment's current Wohnfläche/Flurstücksgröße, editable as live
 // values - not historized per Ablesung like the rest of the monthly form.
 func handleStammdatenForm(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1375,7 +1386,7 @@ func handleStammdatenForm(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// handleUpdateStammdaten saves every apartment's Wohnungsgröße/
+// handleUpdateStammdaten saves every apartment's Wohnfläche/
 // Flurstücksgröße from the /stammdaten form.
 func handleUpdateStammdaten(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1393,14 +1404,14 @@ func handleUpdateStammdaten(db *sql.DB) http.HandlerFunc {
 		in := make(map[int64]store.StammdatenInput, len(apartments))
 		for _, a := range apartments {
 			idStr := strconv.FormatInt(a.ID, 10)
-			qm, err := strconv.ParseFloat(r.FormValue("qm_"+idStr), 64)
+			qm, err := parseFormFloat(r, "qm_"+idStr, "Wohnfläche", idStr)
 			if err != nil {
-				http.Error(w, fmt.Sprintf("invalid Wohnfläche for apartment %s", idStr), http.StatusBadRequest)
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			flurstueckGroesse, err := strconv.ParseFloat(r.FormValue("flurstueck_groesse_"+idStr), 64)
+			flurstueckGroesse, err := parseFormFloat(r, "flurstueck_groesse_"+idStr, "Flurstücksgröße", idStr)
 			if err != nil {
-				http.Error(w, fmt.Sprintf("invalid Flurstücksgröße for apartment %s", idStr), http.StatusBadRequest)
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 			in[a.ID] = store.StammdatenInput{QM: qm, FlurstueckGroesse: flurstueckGroesse}

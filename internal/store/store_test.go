@@ -770,7 +770,7 @@ func TestEnsureApartmentsFlurstueckGroesseColumn(t *testing.T) {
 }
 
 // TestUpdateStammdaten_Roundtrip verifies the /stammdaten page's write path
-// (Issue #61): both apartments' Wohnungsgröße/Flurstücksgröße persist and
+// (Issue #61): both apartments' Wohnfläche/Flurstücksgröße persist and
 // read back via Apartments(), and a partial input only touches the
 // apartments it names.
 func TestUpdateStammdaten_Roundtrip(t *testing.T) {
