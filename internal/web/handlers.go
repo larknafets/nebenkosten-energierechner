@@ -1143,13 +1143,13 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 			http.Error(w, "all periods: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		fixkostenEintraege, err := store.AllFixkostenEintraege(db)
+		fixkostenEingaben, err := store.AllFixkostenEingaben(db)
 		if err != nil {
-			http.Error(w, "fixkosten eintraege: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "fixkosten eingaben: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		if len(allPeriods) == 0 && len(fixkostenEintraege) == 0 {
+		if len(allPeriods) == 0 && len(fixkostenEingaben) == 0 {
 			data := struct {
 				Base       string
 				HasAnyData bool
@@ -1185,7 +1185,7 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 			return
 		}
 
-		jahr := anzeigeJahr(allPeriods, fixkostenEintraege)
+		jahr := anzeigeJahr(allPeriods, fixkostenEingaben)
 
 		var cards []dashboardJahresCard
 		var verlaufSpalten []dashboardVerlaufSpalte

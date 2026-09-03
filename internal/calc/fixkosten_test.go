@@ -10,11 +10,11 @@ import (
 	"github.com/larknafets/nebenkostenrechner/internal/store"
 )
 
-func mustCreateFixkostenEintrag(t *testing.T, db *sql.DB, monat string, personen map[int64]int64, werte map[int64]float64) int64 {
+func mustCreateFixkostenEingabe(t *testing.T, db *sql.DB, monat string, personen map[int64]int64, werte map[int64]float64) int64 {
 	t.Helper()
-	id, err := store.CreateFixkostenEintrag(db, store.FixkostenInput{Monat: monat, Personen: personen, Werte: werte})
+	id, err := store.CreateFixkostenEingabe(db, store.FixkostenInput{Monat: monat, Personen: personen, Werte: werte})
 	if err != nil {
-		t.Fatalf("CreateFixkostenEintrag %s: %v", monat, err)
+		t.Fatalf("CreateFixkostenEingabe %s: %v", monat, err)
 	}
 	return id
 }
@@ -37,7 +37,7 @@ func TestFixkosten_LogikWohneinheit_5050(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertKostenpositionenJahr: %v", err)
 	}
-	id := mustCreateFixkostenEintrag(t, db, "2026-09-01", map[int64]int64{1: 2, 2: 1}, nil)
+	id := mustCreateFixkostenEingabe(t, db, "2026-09-01", map[int64]int64{1: 2, 2: 1}, nil)
 
 	got, err := calc.Fixkosten(db, id)
 	if err != nil {
@@ -65,7 +65,7 @@ func TestFixkosten_LogikFlurstueck_Ratio(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertKostenpositionenJahr: %v", err)
 	}
-	id := mustCreateFixkostenEintrag(t, db, "2026-09-01", map[int64]int64{1: 1, 2: 1}, nil)
+	id := mustCreateFixkostenEingabe(t, db, "2026-09-01", map[int64]int64{1: 1, 2: 1}, nil)
 
 	got, err := calc.Fixkosten(db, id)
 	if err != nil {
@@ -93,7 +93,7 @@ func TestFixkosten_LogikQM_Ratio(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertKostenpositionenJahr: %v", err)
 	}
-	id := mustCreateFixkostenEintrag(t, db, "2026-09-01", map[int64]int64{1: 1, 2: 1}, nil)
+	id := mustCreateFixkostenEingabe(t, db, "2026-09-01", map[int64]int64{1: 1, 2: 1}, nil)
 
 	got, err := calc.Fixkosten(db, id)
 	if err != nil {
@@ -115,7 +115,7 @@ func TestFixkosten_LogikPersonen_Ratio(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertKostenpositionenJahr: %v", err)
 	}
-	id := mustCreateFixkostenEintrag(t, db, "2026-09-01", map[int64]int64{1: 3, 2: 1}, nil)
+	id := mustCreateFixkostenEingabe(t, db, "2026-09-01", map[int64]int64{1: 3, 2: 1}, nil)
 
 	got, err := calc.Fixkosten(db, id)
 	if err != nil {
@@ -141,7 +141,7 @@ func TestFixkosten_LogikPersonen_KeinePersonen_FaelltAufHaelftigeVerteilungZurue
 	}); err != nil {
 		t.Fatalf("UpsertKostenpositionenJahr: %v", err)
 	}
-	id := mustCreateFixkostenEintrag(t, db, "2026-09-01", map[int64]int64{1: 0, 2: 0}, nil)
+	id := mustCreateFixkostenEingabe(t, db, "2026-09-01", map[int64]int64{1: 0, 2: 0}, nil)
 
 	got, err := calc.Fixkosten(db, id)
 	if err != nil {
@@ -160,7 +160,7 @@ func TestFixkosten_TypMonatlich_ExpliziterWert(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertKostenpositionenJahr: %v", err)
 	}
-	id := mustCreateFixkostenEintrag(t, db, "2026-09-01", map[int64]int64{1: 1, 2: 1}, map[int64]float64{13: 39.90})
+	id := mustCreateFixkostenEingabe(t, db, "2026-09-01", map[int64]int64{1: 1, 2: 1}, map[int64]float64{13: 39.90})
 
 	got, err := calc.Fixkosten(db, id)
 	if err != nil {
@@ -178,7 +178,7 @@ func TestFixkosten_TypMonatlich_ExpliziterWert(t *testing.T) {
 // TestFixkosten_TypMonatlich_FallbackNachTypwechsel deckt den in der Spec
 // explizit geforderten Fall ab: eine Position war 2025 jaehrlich, wechselt
 // 2026 auf monatlich, aber fuer diesen konkreten Monat existiert (noch)
-// kein expliziter fixkosten_werte-Eintrag - Fallback ist der letzte bekannte
+// kein expliziter fixkosten_werte-Eingabe - Fallback ist der letzte bekannte
 // Jahreswert/12, nicht 0.
 func TestFixkosten_TypMonatlich_FallbackNachTypwechsel(t *testing.T) {
 	db := openTestDB(t)
@@ -192,7 +192,7 @@ func TestFixkosten_TypMonatlich_FallbackNachTypwechsel(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertKostenpositionenJahr(2026): %v", err)
 	}
-	id := mustCreateFixkostenEintrag(t, db, "2026-03-01", map[int64]int64{1: 1, 2: 1}, nil)
+	id := mustCreateFixkostenEingabe(t, db, "2026-03-01", map[int64]int64{1: 1, 2: 1}, nil)
 
 	got, err := calc.Fixkosten(db, id)
 	if err != nil {
@@ -211,7 +211,7 @@ func TestFixkosten_TypMonatlich_FallbackOhneHistorie_Null(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertKostenpositionenJahr: %v", err)
 	}
-	id := mustCreateFixkostenEintrag(t, db, "2026-03-01", map[int64]int64{1: 1, 2: 1}, nil)
+	id := mustCreateFixkostenEingabe(t, db, "2026-03-01", map[int64]int64{1: 1, 2: 1}, nil)
 
 	got, err := calc.Fixkosten(db, id)
 	if err != nil {
@@ -240,7 +240,7 @@ func TestFixkosten_SummenKonsistenz(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertKostenpositionenJahr: %v", err)
 	}
-	id := mustCreateFixkostenEintrag(t, db, "2026-09-01", map[int64]int64{1: 3, 2: 1}, map[int64]float64{13: 39.90})
+	id := mustCreateFixkostenEingabe(t, db, "2026-09-01", map[int64]int64{1: 3, 2: 1}, map[int64]float64{13: 39.90})
 
 	got, err := calc.Fixkosten(db, id)
 	if err != nil {
@@ -260,7 +260,7 @@ func TestFixkosten_SummenKonsistenz(t *testing.T) {
 
 func TestFixkosten_KeinJahrAngelegt_Error(t *testing.T) {
 	db := openTestDB(t)
-	id := mustCreateFixkostenEintrag(t, db, "2026-09-01", map[int64]int64{1: 1, 2: 1}, nil)
+	id := mustCreateFixkostenEingabe(t, db, "2026-09-01", map[int64]int64{1: 1, 2: 1}, nil)
 
 	_, err := calc.Fixkosten(db, id)
 	if !errors.Is(err, store.ErrNoKostenpositionenJahr) {

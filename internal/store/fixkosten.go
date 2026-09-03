@@ -4,7 +4,19 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 )
+
+// JahrFromMonat parses a Fixkosten-Eingabe's Monat ("YYYY-MM-01") into its
+// calendar year - shared by calc.Fixkosten and the web layer so both read
+// the same "YYYY-MM-01" convention through one place.
+func JahrFromMonat(monat string) (int, error) {
+	t, err := time.Parse("2006-01-02", monat)
+	if err != nil {
+		return 0, fmt.Errorf("invalid monat %q: %w", monat, err)
+	}
+	return t.Year(), nil
+}
 
 // Logik values for kostenpositionen_jahre.logik - the 4 allocation rules a
 // Kostenposition can be split between Wohnung 1/2 by (Issue #60).
@@ -177,9 +189,9 @@ type FixkostenInput struct {
 	Werte    map[int64]float64 // kostenposition id -> expliziter Monatswert, only for that Jahr's monatlich-typed Positionen
 }
 
-// ErrFixkostenEintragNotFound is returned by UpdateFixkostenEintrag and
-// DeleteFixkostenEintrag when the given id doesn't exist.
-var ErrFixkostenEintragNotFound = errors.New("fixkosten eintrag not found")
+// ErrFixkostenEingabeNotFound is returned by UpdateFixkostenEingabe and
+// DeleteFixkostenEingabe when the given id doesn't exist.
+var ErrFixkostenEingabeNotFound = errors.New("fixkosten eingabe not found")
 
 // ErrNoKostenpositionenJahr is returned by calc.Fixkosten when the given
 // Fixkosten-Eingabe's Jahr has no Kostenpositionen-Jahresdaten yet (the
@@ -188,22 +200,22 @@ var ErrFixkostenEintragNotFound = errors.New("fixkosten eintrag not found")
 var ErrNoKostenpositionenJahr = errors.New("no kostenpositionen jahresdaten for this jahr")
 
 // insertFixkostenTx inserts one Fixkosten-Eingabe with its Werte/Personen.
-// Shared by CreateFixkostenEintrag and (a future bulk-insert, should one
+// Shared by CreateFixkostenEingabe and (a future bulk-insert, should one
 // ever be needed) so the write shape stays in one place.
-func insertFixkostenTx(tx *sql.Tx, in FixkostenInput) (eintragID int64, err error) {
-	res, err := tx.Exec(`INSERT INTO fixkosten_eintraege (monat) VALUES (?)`, in.Monat)
+func insertFixkostenTx(tx *sql.Tx, in FixkostenInput) (eingabeID int64, err error) {
+	res, err := tx.Exec(`INSERT INTO fixkosten_eingaben (monat) VALUES (?)`, in.Monat)
 	if err != nil {
-		return 0, fmt.Errorf("insert fixkosten eintrag: %w", err)
+		return 0, fmt.Errorf("insert fixkosten eingabe: %w", err)
 	}
-	eintragID, err = res.LastInsertId()
+	eingabeID, err = res.LastInsertId()
 	if err != nil {
-		return 0, fmt.Errorf("fixkosten eintrag id: %w", err)
+		return 0, fmt.Errorf("fixkosten eingabe id: %w", err)
 	}
 
 	for kostenpositionID, wert := range in.Werte {
 		if _, err := tx.Exec(
-			`INSERT INTO fixkosten_werte (fixkosten_eintrag_id, kostenposition_id, wert) VALUES (?, ?, ?)`,
-			eintragID, kostenpositionID, wert,
+			`INSERT INTO fixkosten_werte (fixkosten_eingabe_id, kostenposition_id, wert) VALUES (?, ?, ?)`,
+			eingabeID, kostenpositionID, wert,
 		); err != nil {
 			return 0, fmt.Errorf("insert fixkosten wert for kostenposition %d: %w", kostenpositionID, err)
 		}
@@ -211,26 +223,26 @@ func insertFixkostenTx(tx *sql.Tx, in FixkostenInput) (eintragID int64, err erro
 
 	for apartmentID, personen := range in.Personen {
 		if _, err := tx.Exec(
-			`INSERT INTO fixkosten_personen (fixkosten_eintrag_id, apartment_id, personen) VALUES (?, ?, ?)`,
-			eintragID, apartmentID, personen,
+			`INSERT INTO fixkosten_personen (fixkosten_eingabe_id, apartment_id, personen) VALUES (?, ?, ?)`,
+			eingabeID, apartmentID, personen,
 		); err != nil {
 			return 0, fmt.Errorf("insert fixkosten personen for apartment %d: %w", apartmentID, err)
 		}
 	}
 
-	return eintragID, nil
+	return eingabeID, nil
 }
 
-// CreateFixkostenEintrag inserts a new Fixkosten-Eingabe in its own
+// CreateFixkostenEingabe inserts a new Fixkosten-Eingabe in its own
 // transaction.
-func CreateFixkostenEintrag(db *sql.DB, in FixkostenInput) (eintragID int64, err error) {
+func CreateFixkostenEingabe(db *sql.DB, in FixkostenInput) (eingabeID int64, err error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return 0, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	eintragID, err = insertFixkostenTx(tx, in)
+	eingabeID, err = insertFixkostenTx(tx, in)
 	if err != nil {
 		return 0, err
 	}
@@ -238,36 +250,36 @@ func CreateFixkostenEintrag(db *sql.DB, in FixkostenInput) (eintragID int64, err
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("commit tx: %w", err)
 	}
-	return eintragID, nil
+	return eingabeID, nil
 }
 
-// UpdateFixkostenEintrag overwrites an existing Fixkosten-Eingabe's Monat/
+// UpdateFixkostenEingabe overwrites an existing Fixkosten-Eingabe's Monat/
 // Werte/Personen in place - no new row, no history (same "korrigieren"
 // convention as UpdatePeriod). Unlike Ablesungen, Fixkosten-Monatswerte
 // don't depend on a chronological Vorperiode (no Verbrauch/Diff involved),
 // so there's no neighbor-date reordering constraint to enforce here.
-func UpdateFixkostenEintrag(db *sql.DB, eintragID int64, in FixkostenInput) error {
+func UpdateFixkostenEingabe(db *sql.DB, eingabeID int64, in FixkostenInput) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`UPDATE fixkosten_eintraege SET monat = ? WHERE id = ?`, in.Monat, eintragID)
+	res, err := tx.Exec(`UPDATE fixkosten_eingaben SET monat = ? WHERE id = ?`, in.Monat, eingabeID)
 	if err != nil {
-		return fmt.Errorf("update fixkosten eintrag: %w", err)
+		return fmt.Errorf("update fixkosten eingabe: %w", err)
 	}
 	if n, err := res.RowsAffected(); err != nil {
-		return fmt.Errorf("update fixkosten eintrag rows affected: %w", err)
+		return fmt.Errorf("update fixkosten eingabe rows affected: %w", err)
 	} else if n == 0 {
-		return fmt.Errorf("%w: eintrag %d", ErrFixkostenEintragNotFound, eintragID)
+		return fmt.Errorf("%w: eingabe %d", ErrFixkostenEingabeNotFound, eingabeID)
 	}
 
 	for kostenpositionID, wert := range in.Werte {
 		if _, err := tx.Exec(
-			`INSERT INTO fixkosten_werte (fixkosten_eintrag_id, kostenposition_id, wert) VALUES (?, ?, ?)
-			 ON CONFLICT(fixkosten_eintrag_id, kostenposition_id) DO UPDATE SET wert = excluded.wert`,
-			eintragID, kostenpositionID, wert,
+			`INSERT INTO fixkosten_werte (fixkosten_eingabe_id, kostenposition_id, wert) VALUES (?, ?, ?)
+			 ON CONFLICT(fixkosten_eingabe_id, kostenposition_id) DO UPDATE SET wert = excluded.wert`,
+			eingabeID, kostenpositionID, wert,
 		); err != nil {
 			return fmt.Errorf("update fixkosten wert for kostenposition %d: %w", kostenpositionID, err)
 		}
@@ -275,9 +287,9 @@ func UpdateFixkostenEintrag(db *sql.DB, eintragID int64, in FixkostenInput) erro
 
 	for apartmentID, personen := range in.Personen {
 		if _, err := tx.Exec(
-			`INSERT INTO fixkosten_personen (fixkosten_eintrag_id, apartment_id, personen) VALUES (?, ?, ?)
-			 ON CONFLICT(fixkosten_eintrag_id, apartment_id) DO UPDATE SET personen = excluded.personen`,
-			eintragID, apartmentID, personen,
+			`INSERT INTO fixkosten_personen (fixkosten_eingabe_id, apartment_id, personen) VALUES (?, ?, ?)
+			 ON CONFLICT(fixkosten_eingabe_id, apartment_id) DO UPDATE SET personen = excluded.personen`,
+			eingabeID, apartmentID, personen,
 		); err != nil {
 			return fmt.Errorf("update fixkosten personen for apartment %d: %w", apartmentID, err)
 		}
@@ -286,86 +298,86 @@ func UpdateFixkostenEintrag(db *sql.DB, eintragID int64, in FixkostenInput) erro
 	return tx.Commit()
 }
 
-// DeleteFixkostenEintrag removes a Fixkosten-Eingabe together with its
+// DeleteFixkostenEingabe removes a Fixkosten-Eingabe together with its
 // Werte/Personen in one transaction.
-func DeleteFixkostenEintrag(db *sql.DB, eintragID int64) error {
+func DeleteFixkostenEingabe(db *sql.DB, eingabeID int64) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`DELETE FROM fixkosten_werte WHERE fixkosten_eintrag_id = ?`, eintragID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM fixkosten_werte WHERE fixkosten_eingabe_id = ?`, eingabeID); err != nil {
 		return fmt.Errorf("delete fixkosten werte: %w", err)
 	}
-	if _, err := tx.Exec(`DELETE FROM fixkosten_personen WHERE fixkosten_eintrag_id = ?`, eintragID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM fixkosten_personen WHERE fixkosten_eingabe_id = ?`, eingabeID); err != nil {
 		return fmt.Errorf("delete fixkosten personen: %w", err)
 	}
 
-	res, err := tx.Exec(`DELETE FROM fixkosten_eintraege WHERE id = ?`, eintragID)
+	res, err := tx.Exec(`DELETE FROM fixkosten_eingaben WHERE id = ?`, eingabeID)
 	if err != nil {
-		return fmt.Errorf("delete fixkosten eintrag: %w", err)
+		return fmt.Errorf("delete fixkosten eingabe: %w", err)
 	}
 	if n, err := res.RowsAffected(); err != nil {
-		return fmt.Errorf("delete fixkosten eintrag rows affected: %w", err)
+		return fmt.Errorf("delete fixkosten eingabe rows affected: %w", err)
 	} else if n == 0 {
-		return fmt.Errorf("%w: eintrag %d", ErrFixkostenEintragNotFound, eintragID)
+		return fmt.Errorf("%w: eingabe %d", ErrFixkostenEingabeNotFound, eingabeID)
 	}
 
 	return tx.Commit()
 }
 
-// FixkostenEintragSummary identifies one Fixkosten-Eingabe without its
+// FixkostenEingabeSummary identifies one Fixkosten-Eingabe without its
 // Werte/Personen, for the /fixkosten Übersicht.
-type FixkostenEintragSummary struct {
+type FixkostenEingabeSummary struct {
 	ID    int64
 	Monat string
 }
 
-// AllFixkostenEintraege returns every Fixkosten-Eingabe (newest first),
+// AllFixkostenEingaben returns every Fixkosten-Eingabe (newest first),
 // without Werte/Personen.
-func AllFixkostenEintraege(db *sql.DB) ([]FixkostenEintragSummary, error) {
-	rows, err := db.Query(`SELECT id, monat FROM fixkosten_eintraege ORDER BY monat DESC, id DESC`)
+func AllFixkostenEingaben(db *sql.DB) ([]FixkostenEingabeSummary, error) {
+	rows, err := db.Query(`SELECT id, monat FROM fixkosten_eingaben ORDER BY monat DESC, id DESC`)
 	if err != nil {
-		return nil, fmt.Errorf("query fixkosten eintraege: %w", err)
+		return nil, fmt.Errorf("query fixkosten eingaben: %w", err)
 	}
 	defer rows.Close()
 
-	var out []FixkostenEintragSummary
+	var out []FixkostenEingabeSummary
 	for rows.Next() {
-		var f FixkostenEintragSummary
+		var f FixkostenEingabeSummary
 		if err := rows.Scan(&f.ID, &f.Monat); err != nil {
-			return nil, fmt.Errorf("scan fixkosten eintrag: %w", err)
+			return nil, fmt.Errorf("scan fixkosten eingabe: %w", err)
 		}
 		out = append(out, f)
 	}
 	return out, rows.Err()
 }
 
-// FixkostenEintragDetails is one Fixkosten-Eingabe together with its
+// FixkostenEingabeDetails is one Fixkosten-Eingabe together with its
 // Werte/Personen.
-type FixkostenEintragDetails struct {
+type FixkostenEingabeDetails struct {
 	ID       int64
 	Monat    string
 	Personen map[int64]int64   // apartment id -> Personenzahl
 	Werte    map[int64]float64 // kostenposition id -> expliziter Monatswert
 }
 
-// GetFixkostenEintragDetails returns the given Fixkosten-Eingabe with its
+// GetFixkostenEingabeDetails returns the given Fixkosten-Eingabe with its
 // Werte/Personen, or nil if it doesn't exist.
-func GetFixkostenEintragDetails(db *sql.DB, eintragID int64) (*FixkostenEintragDetails, error) {
-	f := FixkostenEintragDetails{
+func GetFixkostenEingabeDetails(db *sql.DB, eingabeID int64) (*FixkostenEingabeDetails, error) {
+	f := FixkostenEingabeDetails{
 		Personen: map[int64]int64{},
 		Werte:    map[int64]float64{},
 	}
-	if err := db.QueryRow(`SELECT id, monat FROM fixkosten_eintraege WHERE id = ?`, eintragID).Scan(&f.ID, &f.Monat); err != nil {
+	if err := db.QueryRow(`SELECT id, monat FROM fixkosten_eingaben WHERE id = ?`, eingabeID).Scan(&f.ID, &f.Monat); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("query fixkosten eintrag %d: %w", eintragID, err)
+		return nil, fmt.Errorf("query fixkosten eingabe %d: %w", eingabeID, err)
 	}
 
-	werteRows, err := db.Query(`SELECT kostenposition_id, wert FROM fixkosten_werte WHERE fixkosten_eintrag_id = ?`, eintragID)
+	werteRows, err := db.Query(`SELECT kostenposition_id, wert FROM fixkosten_werte WHERE fixkosten_eingabe_id = ?`, eingabeID)
 	if err != nil {
 		return nil, fmt.Errorf("query fixkosten werte: %w", err)
 	}
@@ -382,7 +394,7 @@ func GetFixkostenEintragDetails(db *sql.DB, eintragID int64) (*FixkostenEintragD
 		return nil, err
 	}
 
-	personenRows, err := db.Query(`SELECT apartment_id, personen FROM fixkosten_personen WHERE fixkosten_eintrag_id = ?`, eintragID)
+	personenRows, err := db.Query(`SELECT apartment_id, personen FROM fixkosten_personen WHERE fixkosten_eingabe_id = ?`, eingabeID)
 	if err != nil {
 		return nil, fmt.Errorf("query fixkosten personen: %w", err)
 	}
@@ -401,17 +413,17 @@ func GetFixkostenEintragDetails(db *sql.DB, eintragID int64) (*FixkostenEintragD
 	return &f, nil
 }
 
-// GetLatestFixkostenEintrag returns the most recently dated Fixkosten-
+// GetLatestFixkostenEingabe returns the most recently dated Fixkosten-
 // Eingabe, or nil if none exist yet - the "neu erfassen" form's prefill
 // source (Issue #60 Story 2/9).
-func GetLatestFixkostenEintrag(db *sql.DB) (*FixkostenEintragDetails, error) {
+func GetLatestFixkostenEingabe(db *sql.DB) (*FixkostenEingabeDetails, error) {
 	var id int64
-	err := db.QueryRow(`SELECT id FROM fixkosten_eintraege ORDER BY monat DESC, id DESC LIMIT 1`).Scan(&id)
+	err := db.QueryRow(`SELECT id FROM fixkosten_eingaben ORDER BY monat DESC, id DESC LIMIT 1`).Scan(&id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("query latest fixkosten eintrag id: %w", err)
+		return nil, fmt.Errorf("query latest fixkosten eingabe id: %w", err)
 	}
-	return GetFixkostenEintragDetails(db, id)
+	return GetFixkostenEingabeDetails(db, id)
 }

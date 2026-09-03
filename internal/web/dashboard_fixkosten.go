@@ -49,15 +49,15 @@ type fixkostenKosten struct {
 }
 
 // alleFixkostenKosten returns every computable Fixkosten-Eingabe's Ergebnis,
-// newest first (store.AllFixkostenEintraege's own order).
+// newest first (store.AllFixkostenEingaben's own order).
 func alleFixkostenKosten(db *sql.DB) ([]fixkostenKosten, error) {
-	eintraege, err := store.AllFixkostenEintraege(db)
+	eingaben, err := store.AllFixkostenEingaben(db)
 	if err != nil {
-		return nil, fmt.Errorf("fixkosten eintraege: %w", err)
+		return nil, fmt.Errorf("fixkosten eingaben: %w", err)
 	}
 
-	out := make([]fixkostenKosten, 0, len(eintraege))
-	for _, e := range eintraege {
+	out := make([]fixkostenKosten, 0, len(eingaben))
+	for _, e := range eingaben {
 		erg, err := calc.Fixkosten(db, e.ID)
 		if err != nil {
 			if errors.Is(err, store.ErrNoKostenpositionenJahr) {
@@ -76,11 +76,7 @@ func alleFixkostenKosten(db *sql.DB) ([]fixkostenKosten, error) {
 func fixkostenGruppen(apartmentID int64, erg *calc.FixkostenErgebnis) []dashboardSegment {
 	sums := map[string]float64{}
 	for _, p := range erg.Positionen {
-		wert := p.KostenW1
-		if apartmentID == 2 {
-			wert = p.KostenW2
-		}
-		sums[p.Logik] += wert
+		sums[p.Logik] += p.KostenFor(apartmentID)
 	}
 	logiken := []string{store.LogikWohneinheit, store.LogikFlurstueck, store.LogikQM, store.LogikPersonen}
 	out := make([]dashboardSegment, len(logiken))
@@ -95,15 +91,15 @@ func fixkostenGruppen(apartmentID int64, erg *calc.FixkostenErgebnis) []dashboar
 // Ablesungen and Fixkosten-Eingaben, purely data-driven (not wall-clock
 // time). Falls back to the real current year only when neither series has
 // any data yet (fresh install).
-func anzeigeJahr(allPeriods []store.PeriodSummary, fixkostenEintraege []store.FixkostenEintragSummary) int {
+func anzeigeJahr(allPeriods []store.PeriodSummary, fixkostenEingaben []store.FixkostenEingabeSummary) int {
 	var jahr int
 	if len(allPeriods) > 0 {
 		if t, err := time.Parse("2006-01-02", allPeriods[0].ReadingDate); err == nil {
 			jahr = t.Year()
 		}
 	}
-	if len(fixkostenEintraege) > 0 {
-		if t, err := time.Parse("2006-01-02", fixkostenEintraege[0].Monat); err == nil && t.Year() > jahr {
+	if len(fixkostenEingaben) > 0 {
+		if t, err := time.Parse("2006-01-02", fixkostenEingaben[0].Monat); err == nil && t.Year() > jahr {
 			jahr = t.Year()
 		}
 	}
@@ -155,11 +151,7 @@ func buildJahresCard(apartmentID int64, apartmentName string, jahr int, perioden
 		if err != nil || t.Year() != jahr {
 			continue
 		}
-		if apartmentID == 2 {
-			fix += fk.Erg.KostenW2
-		} else {
-			fix += fk.Erg.KostenW1
-		}
+		fix += fk.Erg.KostenFor(apartmentID)
 	}
 	strom, heizung, wasser, fix = calc.Round2(strom), calc.Round2(heizung), calc.Round2(wasser), calc.Round2(fix)
 	verbrauch := calc.Round2(strom + heizung + wasser)

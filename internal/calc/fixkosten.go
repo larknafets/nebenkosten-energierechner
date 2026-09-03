@@ -3,7 +3,6 @@ package calc
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/larknafets/nebenkostenrechner/internal/store"
 )
@@ -21,6 +20,17 @@ type FixkostenPosition struct {
 	KostenW2   float64
 }
 
+// KostenFor returns this Position's Kosten for the given apartment (1 or 2)
+// - the shared "which Wohnung's field" selector callers building per-
+// apartment breakdowns (Dashboard Fixkosten-Modus, Jahressummen-Karten)
+// would otherwise repeat as their own if/switch.
+func (p FixkostenPosition) KostenFor(apartmentID int64) float64 {
+	if apartmentID == 2 {
+		return p.KostenW2
+	}
+	return p.KostenW1
+}
+
 // FixkostenErgebnis is one Fixkosten-Eingabe's full breakdown - all 14
 // Positionen plus each Wohnung's total (kaufmännisch auf Cent gerundet,
 // Issue #8, same convention as calc.Strom/Heizung/Wasser).
@@ -30,19 +40,28 @@ type FixkostenErgebnis struct {
 	KostenW2   float64
 }
 
-// Fixkosten computes eintragID's full Kostenpositionen-Aufteilung. Returns
+// KostenFor returns this Ergebnis's total Kosten for the given apartment (1
+// or 2), same selector convention as FixkostenPosition.KostenFor.
+func (e FixkostenErgebnis) KostenFor(apartmentID int64) float64 {
+	if apartmentID == 2 {
+		return e.KostenW2
+	}
+	return e.KostenW1
+}
+
+// Fixkosten computes eingabeID's full Kostenpositionen-Aufteilung. Returns
 // store.ErrNoKostenpositionenJahr if the Eingabe's Jahr was never angelegt
 // on /stammdaten.
-func Fixkosten(db *sql.DB, eintragID int64) (*FixkostenErgebnis, error) {
-	eintrag, err := store.GetFixkostenEintragDetails(db, eintragID)
+func Fixkosten(db *sql.DB, eingabeID int64) (*FixkostenErgebnis, error) {
+	eingabe, err := store.GetFixkostenEingabeDetails(db, eingabeID)
 	if err != nil {
-		return nil, fmt.Errorf("fixkosten eintrag: %w", err)
+		return nil, fmt.Errorf("fixkosten eingabe: %w", err)
 	}
-	if eintrag == nil {
-		return nil, fmt.Errorf("fixkosten eintrag %d not found", eintragID)
+	if eingabe == nil {
+		return nil, fmt.Errorf("fixkosten eingabe %d not found", eingabeID)
 	}
 
-	jahr, err := jahrFromMonat(eintrag.Monat)
+	jahr, err := store.JahrFromMonat(eingabe.Monat)
 	if err != nil {
 		return nil, err
 	}
@@ -64,17 +83,10 @@ func Fixkosten(db *sql.DB, eintragID int64) (*FixkostenErgebnis, error) {
 	if err != nil {
 		return nil, fmt.Errorf("apartments: %w", err)
 	}
-	var qmW1, qmW2, flurstueckW1, flurstueckW2 float64
-	for _, a := range apartments {
-		switch a.ID {
-		case 1:
-			qmW1, flurstueckW1 = a.QM, a.FlurstueckGroesse
-		case 2:
-			qmW2, flurstueckW2 = a.QM, a.FlurstueckGroesse
-		}
-	}
-	personenW1 := float64(eintrag.Personen[1])
-	personenW2 := float64(eintrag.Personen[2])
+	qmW1, qmW2 := apartmentValues(apartments, func(a store.Apartment) float64 { return a.QM })
+	flurstueckW1, flurstueckW2 := apartmentValues(apartments, func(a store.Apartment) float64 { return a.FlurstueckGroesse })
+	personenW1 := float64(eingabe.Personen[1])
+	personenW2 := float64(eingabe.Personen[2])
 
 	ergebnis := FixkostenErgebnis{Positionen: make([]FixkostenPosition, 0, len(kostenpositionen))}
 
@@ -88,7 +100,7 @@ func Fixkosten(db *sql.DB, eintragID int64) (*FixkostenErgebnis, error) {
 			continue
 		}
 
-		monatswert, err := monatswertFuer(db, kp.ID, kj, eintrag, jahr)
+		monatswert, err := monatswertFuer(db, kp.ID, kj, eingabe, jahr)
 		if err != nil {
 			return nil, err
 		}
@@ -121,12 +133,12 @@ func Fixkosten(db *sql.DB, eintragID int64) (*FixkostenErgebnis, error) {
 // jaehrlich positions come from Jahreswert/12; monatlich positions use the
 // Eingabe's own explicit Wert, falling back to the last known Jahreswert/12
 // (or 0) when a Typ-Wechsel left this month without one (Issue #60).
-func monatswertFuer(db *sql.DB, kostenpositionID int64, kj store.KostenpositionJahr, eintrag *store.FixkostenEintragDetails, jahr int) (float64, error) {
+func monatswertFuer(db *sql.DB, kostenpositionID int64, kj store.KostenpositionJahr, eingabe *store.FixkostenEingabeDetails, jahr int) (float64, error) {
 	if kj.Typ == store.TypJaehrlich {
 		return kj.Jahreswert / 12, nil
 	}
 
-	if wert, ok := eintrag.Werte[kostenpositionID]; ok {
+	if wert, ok := eingabe.Werte[kostenpositionID]; ok {
 		return wert, nil
 	}
 
@@ -154,14 +166,4 @@ func splitRatio(logik string, qmW1, qmW2, flurstueckW1, flurstueckW2, personenW1
 	default: // store.LogikWohneinheit
 		return 0.5, 0.5
 	}
-}
-
-// jahrFromMonat parses a Fixkosten-Eingabe's Monat ("YYYY-MM-01") into its
-// calendar year.
-func jahrFromMonat(monat string) (int, error) {
-	t, err := time.Parse("2006-01-02", monat)
-	if err != nil {
-		return 0, fmt.Errorf("invalid monat %q: %w", monat, err)
-	}
-	return t.Year(), nil
 }

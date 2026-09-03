@@ -47,11 +47,9 @@
     <button type="submit" class="primary">Speichern</button>
   </div>
 </form>
-{{if .IstNeuestes}}
 <form method="post" action="{{$.Base}}/stammdaten/jahre/{{.Jahr}}/loeschen" onsubmit="return confirm('Jahr {{.Jahr}} wirklich löschen?');" style="margin-top:.5rem">
   <button type="submit" class="danger">Jahr {{.Jahr}} löschen</button>
 </form>
-{{end}}
 {{end}}
 
 <form method="post" action="{{.Base}}/stammdaten/jahre" class="btn-row" style="margin-top:1rem">

@@ -59,15 +59,7 @@ func Heizung(db *sql.DB, periodID int64) (*HeizungErgebnis, error) {
 	if err != nil {
 		return nil, fmt.Errorf("apartments: %w", err)
 	}
-	var qmW1, qmW2 float64
-	for _, a := range apartments {
-		switch a.ID {
-		case 1:
-			qmW1 = a.QM
-		case 2:
-			qmW2 = a.QM
-		}
-	}
+	qmW1, qmW2 := apartmentValues(apartments, func(a store.Apartment) float64 { return a.QM })
 
 	waermeW1 := verbrauch["waerme_wohnung1"]
 	waermeW2 := verbrauch["waerme_wohnung2"]

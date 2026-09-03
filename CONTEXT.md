@@ -47,6 +47,9 @@ Die ins Netz eingespeiste PV-Überschussmenge (Zähler `strom_einspeisung`) und 
 
 ## Fixkosten
 
+**Stammdaten** (`/stammdaten`):
+Die Seite für Werte, die sich selten ändern und nicht Teil einer monatlichen Erfassung sind: Wohnungsgröße/Flurstücksgröße je Wohnung (aktuelle Einzelwerte) und die Kostenpositionen-Jahre. Änderungen wirken sofort auf alle Monate, nicht eingefroren wie ein Ablesungs- oder Fixkosten-Eingabe-Wert.
+
 **Fixkosten-Eingabe**:
 Eine monatliche Erfassung, analog zur Ablesung: Personenzahl je Wohnung (eigenständig, nicht die der Ablesung) und - für monatlich-typisierte Kostenpositionen - ihr expliziter Monatswert. Anders als die Ablesung hängt sie nicht von einer Vorperiode ab (kein Verbrauch, keine Zählerstand-Differenz).
 _Avoid_: Fixkosten-Eintrag, Fixkosten-Periode

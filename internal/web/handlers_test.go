@@ -168,7 +168,7 @@ func TestBuildDashboardVerlauf_Skalierung(t *testing.T) {
 		t.Errorf("Summe der Prozentanteile des aelteren Monats = %v, want ~200 (laeuft ueber den Rand)", altSum)
 	}
 
-	t.Run("leere Eingaben", func(t *testing.T) {
+	t.Run("leere Eintraege", func(t *testing.T) {
 		spalte := buildDashboardVerlauf(2, "Wohnung 2", nil, nil)
 		if spalte.Eintraege != nil {
 			t.Errorf("want nil Eintraege for empty input, got %+v", spalte.Eintraege)
@@ -292,7 +292,7 @@ func TestMitJahreszeilen(t *testing.T) {
 		}
 	})
 
-	t.Run("leere Eingaben", func(t *testing.T) {
+	t.Run("leere Eintraege", func(t *testing.T) {
 		if got := mitJahreszeilen(nil); got != nil {
 			t.Errorf("want nil, got %+v", got)
 		}
@@ -324,7 +324,7 @@ func TestBuildJahresCard(t *testing.T) {
 		t.Errorf("Strom/Heizung/Wasser = %v/%v/%v, want 20/10/10", card.StromEUR, card.HeizungEUR, card.WasserEUR)
 	}
 	if card.FixkostenEUR != 25 {
-		t.Errorf("FixkostenEUR = %v, want 25 (2025er Eintrag ausgeschlossen)", card.FixkostenEUR)
+		t.Errorf("FixkostenEUR = %v, want 25 (2025er Eingabe ausgeschlossen)", card.FixkostenEUR)
 	}
 	if card.VerbrauchEUR != 40 {
 		t.Errorf("VerbrauchEUR = %v, want 40", card.VerbrauchEUR)
@@ -337,7 +337,7 @@ func TestBuildJahresCard(t *testing.T) {
 func TestAnzeigeJahr(t *testing.T) {
 	t.Run("folgt dem neueren der beiden Serien", func(t *testing.T) {
 		periods := []store.PeriodSummary{{ReadingDate: "2026-01-15"}}
-		fixkosten := []store.FixkostenEintragSummary{{Monat: "2027-03-01"}}
+		fixkosten := []store.FixkostenEingabeSummary{{Monat: "2027-03-01"}}
 		if got := anzeigeJahr(periods, fixkosten); got != 2027 {
 			t.Errorf("anzeigeJahr = %d, want 2027 (Fixkosten ist neuer)", got)
 		}

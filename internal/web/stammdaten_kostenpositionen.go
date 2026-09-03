@@ -21,12 +21,11 @@ type stammdatenPositionRow struct {
 }
 
 // stammdatenJahrBlock is one Jahr's Kostenpositionen-Daten, as shown on
-// /stammdaten - newest first, only the newest gets a "Jahr löschen" button
-// (Issue #60 Story 16, matching the prototype).
+// /stammdaten - newest first. Every Jahr (not just the newest) can be
+// deleted (Issue #60 Story 16 doesn't restrict this).
 type stammdatenJahrBlock struct {
-	Jahr        int
-	IstNeuestes bool
-	Positionen  []stammdatenPositionRow
+	Jahr       int
+	Positionen []stammdatenPositionRow
 }
 
 // kostenpositionDefaultsByID indexes store.KostenpositionDefaults for O(1)
@@ -52,7 +51,7 @@ func buildStammdatenJahrBloecke(db *sql.DB, kostenpositionen []store.Kostenposit
 
 	defaults := kostenpositionDefaultsByID()
 	blocks = make([]stammdatenJahrBlock, 0, len(jahre))
-	for i, jahr := range jahre {
+	for _, jahr := range jahre {
 		jahresdaten, err := store.KostenpositionenJahr(db, jahr)
 		if err != nil {
 			return nil, 0, fmt.Errorf("kostenpositionen jahr %d: %w", jahr, err)
@@ -69,7 +68,7 @@ func buildStammdatenJahrBloecke(db *sql.DB, kostenpositionen []store.Kostenposit
 			rows = append(rows, row)
 		}
 
-		blocks = append(blocks, stammdatenJahrBlock{Jahr: jahr, IstNeuestes: i == 0, Positionen: rows})
+		blocks = append(blocks, stammdatenJahrBlock{Jahr: jahr, Positionen: rows})
 	}
 
 	nextJahr = time.Now().Year()

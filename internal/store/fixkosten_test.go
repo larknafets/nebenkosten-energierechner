@@ -6,6 +6,20 @@ import (
 	"testing"
 )
 
+func TestJahrFromMonat(t *testing.T) {
+	jahr, err := JahrFromMonat("2026-09-01")
+	if err != nil {
+		t.Fatalf("JahrFromMonat: %v", err)
+	}
+	if jahr != 2026 {
+		t.Errorf("JahrFromMonat(2026-09-01) = %d, want 2026", jahr)
+	}
+
+	if _, err := JahrFromMonat("garbage"); err == nil {
+		t.Error("JahrFromMonat(garbage): want error, got nil")
+	}
+}
+
 func TestKostenpositionen_Seed(t *testing.T) {
 	db := openTestDB(t)
 
@@ -180,30 +194,30 @@ func TestLatestJaehrlichWert(t *testing.T) {
 	})
 }
 
-func mustCreateFixkostenEintrag(t *testing.T, db *sql.DB, monat string, werte map[int64]float64) int64 {
+func mustCreateFixkostenEingabe(t *testing.T, db *sql.DB, monat string, werte map[int64]float64) int64 {
 	t.Helper()
-	id, err := CreateFixkostenEintrag(db, FixkostenInput{
+	id, err := CreateFixkostenEingabe(db, FixkostenInput{
 		Monat:    monat,
 		Personen: map[int64]int64{1: 2, 2: 1},
 		Werte:    werte,
 	})
 	if err != nil {
-		t.Fatalf("CreateFixkostenEintrag %s: %v", monat, err)
+		t.Fatalf("CreateFixkostenEingabe %s: %v", monat, err)
 	}
 	return id
 }
 
-func TestFixkostenEintrag_CRUD_Roundtrip(t *testing.T) {
+func TestFixkostenEingabe_CRUD_Roundtrip(t *testing.T) {
 	db := openTestDB(t)
 
-	id := mustCreateFixkostenEintrag(t, db, "2026-09-01", map[int64]float64{10: 12.50, 13: 39.90})
+	id := mustCreateFixkostenEingabe(t, db, "2026-09-01", map[int64]float64{10: 12.50, 13: 39.90})
 
-	got, err := GetFixkostenEintragDetails(db, id)
+	got, err := GetFixkostenEingabeDetails(db, id)
 	if err != nil {
-		t.Fatalf("GetFixkostenEintragDetails: %v", err)
+		t.Fatalf("GetFixkostenEingabeDetails: %v", err)
 	}
 	if got == nil {
-		t.Fatal("GetFixkostenEintragDetails: want entry, got nil")
+		t.Fatal("GetFixkostenEingabeDetails: want entry, got nil")
 	}
 	if got.Monat != "2026-09-01" {
 		t.Errorf("Monat = %q, want 2026-09-01", got.Monat)
@@ -216,16 +230,16 @@ func TestFixkostenEintrag_CRUD_Roundtrip(t *testing.T) {
 	}
 
 	// Update: neuer Monat, geaenderter Wert, neuer Personenstand.
-	if err := UpdateFixkostenEintrag(db, id, FixkostenInput{
+	if err := UpdateFixkostenEingabe(db, id, FixkostenInput{
 		Monat:    "2026-09-02",
 		Personen: map[int64]int64{1: 3, 2: 1},
 		Werte:    map[int64]float64{10: 15.00, 13: 39.90},
 	}); err != nil {
-		t.Fatalf("UpdateFixkostenEintrag: %v", err)
+		t.Fatalf("UpdateFixkostenEingabe: %v", err)
 	}
-	got, err = GetFixkostenEintragDetails(db, id)
+	got, err = GetFixkostenEingabeDetails(db, id)
 	if err != nil {
-		t.Fatalf("GetFixkostenEintragDetails after update: %v", err)
+		t.Fatalf("GetFixkostenEingabeDetails after update: %v", err)
 	}
 	if got.Monat != "2026-09-02" {
 		t.Errorf("Monat after update = %q, want 2026-09-02", got.Monat)
@@ -237,92 +251,92 @@ func TestFixkostenEintrag_CRUD_Roundtrip(t *testing.T) {
 		t.Errorf("Personen[1] after update = %v, want 3", got.Personen[1])
 	}
 
-	latest, err := GetLatestFixkostenEintrag(db)
+	latest, err := GetLatestFixkostenEingabe(db)
 	if err != nil {
-		t.Fatalf("GetLatestFixkostenEintrag: %v", err)
+		t.Fatalf("GetLatestFixkostenEingabe: %v", err)
 	}
 	if latest == nil || latest.ID != id {
-		t.Fatalf("GetLatestFixkostenEintrag = %+v, want id %d", latest, id)
+		t.Fatalf("GetLatestFixkostenEingabe = %+v, want id %d", latest, id)
 	}
 }
 
-func TestGetFixkostenEintragDetails_NotFound(t *testing.T) {
+func TestGetFixkostenEingabeDetails_NotFound(t *testing.T) {
 	db := openTestDB(t)
-	got, err := GetFixkostenEintragDetails(db, 999)
+	got, err := GetFixkostenEingabeDetails(db, 999)
 	if err != nil {
-		t.Fatalf("GetFixkostenEintragDetails: %v", err)
+		t.Fatalf("GetFixkostenEingabeDetails: %v", err)
 	}
 	if got != nil {
-		t.Errorf("GetFixkostenEintragDetails(999) = %+v, want nil", got)
+		t.Errorf("GetFixkostenEingabeDetails(999) = %+v, want nil", got)
 	}
 }
 
-func TestGetLatestFixkostenEintrag_NoEintraege(t *testing.T) {
+func TestGetLatestFixkostenEingabe_NoEingaben(t *testing.T) {
 	db := openTestDB(t)
-	got, err := GetLatestFixkostenEintrag(db)
+	got, err := GetLatestFixkostenEingabe(db)
 	if err != nil {
-		t.Fatalf("GetLatestFixkostenEintrag: %v", err)
+		t.Fatalf("GetLatestFixkostenEingabe: %v", err)
 	}
 	if got != nil {
-		t.Errorf("GetLatestFixkostenEintrag on empty db = %+v, want nil", got)
+		t.Errorf("GetLatestFixkostenEingabe on empty db = %+v, want nil", got)
 	}
 }
 
-func TestUpdateFixkostenEintrag_NotFound(t *testing.T) {
+func TestUpdateFixkostenEingabe_NotFound(t *testing.T) {
 	db := openTestDB(t)
-	err := UpdateFixkostenEintrag(db, 999, FixkostenInput{Monat: "2026-09-01"})
-	if !errors.Is(err, ErrFixkostenEintragNotFound) {
-		t.Fatalf("UpdateFixkostenEintrag on unknown id: err = %v, want ErrFixkostenEintragNotFound", err)
+	err := UpdateFixkostenEingabe(db, 999, FixkostenInput{Monat: "2026-09-01"})
+	if !errors.Is(err, ErrFixkostenEingabeNotFound) {
+		t.Fatalf("UpdateFixkostenEingabe on unknown id: err = %v, want ErrFixkostenEingabeNotFound", err)
 	}
 }
 
-func TestDeleteFixkostenEintrag(t *testing.T) {
+func TestDeleteFixkostenEingabe(t *testing.T) {
 	db := openTestDB(t)
-	id := mustCreateFixkostenEintrag(t, db, "2026-09-01", map[int64]float64{10: 12.50})
+	id := mustCreateFixkostenEingabe(t, db, "2026-09-01", map[int64]float64{10: 12.50})
 
-	if err := DeleteFixkostenEintrag(db, id); err != nil {
-		t.Fatalf("DeleteFixkostenEintrag: %v", err)
+	if err := DeleteFixkostenEingabe(db, id); err != nil {
+		t.Fatalf("DeleteFixkostenEingabe: %v", err)
 	}
 
-	got, err := GetFixkostenEintragDetails(db, id)
+	got, err := GetFixkostenEingabeDetails(db, id)
 	if err != nil {
-		t.Fatalf("GetFixkostenEintragDetails after delete: %v", err)
+		t.Fatalf("GetFixkostenEingabeDetails after delete: %v", err)
 	}
 	if got != nil {
-		t.Errorf("GetFixkostenEintragDetails after delete = %+v, want nil", got)
+		t.Errorf("GetFixkostenEingabeDetails after delete = %+v, want nil", got)
 	}
 
-	all, err := AllFixkostenEintraege(db)
+	all, err := AllFixkostenEingaben(db)
 	if err != nil {
-		t.Fatalf("AllFixkostenEintraege: %v", err)
+		t.Fatalf("AllFixkostenEingaben: %v", err)
 	}
 	if len(all) != 0 {
-		t.Errorf("AllFixkostenEintraege after delete = %d, want 0", len(all))
+		t.Errorf("AllFixkostenEingaben after delete = %d, want 0", len(all))
 	}
 }
 
-func TestDeleteFixkostenEintrag_NotFound(t *testing.T) {
+func TestDeleteFixkostenEingabe_NotFound(t *testing.T) {
 	db := openTestDB(t)
-	err := DeleteFixkostenEintrag(db, 999)
-	if !errors.Is(err, ErrFixkostenEintragNotFound) {
-		t.Fatalf("DeleteFixkostenEintrag on unknown id: err = %v, want ErrFixkostenEintragNotFound", err)
+	err := DeleteFixkostenEingabe(db, 999)
+	if !errors.Is(err, ErrFixkostenEingabeNotFound) {
+		t.Fatalf("DeleteFixkostenEingabe on unknown id: err = %v, want ErrFixkostenEingabeNotFound", err)
 	}
 }
 
-func TestAllFixkostenEintraege_NewestFirst(t *testing.T) {
+func TestAllFixkostenEingaben_NewestFirst(t *testing.T) {
 	db := openTestDB(t)
-	mustCreateFixkostenEintrag(t, db, "2026-07-01", nil)
-	newest := mustCreateFixkostenEintrag(t, db, "2026-09-01", nil)
-	mustCreateFixkostenEintrag(t, db, "2026-08-01", nil)
+	mustCreateFixkostenEingabe(t, db, "2026-07-01", nil)
+	newest := mustCreateFixkostenEingabe(t, db, "2026-09-01", nil)
+	mustCreateFixkostenEingabe(t, db, "2026-08-01", nil)
 
-	all, err := AllFixkostenEintraege(db)
+	all, err := AllFixkostenEingaben(db)
 	if err != nil {
-		t.Fatalf("AllFixkostenEintraege: %v", err)
+		t.Fatalf("AllFixkostenEingaben: %v", err)
 	}
 	if len(all) != 3 {
-		t.Fatalf("AllFixkostenEintraege = %d, want 3", len(all))
+		t.Fatalf("AllFixkostenEingaben = %d, want 3", len(all))
 	}
 	if all[0].ID != newest || all[0].Monat != "2026-09-01" {
-		t.Errorf("AllFixkostenEintraege[0] = %+v, want newest (2026-09-01)", all[0])
+		t.Errorf("AllFixkostenEingaben[0] = %+v, want newest (2026-09-01)", all[0])
 	}
 }

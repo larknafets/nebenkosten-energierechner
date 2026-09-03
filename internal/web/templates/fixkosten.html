@@ -2,14 +2,14 @@
 <h1>Fixkosten</h1>
 <p class="muted"><a href="{{.Base}}/dashboard">Zum Dashboard</a></p>
 
-{{if not .Eintraege}}
+{{if not .Eingaben}}
 <p class="muted">Noch keine Fixkosten-Eingabe erfasst. <a href="{{.Base}}/fixkosten/neu">Jetzt erfassen</a>.</p>
 {{else}}
 <div class="panel">
   <table class="letzte">
     <thead><tr><th>Monat</th><th>Summe Wohnung 1</th><th>Summe Wohnung 2</th><th></th></tr></thead>
     <tbody>
-      {{range .Eintraege}}
+      {{range .Eingaben}}
       <tr>
         <td>{{.Label}}</td>
         {{if .HasSumme}}

@@ -121,9 +121,9 @@ func handleFixkostenForm(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		latest, err := store.GetLatestFixkostenEintrag(db)
+		latest, err := store.GetLatestFixkostenEingabe(db)
 		if err != nil {
-			http.Error(w, "latest fixkosten eintrag: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "latest fixkosten eingabe: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
@@ -166,15 +166,15 @@ func handleFixkostenForm(db *sql.DB) http.HandlerFunc {
 // existing Eingabe, prefilled with its own current values.
 func handleFixkostenEditForm(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		eintragID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		eingabeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
-			http.Error(w, "invalid fixkosten eintrag id", http.StatusBadRequest)
+			http.Error(w, "invalid fixkosten eingabe id", http.StatusBadRequest)
 			return
 		}
 
-		target, err := store.GetFixkostenEintragDetails(db, eintragID)
+		target, err := store.GetFixkostenEingabeDetails(db, eingabeID)
 		if err != nil {
-			http.Error(w, "fixkosten eintrag: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "fixkosten eingabe: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		if target == nil {
@@ -188,7 +188,7 @@ func handleFixkostenEditForm(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		jahr, err := jahrFromMonat(target.Monat)
+		jahr, err := store.JahrFromMonat(target.Monat)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -222,17 +222,6 @@ func handleFixkostenEditForm(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// jahrFromMonat parses a Fixkosten-Eingabe's Monat ("YYYY-MM-01") into its
-// calendar year - the web-layer counterpart of calc's unexported helper of
-// the same purpose.
-func jahrFromMonat(monat string) (int, error) {
-	t, err := time.Parse("2006-01-02", monat)
-	if err != nil {
-		return 0, fmt.Errorf("invalid monat %q: %w", monat, err)
-	}
-	return t.Year(), nil
-}
-
 // parseFixkostenInput parses a Fixkosten-Formular (shared by
 // handleCreateFixkosten and handleUpdateFixkosten). Werte are only read for
 // monatlich-typed Kostenpositionen in the Monat's Jahr - jährlich rows are
@@ -245,7 +234,7 @@ func parseFixkostenInput(r *http.Request, db *sql.DB, apartments []store.Apartme
 		return store.FixkostenInput{}, err
 	}
 
-	jahr, err := jahrFromMonat(monat)
+	jahr, err := store.JahrFromMonat(monat)
 	if err != nil {
 		return store.FixkostenInput{}, err
 	}
@@ -305,27 +294,27 @@ func handleCreateFixkosten(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		eintragID, err := store.CreateFixkostenEintrag(db, in)
+		eingabeID, err := store.CreateFixkostenEingabe(db, in)
 		if err != nil {
 			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		http.Redirect(w, r, fmt.Sprintf("%s/fixkosten/%d", requestBase(r), eintragID), http.StatusFound)
+		http.Redirect(w, r, fmt.Sprintf("%s/fixkosten/%d", requestBase(r), eingabeID), http.StatusFound)
 	}
 }
 
 func handleUpdateFixkosten(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		eintragID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		eingabeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
-			http.Error(w, "invalid fixkosten eintrag id", http.StatusBadRequest)
+			http.Error(w, "invalid fixkosten eingabe id", http.StatusBadRequest)
 			return
 		}
 
-		existing, err := store.GetFixkostenEintragDetails(db, eintragID)
+		existing, err := store.GetFixkostenEingabeDetails(db, eingabeID)
 		if err != nil {
-			http.Error(w, "fixkosten eintrag: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "fixkosten eingabe: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		if existing == nil {
@@ -350,25 +339,25 @@ func handleUpdateFixkosten(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		if err := store.UpdateFixkostenEintrag(db, eintragID, in); err != nil {
+		if err := store.UpdateFixkostenEingabe(db, eingabeID, in); err != nil {
 			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		http.Redirect(w, r, fmt.Sprintf("%s/fixkosten/%d", requestBase(r), eintragID), http.StatusFound)
+		http.Redirect(w, r, fmt.Sprintf("%s/fixkosten/%d", requestBase(r), eingabeID), http.StatusFound)
 	}
 }
 
 func handleDeleteFixkosten(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		eintragID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		eingabeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
-			http.Error(w, "invalid fixkosten eintrag id", http.StatusBadRequest)
+			http.Error(w, "invalid fixkosten eingabe id", http.StatusBadRequest)
 			return
 		}
 
-		if err := store.DeleteFixkostenEintrag(db, eintragID); err != nil {
-			if errors.Is(err, store.ErrFixkostenEintragNotFound) {
+		if err := store.DeleteFixkostenEingabe(db, eingabeID); err != nil {
+			if errors.Is(err, store.ErrFixkostenEingabeNotFound) {
 				http.NotFound(w, r)
 				return
 			}
@@ -392,14 +381,14 @@ type fixkostenListItem struct {
 
 func handleFixkostenListe(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		eintraege, err := store.AllFixkostenEintraege(db)
+		eingaben, err := store.AllFixkostenEingaben(db)
 		if err != nil {
-			http.Error(w, "fixkosten eintraege: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "fixkosten eingaben: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		items := make([]fixkostenListItem, 0, len(eintraege))
-		for _, e := range eintraege {
+		items := make([]fixkostenListItem, 0, len(eingaben))
+		for _, e := range eingaben {
 			item := fixkostenListItem{ID: e.ID, Label: germanPeriodLabel(e.Monat)}
 			erg, err := calc.Fixkosten(db, e.ID)
 			if err != nil {
@@ -416,11 +405,11 @@ func handleFixkostenListe(db *sql.DB) http.HandlerFunc {
 		}
 
 		data := struct {
-			Base      string
-			Eintraege []fixkostenListItem
+			Base     string
+			Eingaben []fixkostenListItem
 		}{
-			Base:      requestBase(r),
-			Eintraege: items,
+			Base:     requestBase(r),
+			Eingaben: items,
 		}
 
 		if err := fixkostenListeTemplate.ExecuteTemplate(w, "layout", data); err != nil {
@@ -439,18 +428,18 @@ type fixkostenDetailPosition struct {
 
 func handleFixkostenDetail(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		eintragID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		eingabeID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		if err != nil {
-			http.Error(w, "invalid fixkosten eintrag id", http.StatusBadRequest)
+			http.Error(w, "invalid fixkosten eingabe id", http.StatusBadRequest)
 			return
 		}
 
-		eintrag, err := store.GetFixkostenEintragDetails(db, eintragID)
+		eingabe, err := store.GetFixkostenEingabeDetails(db, eingabeID)
 		if err != nil {
-			http.Error(w, "fixkosten eintrag: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "fixkosten eingabe: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if eintrag == nil {
+		if eingabe == nil {
 			http.NotFound(w, r)
 			return
 		}
@@ -461,26 +450,26 @@ func handleFixkostenDetail(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		allEintraege, err := store.AllFixkostenEintraege(db)
+		allEingaben, err := store.AllFixkostenEingaben(db)
 		if err != nil {
-			http.Error(w, "fixkosten eintraege: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "fixkosten eingaben: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		allItems := make([]fixkostenListItem, len(allEintraege))
-		for i, e := range allEintraege {
+		allItems := make([]fixkostenListItem, len(allEingaben))
+		for i, e := range allEingaben {
 			allItems[i] = fixkostenListItem{ID: e.ID, Label: germanPeriodLabel(e.Monat)}
 		}
 
 		var positionen []fixkostenDetailPosition
 		var kostenW1, kostenW2 float64
 		var kostenNote string
-		erg, err := calc.Fixkosten(db, eintragID)
+		erg, err := calc.Fixkosten(db, eingabeID)
 		if err != nil {
 			if !errors.Is(err, store.ErrNoKostenpositionenJahr) {
 				http.Error(w, "fixkosten: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
-			jahr, jahrErr := jahrFromMonat(eintrag.Monat)
+			jahr, jahrErr := store.JahrFromMonat(eingabe.Monat)
 			if jahrErr != nil {
 				http.Error(w, jahrErr.Error(), http.StatusInternalServerError)
 				return
@@ -499,25 +488,25 @@ func handleFixkostenDetail(db *sql.DB) http.HandlerFunc {
 		}
 
 		data := struct {
-			Base         string
-			Eintrag      *store.FixkostenEintragDetails
-			MonatLabel   string
-			AllEintraege []fixkostenListItem
-			Apartments   []store.Apartment
-			Positionen   []fixkostenDetailPosition
-			KostenW1     float64
-			KostenW2     float64
-			KostenNote   string
+			Base        string
+			Eingabe     *store.FixkostenEingabeDetails
+			MonatLabel  string
+			AllEingaben []fixkostenListItem
+			Apartments  []store.Apartment
+			Positionen  []fixkostenDetailPosition
+			KostenW1    float64
+			KostenW2    float64
+			KostenNote  string
 		}{
-			Base:         requestBase(r),
-			Eintrag:      eintrag,
-			MonatLabel:   germanPeriodLabel(eintrag.Monat),
-			AllEintraege: allItems,
-			Apartments:   apartments,
-			Positionen:   positionen,
-			KostenW1:     kostenW1,
-			KostenW2:     kostenW2,
-			KostenNote:   kostenNote,
+			Base:        requestBase(r),
+			Eingabe:     eingabe,
+			MonatLabel:  germanPeriodLabel(eingabe.Monat),
+			AllEingaben: allItems,
+			Apartments:  apartments,
+			Positionen:  positionen,
+			KostenW1:    kostenW1,
+			KostenW2:    kostenW2,
+			KostenNote:  kostenNote,
 		}
 
 		if err := fixkostenDetailTemplate.ExecuteTemplate(w, "layout", data); err != nil {

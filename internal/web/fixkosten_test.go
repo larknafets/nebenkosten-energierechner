@@ -32,20 +32,6 @@ func TestMonatForInput(t *testing.T) {
 	}
 }
 
-func TestJahrFromMonat(t *testing.T) {
-	jahr, err := jahrFromMonat("2026-09-01")
-	if err != nil {
-		t.Fatalf("jahrFromMonat: %v", err)
-	}
-	if jahr != 2026 {
-		t.Errorf("jahrFromMonat(2026-09-01) = %d, want 2026", jahr)
-	}
-
-	if _, err := jahrFromMonat("garbage"); err == nil {
-		t.Error("jahrFromMonat(garbage): want error, got nil")
-	}
-}
-
 func TestBuildFixkostenPositionRows(t *testing.T) {
 	kostenpositionen := []store.Kostenposition{
 		{ID: 1, Key: "grundsteuer", Label: "Grundsteuer"},

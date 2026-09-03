@@ -56,23 +56,23 @@ CREATE TABLE IF NOT EXISTS kostenpositionen_jahre (
     UNIQUE(kostenposition_id, jahr)
 );
 
-CREATE TABLE IF NOT EXISTS fixkosten_eintraege (
+CREATE TABLE IF NOT EXISTS fixkosten_eingaben (
     id    INTEGER PRIMARY KEY,
     monat TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS fixkosten_werte (
     id                    INTEGER PRIMARY KEY,
-    fixkosten_eintrag_id  INTEGER NOT NULL REFERENCES fixkosten_eintraege(id),
+    fixkosten_eingabe_id  INTEGER NOT NULL REFERENCES fixkosten_eingaben(id),
     kostenposition_id     INTEGER NOT NULL REFERENCES kostenpositionen(id),
     wert                  REAL NOT NULL,
-    UNIQUE(fixkosten_eintrag_id, kostenposition_id)
+    UNIQUE(fixkosten_eingabe_id, kostenposition_id)
 );
 
 CREATE TABLE IF NOT EXISTS fixkosten_personen (
     id                    INTEGER PRIMARY KEY,
-    fixkosten_eintrag_id  INTEGER NOT NULL REFERENCES fixkosten_eintraege(id),
+    fixkosten_eingabe_id  INTEGER NOT NULL REFERENCES fixkosten_eingaben(id),
     apartment_id          INTEGER NOT NULL REFERENCES apartments(id),
     personen              INTEGER NOT NULL,
-    UNIQUE(fixkosten_eintrag_id, apartment_id)
+    UNIQUE(fixkosten_eingabe_id, apartment_id)
 );

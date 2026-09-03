@@ -3,7 +3,11 @@
 // rounding decision this package implements.
 package calc
 
-import "math"
+import (
+	"math"
+
+	"github.com/larknafets/nebenkostenrechner/internal/store"
+)
 
 // Round2 rounds to 2 decimal places (Cent), kaufmännisch (0,5 Cent always
 // rounds up) - math.Round already rounds half-away-from-zero, which for
@@ -22,4 +26,20 @@ func Ratio2(a, b float64) (float64, float64) {
 		return a / total, b / total
 	}
 	return 0.5, 0.5
+}
+
+// apartmentValues extracts Wohnung 1/2's respective values from the fixed
+// 2-apartment list via selector - the shared shape behind every calc
+// function that needs a per-Wohnung value off store.Apartment (Heizung's
+// Wohnungsgröße, Fixkosten's Wohnungsgröße/Flurstücksgröße).
+func apartmentValues(apartments []store.Apartment, selector func(store.Apartment) float64) (w1, w2 float64) {
+	for _, a := range apartments {
+		switch a.ID {
+		case 1:
+			w1 = selector(a)
+		case 2:
+			w2 = selector(a)
+		}
+	}
+	return w1, w2
 }

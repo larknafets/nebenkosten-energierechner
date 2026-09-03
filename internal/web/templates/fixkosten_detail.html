@@ -5,8 +5,8 @@
 <div class="field" style="max-width:220px">
   <label>Andere Eingabe anzeigen</label>
   <select onchange="if(this.value) location.href=this.value">
-    {{range .AllEintraege}}
-    <option value="{{$.Base}}/fixkosten/{{.ID}}" {{if eq .ID $.Eintrag.ID}}selected{{end}}>{{.Label}}</option>
+    {{range .AllEingaben}}
+    <option value="{{$.Base}}/fixkosten/{{.ID}}" {{if eq .ID $.Eingabe.ID}}selected{{end}}>{{.Label}}</option>
     {{end}}
   </select>
 </div>
@@ -16,7 +16,7 @@
     <thead><tr><th>Wohnung</th><th>Personen</th></tr></thead>
     <tbody>
       {{range .Apartments}}
-      <tr><td>{{.Name}}</td><td>{{index $.Eintrag.Personen .ID}}</td></tr>
+      <tr><td>{{.Name}}</td><td>{{index $.Eingabe.Personen .ID}}</td></tr>
       {{end}}
     </tbody>
   </table>
@@ -38,8 +38,8 @@
 
 <div class="btn-row">
   <a href="{{.Base}}/fixkosten/neu" class="button success">Neue Fixkosten-Eingabe erfassen</a>
-  <a href="{{.Base}}/fixkosten/{{.Eintrag.ID}}/bearbeiten" class="button secondary">Diese Eingabe korrigieren</a>
-  <form method="post" action="{{.Base}}/fixkosten/{{.Eintrag.ID}}/loeschen" onsubmit="return confirm('Fixkosten-Eingabe {{.MonatLabel}} wirklich löschen?');">
+  <a href="{{.Base}}/fixkosten/{{.Eingabe.ID}}/bearbeiten" class="button secondary">Diese Eingabe korrigieren</a>
+  <form method="post" action="{{.Base}}/fixkosten/{{.Eingabe.ID}}/loeschen" onsubmit="return confirm('Fixkosten-Eingabe {{.MonatLabel}} wirklich löschen?');">
     <button type="submit" class="danger">Diese Eingabe löschen</button>
   </form>
 </div>
