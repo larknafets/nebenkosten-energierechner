@@ -24,6 +24,13 @@ type dashboardSegment struct {
 	Verbrauch             float64 // Menge (kWh/MWh/m³) - only set for Verbrauch-Kategorien, 0 for Fixkosten/Kombiniert
 	Einheit               string
 	ProzentNeuestesGesamt float64
+
+	// Verbrauch2/Einheit2 is a second, optional Mengenangabe shown behind
+	// Verbrauch/Einheit in der Verbrauchswerte-Ansicht - nur bei Heizung/
+	// Warmwasser gesetzt (siehe kategorie.Verbrauch2). Einheit2 == "" heißt
+	// kein zweiter Wert.
+	Verbrauch2 float64
+	Einheit2   string
 }
 
 // setSegmentPct fills every segment's ProzentNeuestesGesamt as its share of
@@ -278,6 +285,7 @@ func buildDashboardVerlauf(apartmentID int64, apartmentName string, periodenKost
 				dm.VerbrauchGesamt += kat.Kosten
 				dm.VerbrauchSegmente = append(dm.VerbrauchSegmente, dashboardSegment{
 					Farbe: kat.Farbe, Label: kat.Label, Kosten: kat.Kosten, Verbrauch: kat.Verbrauch, Einheit: kat.Einheit,
+					Verbrauch2: kat.Verbrauch2, Einheit2: kat.Einheit2,
 				})
 			}
 			dm.VerbrauchGesamt = calc.Round2(dm.VerbrauchGesamt)
@@ -385,16 +393,17 @@ type dashboardSimpleCard struct {
 }
 
 // dashboardSimpleMonat is one calendar month's row in a Wallbox/PV-Anlage
-// Monatsverlauf - a single bar segment, unlike dashboardMonat's 4 Modus-
-// Varianten (there's no Fixkosten/Kombiniert distinction for these).
+// Monatsverlauf - 1+ bar segments (Segmente, in tatsächlichen kWh - Ticket
+// #67 Nachtrag: Wallbox zeigt hier 2, "Stromkosten" + "PV-Anteil", statt nur
+// des abgerechneten Anteils), unlike dashboardMonat's 4 Modus-Varianten
+// (there's no Fixkosten/Kombiniert distinction for these).
 type dashboardSimpleMonat struct {
-	Label                 string
-	Jahr                  int
-	IsCurrent             bool
-	HasWert               bool
-	KWh                   float64
-	EUR                   float64
-	ProzentNeuestesGesamt float64
+	Label     string
+	Jahr      int
+	IsCurrent bool
+	HasWert   bool
+	EUR       float64
+	Segmente  []dashboardSegment
 }
 
 type dashboardSimpleJahreszeile struct {
@@ -417,9 +426,11 @@ type dashboardSimpleSpalte struct {
 	Eintraege []dashboardSimpleEintrag
 }
 
-// simpleWert extracts one period's kWh/EUR for a Wallbox/PV-Anlage series -
-// ok=false skips the period entirely (no Ablesung/keine Vorperiode).
-type simpleWert func(k kosten) (kwh, eur float64, ok bool)
+// simpleWert extracts one period's bar-Segmente (tatsächliche kWh je
+// Segment, nicht nur der abgerechnete Anteil) and total EUR for a Wallbox/
+// PV-Anlage series - ok=false skips the period entirely (no Ablesung/keine
+// Vorperiode).
+type simpleWert func(k kosten) (segs []dashboardSegment, eur float64, ok bool)
 
 // simpleSeries bundles a Wallbox/PV-Anlage entity's identity (ID/Name/
 // IstErtrag) with its Wert-Extractor - the 2 call sites in handleDashboard
@@ -432,26 +443,37 @@ type simpleSeries struct {
 	Wert      simpleWert
 }
 
-// wallboxSeries reads the Wallbox-Anteil from StromErgebnis - a third,
+// wallboxSeries reads the Wallbox-Anteil from StromErgebnis - eine dritte,
 // PV-Netzbezug-gedeckelte Zuteilungsstufe nach Wohnung 2 und Wärmepumpe
-// (Ticket #67 Nachtrag), nicht der rohe Zwischenzähler-Verbrauch.
+// (Ticket #67 Nachtrag). Der Balken zeigt den tatsächlichen Wallbox-
+// Verbrauch als 2 Segmente: "Stromkosten" (WallboxAnteilKWh, der
+// abgerechnete Anteil) und "PV-Anteil" (PVAnteilWallboxKWh, die Lücke
+// zwischen Zwischenzähler-Verbrauch und dem, was der Netzbezug hergab -
+// analog zur "Nicht dem Netzbezug zugeordnet (PV)"-Zeile bei Wohnung 2/WP).
+// Die Summe beider Segmente ist der rohe Zwischenzähler-Verbrauch, nicht
+// nur der abgerechnete Teil.
 var wallboxSeries = simpleSeries{
 	ID: "wallbox", Name: "Wallboxen", IstErtrag: false,
-	Wert: func(k kosten) (kwh, eur float64, ok bool) {
+	Wert: func(k kosten) (segs []dashboardSegment, eur float64, ok bool) {
 		if k.Strom == nil {
-			return 0, 0, false
+			return nil, 0, false
 		}
-		return k.Strom.WallboxAnteilKWh, k.Strom.KostenWallbox, true
+		return []dashboardSegment{
+			{Farbe: "strom", Label: "Stromkosten", Kosten: k.Strom.KostenWallbox, Verbrauch: k.Strom.WallboxAnteilKWh, Einheit: "kWh"},
+			{Farbe: "pv", Label: "PV-Anteil", Verbrauch: k.Strom.PVAnteilWallboxKWh, Einheit: "kWh"},
+		}, k.Strom.KostenWallbox, true
 	},
 }
 
 var pvSeries = simpleSeries{
 	ID: "pv", Name: "PV-Anlage", IstErtrag: true,
-	Wert: func(k kosten) (kwh, eur float64, ok bool) {
+	Wert: func(k kosten) (segs []dashboardSegment, eur float64, ok bool) {
 		if k.Einspeisung == nil {
-			return 0, 0, false
+			return nil, 0, false
 		}
-		return k.Einspeisung.EinspeisungKWh, k.Einspeisung.Ertrag, true
+		return []dashboardSegment{
+			{Farbe: "pv", Label: "Einspeisevergütung", Kosten: k.Einspeisung.Ertrag, Verbrauch: k.Einspeisung.EinspeisungKWh, Einheit: "kWh"},
+		}, k.Einspeisung.Ertrag, true
 	},
 }
 
@@ -473,7 +495,9 @@ func buildSimpleJahresCard(series simpleSeries, jahr int, periodenKosten []perio
 
 // buildSimpleVerlauf builds a Wallbox/PV-Anlage Monatsverlauf - one bar per
 // Ablesungs-Monat plus a Jahressumme-Trennzeile per Kalenderjahr, analog zu
-// buildDashboardVerlauf's Fixkosten-freier Fall.
+// buildDashboardVerlauf's Fixkosten-freier Fall. Der Balken skaliert nach
+// der Summe der Segment-kWh (tatsächlicher Verbrauch), nicht nach EUR - bei
+// Wallbox macht sonst der unbezahlte PV-Anteil die Breite unproportional.
 func buildSimpleVerlauf(series simpleSeries, periodenKosten []periodKosten) dashboardSimpleSpalte {
 	id, name, istErtrag, wert := series.ID, series.Name, series.IstErtrag, series.Wert
 	monate := make([]dashboardSimpleMonat, 0, len(periodenKosten))
@@ -483,9 +507,9 @@ func buildSimpleVerlauf(series simpleSeries, periodenKosten []periodKosten) dash
 			continue
 		}
 		dm := dashboardSimpleMonat{Label: germanPeriodLabelShort(pk.ReadingDate), Jahr: t.Year()}
-		if kwh, eur, ok := wert(pk.K); ok {
+		if segs, eur, ok := wert(pk.K); ok {
 			dm.HasWert = true
-			dm.KWh = kwh
+			dm.Segmente = segs
 			dm.EUR = calc.Round2(eur)
 		}
 		monate = append(monate, dm)
@@ -494,17 +518,28 @@ func buildSimpleVerlauf(series simpleSeries, periodenKosten []periodKosten) dash
 		monate[0].IsCurrent = true
 	}
 
-	var neuestesEUR float64
+	segmentSumme := func(segs []dashboardSegment) float64 {
+		var sum float64
+		for _, s := range segs {
+			sum += s.Verbrauch
+		}
+		return sum
+	}
+
+	var neuestesKWh float64
 	for _, m := range monate {
 		if m.HasWert {
-			neuestesEUR = m.EUR
+			neuestesKWh = segmentSumme(m.Segmente)
 			break
 		}
 	}
-	if neuestesEUR > 0 {
+	if neuestesKWh > 0 {
 		for i := range monate {
-			if monate[i].HasWert {
-				monate[i].ProzentNeuestesGesamt = monate[i].EUR / neuestesEUR * 100
+			if !monate[i].HasWert {
+				continue
+			}
+			for j := range monate[i].Segmente {
+				monate[i].Segmente[j].ProzentNeuestesGesamt = monate[i].Segmente[j].Verbrauch / neuestesKWh * 100
 			}
 		}
 	}

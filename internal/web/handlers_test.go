@@ -28,10 +28,39 @@ func TestKategorien(t *testing.T) {
 		Heizung: &calc.HeizungErgebnis{
 			WaermeW1MWh:     14.2,
 			WaermeW2MWh:     9.6,
+			WPAnteilW1KWh:   840,
+			WPAnteilW2KWh:   360,
 			KostenHeizungW1: 112.40,
 			KostenHeizungW2: 84.10,
 		},
 	}
+
+	t.Run("Heizung/Warmwasser zeigt WP-Anteil-kWh, dahinter Waermeverbrauch-MWh", func(t *testing.T) {
+		for _, tc := range []struct {
+			apartmentID      int64
+			wantKWh, wantMWh float64
+		}{
+			{1, 840, 14.2},
+			{2, 360, 9.6},
+		} {
+			kats := kategorien(tc.apartmentID, k)
+			var heizung *kategorie
+			for i := range kats {
+				if kats[i].Label == "Heizung/Warmwasser" {
+					heizung = &kats[i]
+				}
+			}
+			if heizung == nil {
+				t.Fatalf("Wohnung %d: keine Heizung/Warmwasser-Kategorie gefunden", tc.apartmentID)
+			}
+			if heizung.Verbrauch != tc.wantKWh || heizung.Einheit != "kWh" {
+				t.Errorf("Wohnung %d: Verbrauch/Einheit = %v/%q, want %v/kWh", tc.apartmentID, heizung.Verbrauch, heizung.Einheit, tc.wantKWh)
+			}
+			if heizung.Verbrauch2 != tc.wantMWh || heizung.Einheit2 != "MWh" {
+				t.Errorf("Wohnung %d: Verbrauch2/Einheit2 = %v/%q, want %v/MWh", tc.apartmentID, heizung.Verbrauch2, heizung.Einheit2, tc.wantMWh)
+			}
+		}
+	})
 
 	t.Run("Wohnung 1 has no eigene Strom-Position", func(t *testing.T) {
 		kats := kategorien(1, k)
@@ -191,8 +220,8 @@ func TestBuildSimpleVerlaufUndJahresCard(t *testing.T) {
 	// Fixkosten-Anteil, keine Wohnungs-Zuteilung. Wallbox-Anteil kommt aus
 	// StromErgebnis (dritte, PV-Netzbezug-gedeckelte Zuteilungsstufe nach
 	// Wohnung 2 und Wärmepumpe, Ticket #67 Nachtrag).
-	neu := kosten{Strom: &calc.StromErgebnis{WallboxAnteilKWh: 40, KostenWallbox: 12}}
-	alt := kosten{Strom: &calc.StromErgebnis{WallboxAnteilKWh: 20, KostenWallbox: 6}}
+	neu := kosten{Strom: &calc.StromErgebnis{WallboxAnteilKWh: 30, PVAnteilWallboxKWh: 10, KostenWallbox: 12}}
+	alt := kosten{Strom: &calc.StromErgebnis{WallboxAnteilKWh: 15, PVAnteilWallboxKWh: 5, KostenWallbox: 6}}
 	ohneWallbox := kosten{} // Strom nil - erste Periode ohne Vorperiode
 
 	periods := []periodKosten{
@@ -222,16 +251,32 @@ func TestBuildSimpleVerlaufUndJahresCard(t *testing.T) {
 	if !monate[0].IsCurrent || monate[1].IsCurrent || monate[2].IsCurrent {
 		t.Errorf("nur der erste (neueste) Monat soll IsCurrent sein, got %+v", monate)
 	}
-	if !monate[0].HasWert || monate[0].EUR != 12 || monate[0].KWh != 40 {
-		t.Errorf("neuester Monat = %+v, want HasWert EUR=12 KWh=40", monate[0])
+	if !monate[0].HasWert || monate[0].EUR != 12 {
+		t.Errorf("neuester Monat = %+v, want HasWert EUR=12", monate[0])
+	}
+	if len(monate[0].Segmente) != 2 {
+		t.Fatalf("want 2 Segmente (Stromkosten, PV-Anteil), got %d: %+v", len(monate[0].Segmente), monate[0].Segmente)
+	}
+	if s := monate[0].Segmente[0]; s.Label != "Stromkosten" || s.Verbrauch != 30 || s.Einheit != "kWh" {
+		t.Errorf("Segment 0 = %+v, want Label=Stromkosten Verbrauch=30 Einheit=kWh", s)
+	}
+	if s := monate[0].Segmente[1]; s.Label != "PV-Anteil" || s.Verbrauch != 10 || s.Einheit != "kWh" {
+		t.Errorf("Segment 1 = %+v, want Label=PV-Anteil Verbrauch=10 Einheit=kWh", s)
 	}
 	if monate[2].HasWert {
 		t.Errorf("Monat ohne Wallbox-Ergebnis soll HasWert=false sein, got %+v", monate[2])
 	}
-	// Skala = neuester EUR-Wert (12) - der aeltere Monat kostet halb so
-	// viel, muss also bei 50% liegen (analog TestBuildDashboardVerlauf_Skalierung).
-	if want := 50.0; monate[1].ProzentNeuestesGesamt < want-0.01 || monate[1].ProzentNeuestesGesamt > want+0.01 {
-		t.Errorf("aelterer ProzentNeuestesGesamt = %v, want ~50", monate[1].ProzentNeuestesGesamt)
+	// Skala = neuester tatsaechlicher Gesamt-kWh (30+10=40) - jedes Segment
+	// des aelteren Monats (15/5 kWh) skaliert gegen diesen gemeinsamen Nenner
+	// (nicht gegen seinen eigenen Segment-Typ), die 2 Segmentbreiten summieren
+	// sich also auf die Haelfte der Balkenbreite (15+5=20, halb so viel wie
+	// 40) - analog TestBuildDashboardVerlauf_Skalierung, aber kWh- statt
+	// EUR-basiert, siehe buildSimpleVerlauf.
+	if want := 37.5; monate[1].Segmente[0].ProzentNeuestesGesamt < want-0.01 || monate[1].Segmente[0].ProzentNeuestesGesamt > want+0.01 {
+		t.Errorf("aelteres Stromkosten-Segment ProzentNeuestesGesamt = %v, want ~37.5 (15/40)", monate[1].Segmente[0].ProzentNeuestesGesamt)
+	}
+	if want := 12.5; monate[1].Segmente[1].ProzentNeuestesGesamt < want-0.01 || monate[1].Segmente[1].ProzentNeuestesGesamt > want+0.01 {
+		t.Errorf("aelteres PV-Anteil-Segment ProzentNeuestesGesamt = %v, want ~12.5 (5/40)", monate[1].Segmente[1].ProzentNeuestesGesamt)
 	}
 	if len(jahreszeilen) != 1 || jahreszeilen[0].Summe != 18 {
 		t.Errorf("Jahreszeile = %+v, want 1 Eintrag mit Summe=18 (12+6, der Monat ohne Wert zaehlt 0)", jahreszeilen)

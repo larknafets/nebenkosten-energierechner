@@ -82,7 +82,7 @@
         {{if $m.HasVerbrauch}}{{range $m.VerbrauchSegmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="verbrauch">– keine Ablesung</span>{{end}}
       </div>
       <div class="verbrauch-liste" data-modus="verbrauchswerte">
-        {{if $m.HasVerbrauch}}{{range $i2, $seg := $m.VerbrauchSegmente}}{{if $i2}} · {{end}}{{$seg.Label}} {{de $seg.Verbrauch}} {{$seg.Einheit}}{{end}}{{else}}– keine Ablesung{{end}}
+        {{if $m.HasVerbrauch}}{{range $i2, $seg := $m.VerbrauchSegmente}}{{if $i2}} · {{end}}{{$seg.Label}} {{de $seg.Verbrauch}} {{$seg.Einheit}}{{if $seg.Einheit2}} ({{de $seg.Verbrauch2}} {{$seg.Einheit2}}){{end}}{{end}}{{else}}– keine Ablesung{{end}}
       </div>
       <div class="bar-track" data-modus="fixkosten">
         {{if $m.HasFixkosten}}{{range $m.FixkostenSegmente}}<div class="{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="fixkosten">– keine Fixkosten-Eingabe</span>{{end}}
@@ -107,7 +107,7 @@
     <div class="kpi"><div class="kpi-label">Stromkosten {{$.AnzeigeJahr}}</div><div class="kpi-value">{{deEUR $.WallboxCard.GesamtEUR}} €</div></div>
   </div>
   <div class="panel verlauf-panel">
-    <div class="verlauf-legend"><span><i class="cat-strom"></i>Stromkosten</span></div>
+    <div class="verlauf-legend"><span><i class="cat-strom"></i>Stromkosten</span><span><i class="cat-pv"></i>PV-Anteil</span></div>
     {{range .Eintraege}}
     {{if .Jahreszeile}}
     <div class="verlauf-year-row"><span>Jahr {{.Jahreszeile.Jahr}}{{if .Jahreszeile.IstLaufend}} (laufend){{end}}</span><span>{{deEUR .Jahreszeile.Summe}} €</span></div>
@@ -116,7 +116,7 @@
     <div class="verlauf-row {{if $m.IsCurrent}}is-current{{end}}">
       <span class="month-label">{{$m.Label}}</span>
       <div class="bar-track">
-        {{if $m.HasWert}}<div class="cat-strom" style="width:{{$m.ProzentNeuestesGesamt}}%" data-eur="{{de $m.KWh}} kWh"><span>{{de $m.KWh}} kWh</span></div>{{else}}<span class="verlauf-none">– keine Ablesung</span>{{end}}
+        {{if $m.HasWert}}{{range $m.Segmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{de .Verbrauch}} kWh"><span>{{de .Verbrauch}} kWh</span></div>{{end}}{{else}}<span class="verlauf-none">– keine Ablesung</span>{{end}}
       </div>
       <span class="value-label">{{if $m.HasWert}}{{deEUR $m.EUR}} €{{end}}</span>
     </div>
@@ -132,7 +132,7 @@
     <div class="kpi"><div class="kpi-label">Einspeisevergütung {{$.AnzeigeJahr}}</div><div class="kpi-value" style="color:var(--success)">+{{deEUR $.PVCard.GesamtEUR}} €</div></div>
   </div>
   <div class="panel verlauf-panel">
-    <div class="verlauf-legend"><span><i style="background:var(--success)"></i>Einspeisevergütung</span></div>
+    <div class="verlauf-legend"><span><i class="cat-pv"></i>Einspeisevergütung</span></div>
     {{range .Eintraege}}
     {{if .Jahreszeile}}
     <div class="verlauf-year-row"><span>Jahr {{.Jahreszeile.Jahr}}{{if .Jahreszeile.IstLaufend}} (laufend){{end}}</span><span>+{{deEUR .Jahreszeile.Summe}} €</span></div>
@@ -141,7 +141,7 @@
     <div class="verlauf-row {{if $m.IsCurrent}}is-current{{end}}">
       <span class="month-label">{{$m.Label}}</span>
       <div class="bar-track">
-        {{if $m.HasWert}}<div style="width:{{$m.ProzentNeuestesGesamt}}%;background:var(--success)" data-eur="{{de $m.KWh}} kWh"><span>{{de $m.KWh}} kWh</span></div>{{else}}<span class="verlauf-none">– keine Ablesung</span>{{end}}
+        {{if $m.HasWert}}{{range $m.Segmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{de .Verbrauch}} kWh"><span>{{de .Verbrauch}} kWh</span></div>{{end}}{{else}}<span class="verlauf-none">– keine Ablesung</span>{{end}}
       </div>
       <span class="value-label">{{if $m.HasWert}}+{{deEUR $m.EUR}} €{{end}}</span>
     </div>
