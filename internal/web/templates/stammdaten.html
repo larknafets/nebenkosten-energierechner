@@ -14,4 +14,47 @@
     <button type="submit" class="primary">Speichern</button>
   </div>
 </form>
+
+<h3 style="margin-top:1.5rem">Kostenpositionen je Jahr</h3>
+<p class="muted">Jahresgebühren und Grundpreise, jahresweise gepflegt. Jahreswert-Positionen werden für die Fixkosten-Eingabe automatisch durch 12 geteilt.</p>
+
+{{range .JahrBloecke}}
+<form method="post" action="{{$.Base}}/stammdaten/jahre/{{.Jahr}}" class="panel" style="margin-top:1rem">
+  <h4>Jahr {{.Jahr}}</h4>
+  {{range .Positionen}}
+  {{$posLogik := .Logik}}
+  <div class="grid grid-4" style="align-items:end;margin-bottom:.5rem">
+    <div class="field" style="margin-bottom:0"><label>{{.Label}}</label></div>
+    <div class="field" style="margin-bottom:0">
+      <label>Berechnungslogik</label>
+      <select name="logik_{{.ID}}">
+        {{range $.LogikOptions}}
+        <option value="{{.Value}}" {{if eq .Value $posLogik}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:0">
+      <label>Typ</label>
+      <select name="typ_{{.ID}}">
+        <option value="jaehrlich" {{if eq .Typ "jaehrlich"}}selected{{end}}>jährlich</option>
+        <option value="monatlich" {{if eq .Typ "monatlich"}}selected{{end}}>monatlich</option>
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:0"><label>Jahreswert (EUR)</label><input type="number" step="any" name="jahreswert_{{.ID}}" value="{{.Jahreswert}}"></div>
+  </div>
+  {{end}}
+  <div class="btn-row">
+    <button type="submit" class="primary">Speichern</button>
+  </div>
+</form>
+{{if .IstNeuestes}}
+<form method="post" action="{{$.Base}}/stammdaten/jahre/{{.Jahr}}/loeschen" onsubmit="return confirm('Jahr {{.Jahr}} wirklich löschen?');" style="margin-top:.5rem">
+  <button type="submit" class="danger">Jahr {{.Jahr}} löschen</button>
+</form>
+{{end}}
+{{end}}
+
+<form method="post" action="{{.Base}}/stammdaten/jahre" class="btn-row" style="margin-top:1rem">
+  <button type="submit" class="secondary">+ Jahr {{.NextJahr}} anlegen{{if .JahrBloecke}} (vorbelegt vom Vorjahr){{end}}</button>
+</form>
 {{end}}

@@ -22,6 +22,18 @@ var logikLabels = map[string]string{
 	store.LogikPersonen:    "Je Anzahl Personen",
 }
 
+// logikOption is one <select> choice for a Kostenposition's Logik.
+type logikOption struct{ Value, Label string }
+
+// logikOptions is logikLabels in a stable, display order - the Stammdaten
+// Kostenpositionen-Jahre Logik-Dropdown's option list.
+var logikOptions = []logikOption{
+	{store.LogikWohneinheit, logikLabels[store.LogikWohneinheit]},
+	{store.LogikFlurstueck, logikLabels[store.LogikFlurstueck]},
+	{store.LogikQM, logikLabels[store.LogikQM]},
+	{store.LogikPersonen, logikLabels[store.LogikPersonen]},
+}
+
 // parseFixkostenMonat turns the form's <input type="month"> value ("YYYY-MM")
 // into the stored "YYYY-MM-01" convention (same day-1 convention as
 // PeriodInput.ReadingDate, minus the day-of-month the user never picks).
