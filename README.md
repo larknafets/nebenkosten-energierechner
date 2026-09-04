@@ -190,7 +190,20 @@ Danach erreichbar unter `http://localhost:8080`, Health-Check unter `/healthz`. 
 |---|---|---|
 | `DB_PATH` | `/data/nebenkosten.db` | Pfad zur SQLite-Datenbankdatei |
 | `LISTEN_ADDR` | `:8080` | Listen-Adresse des HTTP-Servers |
+| `WIDGET_LISTEN_ADDR` | `:8081` | Listen-Adresse der Widget-Routen (siehe unten) |
 
 ### Home Assistant Add-on
 
 Für den Betrieb als Home Assistant Add-on (inkl. Ingress-Integration, siehe Issue #22) siehe das Add-on-Repository [`larknafets/ha-addons`](https://github.com/larknafets/ha-addons).
+
+### Dashboard-Widgets (Home Assistant Lovelace)
+
+Für einzelne, kleine Karten im eigenen Dashboard - statt der ganzen App über Ingress - stellt der Server auf einem eigenen, 2. Port (`WIDGET_LISTEN_ADDR`) 3 zusätzliche, read-only Routen bereit, gedacht für ein Lovelace "Webpage card"/Iframe (Issue #77/#78). HA-Ingress-URLs lassen sich nicht zuverlässig in ein beliebiges Iframe einbetten (Ingress-Session muss erst durch Besuch des Addon-Panels geprimt werden), deshalb ein eigener, Ingress-freier Port - bewusst ohne Login und ohne jede mutierende Route, kleinstmögliche Angriffsfläche.
+
+| Route | Inhalt |
+|---|---|
+| `GET /widget/jahressumme/{entity}` | nur die Jahressummen-Karte |
+| `GET /widget/verbrauchswerte/{entity}` | nur das Verbrauchswerte-Panel (Verbrauch/Verbrauchswerte/Fixkosten/Kombiniert bleibt umschaltbar) |
+| `GET /widget/uebersicht/{entity}` | beide Ansichten untereinander |
+
+`{entity}` ist eine von: `wohnung-1`, `wohnung-2`, `wallboxen`, `pv-anlage`. Jede Route zeigt ohne Nav/Footer/Theme-Toggle immer das laufende Jahr, folgt nur `prefers-color-scheme` (kein Toggle-Button).
