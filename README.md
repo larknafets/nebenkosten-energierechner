@@ -67,6 +67,8 @@ Kosten_Wallbox   = Wallbox_Anteil_kWh * Strompreis
 
 Bei PV-Überschuss (`Netzbezug_Gesamt = 0`) sind alle 3 Kosten 0. Alle Anteile über `min()` gedeckelt, nie negativ.
 
+Visuelle Übersicht der Zähler-Verschachtelung und der PV-Verrechnungskaskade: [docs/pv-verrechnung.md](docs/pv-verrechnung.md).
+
 ### Heizung/Warmwasser (konfigurierbarer Split, Default 70/30)
 
 Die Wärmepumpen-Stromkosten (siehe oben) werden nach Wärmemengenzähler-Verhältnis und Wohnungsgrößen-Verhältnis auf die beiden Wohnungen verteilt. Die Gewichtung wird pro Periode im Wizard gewählt (70/30, 60/40 oder 50/50 - kein Freitext, siehe Issue #27) und ab dann für diese Periode eingefroren. `qm_W1`/`qm_W2` kommen dagegen live von den Stammdaten, nicht von der Periode.

@@ -17,6 +17,51 @@ Kosten_Strom_W2  = W2_Anteil_kWh * Strompreis
 Kosten_WP_gesamt = WP_Anteil_kWh * Strompreis        (Basis für Heizungskosten, siehe unten)
 Kosten_Wallbox   = Wallbox_Anteil_kWh * Strompreis</pre>
   <p class="muted">Bei PV-Überschuss (Netzbezug_Gesamt = 0) sind alle 3 Kosten 0. Alle Anteile über min() gedeckelt, nie negativ.</p>
+
+  <h3 style="margin-top:1.25rem">Zähler-Verschachtelung</h3>
+  <pre class="formula">Zähler
+├─ Strom
+│  ├─ Netzbezug Gesamt (strom_gesamt)       ← vom Netz bezogen, NETTO nach PV-Eigenverbrauch
+│  ├─ Wohnung 2 (strom_wohnung2)            ← Unterzähler, ROHER Verbrauch (vor PV-Abzug)
+│  ├─ Wärmepumpe (strom_waermepumpe)        ← Unterzähler, ROHER Verbrauch (vor PV-Abzug)
+│  ├─ Wallboxen (strom_wallbox)             ← Unterzähler, ROHER Verbrauch (vor PV-Abzug)
+│  └─ Einspeisung (strom_einspeisung)       ← PV-Überschuss ins Netz
+├─ Wärme
+│  ├─ Wohnung 1 (waerme_wohnung1)           ← Wärmemengenzähler
+│  └─ Wohnung 2 (waerme_wohnung2)           ← Wärmemengenzähler
+└─ Wasser
+   ├─ Gesamt (wasser_gesamt)
+   ├─ Wohnung 2 (wasser_wohnung2)
+   └─ Warmwasseraufbereitung (wasser_warmwasseraufbereitung)</pre>
+  <p class="muted">Wohnung 1's Strom hat keinen eigenen Zähler - er ergibt sich implizit als Rest der Kaskade unten.</p>
+
+  <h3 style="margin-top:1.25rem">PV-Verrechnungskaskade</h3>
+  <pre class="formula">Netzbezug Gesamt (netto)
+        │
+        ▼
+┌───────────────────────┐  strom_wohnung2 (roh) ──┐
+│ Stufe 1: Wohnung 2      │                          │
+│ Anteil = min(Netzbezug, W2-roh)                    │
+└───────────┬────────────┘                          │
+   Rest1 = Netzbezug − W2-Anteil        PV-Anteil W2 = W2-roh − W2-Anteil
+        │                                (nur >0, falls Netzbezug < W2-roh)
+        ▼
+┌───────────────────────┐  strom_waermepumpe (roh) ┐
+│ Stufe 2: Wärmepumpe     │                          │
+│ Anteil = min(Rest1, WP-roh)      ← Basis für Heizungskosten (70/30-Split)
+└───────────┬────────────┘                          │
+   Rest2 = Rest1 − WP-Anteil          PV-Anteil WP = WP-roh − WP-Anteil
+        │
+        ▼
+┌───────────────────────┐  strom_wallbox (roh) ────┐
+│ Stufe 3: Wallboxen      │                          │
+│ Anteil = min(Rest2, Wallbox-roh)   ← rein informativ, keine Wohnungs-Zuteilung
+└───────────┬────────────┘                          │
+   Rest3 = Rest2 − Wallbox-Anteil    PV-Anteil Wallbox = Wallbox-roh − Wallbox-Anteil
+        │
+        ▼
+   Wohnung 1 = Rest3
+   (kompletter verbleibender Netzbezug, kein eigener Zähler/PV-Anteil)</pre>
 </div>
 
 <div class="panel" style="margin-top:1rem">
