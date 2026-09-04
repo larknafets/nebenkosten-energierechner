@@ -1,0 +1,20 @@
+{{/* widget-layout is the minimal shell for the 2 HA-Widget-Routen (siehe
+     Issue #77 ff.) - reuses "styles" (layout.html) for identical look, but
+     drops Nav/Footer/Theme-Toggle: gedacht für ein Iframe/Webpage-Card in
+     Home Assistant, nicht für eigenständige Navigation. Folgt nur
+     prefers-color-scheme (kein Toggle-Button, kein localStorage-Theme). */}}
+{{define "widget-layout"}}<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nebenkostenrechner</title>
+<style>{{template "styles"}}
+  body { padding: .75rem; }
+</style>
+</head>
+<body>
+{{template "content" .}}
+</body>
+</html>
+{{end}}

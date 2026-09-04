@@ -18,7 +18,75 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nebenkostenrechner</title>
-<style>
+<style>{{template "styles"}}</style>
+</head>
+<body>
+<div class="theme-toggle">
+  <button type="button" class="theme-btn" data-choice="system" title="System">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M2.25 5.25a3 3 0 013-3h13.5a3 3 0 013 3V15a3 3 0 01-3 3h-3v.257c0 .597.237 1.17.659 1.591l.621.622a.75.75 0 01-.53 1.28h-9a.75.75 0 01-.53-1.28l.621-.622a2.25 2.25 0 00.659-1.591V18h-3a3 3 0 01-3-3V5.25zm1.5 0v9a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5z" clip-rule="evenodd"></path></svg>
+  </button>
+  <button type="button" class="theme-btn" data-choice="light" title="Hell">
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path></svg>
+  </button>
+  <button type="button" class="theme-btn" data-choice="dark" title="Dunkel">
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.455 2.004a.75.75 0 01.26.77 7 7 0 009.958 7.967.75.75 0 011.067.853A8.5 8.5 0 116.647 1.921a.75.75 0 01.808.083z" clip-rule="evenodd"></path></svg>
+  </button>
+</div>
+<div class="app">
+  {{template "content" .}}
+</div>
+<script>
+  // Theme-Umschalter (Ticket #49): schreibt die Wahl in localStorage und
+  // setzt data-theme sofort, ohne Reload. "system" löscht die explizite
+  // Wahl wieder - dann greift die prefers-color-scheme-Media-Query in der
+  // <style>-Regel oben.
+  (function () {
+    var btns = document.querySelectorAll(".theme-btn");
+    function setActive(choice) {
+      btns.forEach(function (b) {
+        b.classList.toggle("active", b.getAttribute("data-choice") === choice);
+      });
+    }
+    btns.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var choice = btn.getAttribute("data-choice");
+        try {
+          if (choice === "system") {
+            localStorage.removeItem("theme");
+            document.documentElement.removeAttribute("data-theme");
+          } else {
+            localStorage.setItem("theme", choice);
+            document.documentElement.setAttribute("data-theme", choice);
+          }
+        } catch (e) {}
+        setActive(choice);
+      });
+    });
+    var stored = null;
+    try {
+      stored = localStorage.getItem("theme");
+    } catch (e) {}
+    setActive(stored === "light" || stored === "dark" ? stored : "system");
+  })();
+</script>
+</body>
+</html>
+{{end}}
+
+{{/* nav is the top nav every page shows right under its <h1> (Prototyp-
+     Vorbild) - the current page's own item is bold, not a self-link, so
+     it's always visible which page you're on (unlike the old crumb/
+     crumbBack, where every page showed the same 4 links regardless of
+     where you were). .Aktuell is one of "dashboard"/"ablesungen"/
+     "fixkosten"/"stammdaten"/"berechnungslogik", set by each handler. */}}
+{{define "nav"}}<p class="muted">{{if eq .Aktuell "dashboard"}}<strong>Dashboard</strong>{{else}}<a href="{{.Base}}/dashboard">Dashboard</a>{{end}} · {{if eq .Aktuell "ablesungen"}}<strong>Ablesungen</strong>{{else}}<a href="{{.Base}}/ablesungen">Ablesungen</a>{{end}} · {{if eq .Aktuell "fixkosten"}}<strong>Fixkosten</strong>{{else}}<a href="{{.Base}}/fixkosten">Fixkosten</a>{{end}} · {{if eq .Aktuell "stammdaten"}}<strong>Stammdaten</strong>{{else}}<a href="{{.Base}}/stammdaten">Stammdaten</a>{{end}} · {{if eq .Aktuell "berechnungslogik"}}<strong>Wie wird gerechnet?</strong>{{else}}<a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a>{{end}}</p>{{end}}
+
+{{/* styles is the full shared CSS, split out of "layout" so the widget
+     shell (widget_layout.html) can reuse every component style (badges,
+     Kategorie-/Legend-Farben, stat-card layout, ...) without duplicating
+     ~135 lines - only the <head>/<body> wrapper and the theme-toggle/nav/
+     footer differ between the two shells. */}}
+{{define "styles"}}
   :root {
     color-scheme: light;
     --bg: #f4f5f7; --panel: #ffffff; --border: #e0e2e7; --text: #1c1e21;
@@ -155,65 +223,4 @@
     .bar-track { order: 3; flex-basis: 100%; }
     .verbrauch-liste { order: 3; flex-basis: 100%; }
   }
-</style>
-</head>
-<body>
-<div class="theme-toggle">
-  <button type="button" class="theme-btn" data-choice="system" title="System">
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M2.25 5.25a3 3 0 013-3h13.5a3 3 0 013 3V15a3 3 0 01-3 3h-3v.257c0 .597.237 1.17.659 1.591l.621.622a.75.75 0 01-.53 1.28h-9a.75.75 0 01-.53-1.28l.621-.622a2.25 2.25 0 00.659-1.591V18h-3a3 3 0 01-3-3V5.25zm1.5 0v9a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5z" clip-rule="evenodd"></path></svg>
-  </button>
-  <button type="button" class="theme-btn" data-choice="light" title="Hell">
-    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path></svg>
-  </button>
-  <button type="button" class="theme-btn" data-choice="dark" title="Dunkel">
-    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.455 2.004a.75.75 0 01.26.77 7 7 0 009.958 7.967.75.75 0 011.067.853A8.5 8.5 0 116.647 1.921a.75.75 0 01.808.083z" clip-rule="evenodd"></path></svg>
-  </button>
-</div>
-<div class="app">
-  {{template "content" .}}
-</div>
-<script>
-  // Theme-Umschalter (Ticket #49): schreibt die Wahl in localStorage und
-  // setzt data-theme sofort, ohne Reload. "system" löscht die explizite
-  // Wahl wieder - dann greift die prefers-color-scheme-Media-Query in der
-  // <style>-Regel oben.
-  (function () {
-    var btns = document.querySelectorAll(".theme-btn");
-    function setActive(choice) {
-      btns.forEach(function (b) {
-        b.classList.toggle("active", b.getAttribute("data-choice") === choice);
-      });
-    }
-    btns.forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var choice = btn.getAttribute("data-choice");
-        try {
-          if (choice === "system") {
-            localStorage.removeItem("theme");
-            document.documentElement.removeAttribute("data-theme");
-          } else {
-            localStorage.setItem("theme", choice);
-            document.documentElement.setAttribute("data-theme", choice);
-          }
-        } catch (e) {}
-        setActive(choice);
-      });
-    });
-    var stored = null;
-    try {
-      stored = localStorage.getItem("theme");
-    } catch (e) {}
-    setActive(stored === "light" || stored === "dark" ? stored : "system");
-  })();
-</script>
-</body>
-</html>
 {{end}}
-
-{{/* nav is the top nav every page shows right under its <h1> (Prototyp-
-     Vorbild) - the current page's own item is bold, not a self-link, so
-     it's always visible which page you're on (unlike the old crumb/
-     crumbBack, where every page showed the same 4 links regardless of
-     where you were). .Aktuell is one of "dashboard"/"ablesungen"/
-     "fixkosten"/"stammdaten"/"berechnungslogik", set by each handler. */}}
-{{define "nav"}}<p class="muted">{{if eq .Aktuell "dashboard"}}<strong>Dashboard</strong>{{else}}<a href="{{.Base}}/dashboard">Dashboard</a>{{end}} · {{if eq .Aktuell "ablesungen"}}<strong>Ablesungen</strong>{{else}}<a href="{{.Base}}/ablesungen">Ablesungen</a>{{end}} · {{if eq .Aktuell "fixkosten"}}<strong>Fixkosten</strong>{{else}}<a href="{{.Base}}/fixkosten">Fixkosten</a>{{end}} · {{if eq .Aktuell "stammdaten"}}<strong>Stammdaten</strong>{{else}}<a href="{{.Base}}/stammdaten">Stammdaten</a>{{end}} · {{if eq .Aktuell "berechnungslogik"}}<strong>Wie wird gerechnet?</strong>{{else}}<a href="{{.Base}}/berechnungslogik">Wie wird gerechnet?</a>{{end}}</p>{{end}}

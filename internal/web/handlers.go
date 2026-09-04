@@ -43,6 +43,11 @@ var (
 	fixkostenListeTemplate  = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/fixkosten.html"))
 	fixkostenFormTemplate   = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/fixkosten_form.html"))
 	fixkostenDetailTemplate = template.Must(template.New("layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/fixkosten_detail.html"))
+
+	// widget-layout Templates (Issue #77 ff.) - eigene Shell statt "layout",
+	// teilen sich nur "styles" (layout.html) mit dem Rest der App.
+	widgetJahressummeTemplate     = template.Must(template.New("widget_layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/widget_layout.html", "templates/widget_jahressumme.html"))
+	widgetVerbrauchswerteTemplate = template.Must(template.New("widget_layout.html").Funcs(templateFuncs).ParseFS(templateFS, "templates/layout.html", "templates/widget_layout.html", "templates/widget_verbrauchswerte.html"))
 )
 
 // meterDisplay describes how one meter's reading is labelled on the
@@ -1254,29 +1259,90 @@ type periodKosten struct {
 	Personen    map[int64]int64
 }
 
+// dashboardData is every piece of already-computed data the Dashboard and
+// the HA-Widget-Routen (Issue #77 ff.) build their views from - factored
+// out of handleDashboard so both share one implementation of "walk every
+// Periode/Fixkosten-Eingabe and compute this Jahr's Kosten" instead of
+// diverging copies.
+type dashboardData struct {
+	HasAnyData     bool
+	Apartments     []store.Apartment
+	PeriodenKosten []periodKosten
+	FixkostenListe []fixkostenKosten
+	Jahr           int
+}
+
+// loadDashboardData runs the shared, DB-heavy first half of both
+// handleDashboard and the widget handlers: apartments, every period's
+// Kosten (stopping at the oldest Periode ohne Vorperiode, same as before),
+// every Fixkosten-Eingabe's Ergebnis, and the auto-following Anzeigejahr.
+// HasAnyData=false (zero-value everything else) when neither Ablesungen
+// noch Fixkosten-Eingaben exist yet.
+func loadDashboardData(db *sql.DB) (dashboardData, error) {
+	apartments, err := store.Apartments(db)
+	if err != nil {
+		return dashboardData{}, fmt.Errorf("apartments: %w", err)
+	}
+
+	allPeriods, err := store.AllPeriods(db)
+	if err != nil {
+		return dashboardData{}, fmt.Errorf("all periods: %w", err)
+	}
+	fixkostenEingaben, err := store.AllFixkostenEingaben(db)
+	if err != nil {
+		return dashboardData{}, fmt.Errorf("fixkosten eingaben: %w", err)
+	}
+
+	if len(allPeriods) == 0 && len(fixkostenEingaben) == 0 {
+		return dashboardData{Apartments: apartments}, nil
+	}
+
+	// Verbrauch walks newest -> oldest and stops at the first period
+	// without a Vorperiode - that's always the very first period ever
+	// recorded (every later one has an earlier neighbour to diff
+	// against), so it's the natural end of the available history.
+	var periodenKosten []periodKosten
+	for _, p := range allPeriods {
+		pk, err := berechneKosten(db, p.ID)
+		if err != nil {
+			return dashboardData{}, err
+		}
+		if pk.KostenNote != "" {
+			break
+		}
+		personen, err := store.PersonenByApartment(db, p.ID)
+		if err != nil {
+			return dashboardData{}, fmt.Errorf("personen: %w", err)
+		}
+		periodenKosten = append(periodenKosten, periodKosten{ReadingDate: p.ReadingDate, K: pk, Personen: personen})
+	}
+
+	fixkostenListe, err := alleFixkostenKosten(db)
+	if err != nil {
+		return dashboardData{}, err
+	}
+
+	return dashboardData{
+		HasAnyData:     true,
+		Apartments:     apartments,
+		PeriodenKosten: periodenKosten,
+		FixkostenListe: fixkostenListe,
+		Jahr:           anzeigeJahr(allPeriods, fixkostenEingaben),
+	}, nil
+}
+
 // handleDashboard serves the redesigned Dashboard (Issue #60): Jahressummen-
 // Karten je Wohnung for the auto-following Anzeigejahr, then a Wohnung-
 // Umschalter with a combined Verbrauch+Fixkosten Monatsverlauf (4 Modi).
 func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		apartments, err := store.Apartments(db)
+		dd, err := loadDashboardData(db)
 		if err != nil {
-			http.Error(w, "apartments: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		allPeriods, err := store.AllPeriods(db)
-		if err != nil {
-			http.Error(w, "all periods: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		fixkostenEingaben, err := store.AllFixkostenEingaben(db)
-		if err != nil {
-			http.Error(w, "fixkosten eingaben: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		if len(allPeriods) == 0 && len(fixkostenEingaben) == 0 {
+		if !dd.HasAnyData {
 			data := struct {
 				Base       string
 				Aktuell    string
@@ -1289,36 +1355,7 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 			}
 			return
 		}
-
-		// Verbrauch walks newest -> oldest and stops at the first period
-		// without a Vorperiode - that's always the very first period ever
-		// recorded (every later one has an earlier neighbour to diff
-		// against), so it's the natural end of the available history.
-		var periodenKosten []periodKosten
-		for _, p := range allPeriods {
-			pk, err := berechneKosten(db, p.ID)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			if pk.KostenNote != "" {
-				break
-			}
-			personen, err := store.PersonenByApartment(db, p.ID)
-			if err != nil {
-				http.Error(w, "personen: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-			periodenKosten = append(periodenKosten, periodKosten{ReadingDate: p.ReadingDate, K: pk, Personen: personen})
-		}
-
-		fixkostenListe, err := alleFixkostenKosten(db)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		jahr := anzeigeJahr(allPeriods, fixkostenEingaben)
+		apartments, periodenKosten, fixkostenListe, jahr := dd.Apartments, dd.PeriodenKosten, dd.FixkostenListe, dd.Jahr
 
 		var cards []dashboardJahresCard
 		var verlaufSpalten []dashboardVerlaufSpalte
@@ -1372,6 +1409,132 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
+}
+
+// widgetEntity resolves a Widget-Route's {entity} Pfadsegment to either an
+// Apartment-ID (Wohnung 1/2) or one of the whole-house simpleSeries
+// (Wallboxen/PV-Anlage) - exactly the 4 Entitäten the Dashboard's
+// Jahressummen-Karten/Wohnung-Tabs already show. "" for an unknown slug.
+func widgetEntity(slug string) (apartmentID int64, simple *simpleSeries) {
+	switch slug {
+	case "wohnung-1":
+		return 1, nil
+	case "wohnung-2":
+		return 2, nil
+	case "wallboxen":
+		return 0, &wallboxSeries
+	case "pv-anlage":
+		return 0, &pvSeries
+	}
+	return 0, nil
+}
+
+// findApartment returns the apartment with the given id, or the zero value
+// if absent (only reachable if the DB's fixed 2-apartment seed data was
+// somehow removed).
+func findApartment(apartments []store.Apartment, id int64) store.Apartment {
+	for _, a := range apartments {
+		if a.ID == id {
+			return a
+		}
+	}
+	return store.Apartment{}
+}
+
+// handleWidgetJahressumme serves the Ingress-freie HA-Widget-Route (Issue
+// #77 ff.): exactly one Entity's Jahressummen-Karte, ohne Nav/Footer/
+// Theme-Toggle - gedacht für ein Lovelace "Webpage card" Iframe. {entity}
+// ist eine der 4 festen Wohnung-Tab-Entitäten (siehe widgetEntity).
+func handleWidgetJahressumme(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		apartmentID, simple := widgetEntity(r.PathValue("entity"))
+		if apartmentID == 0 && simple == nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		dd, err := loadDashboardData(db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		data := struct {
+			HasAnyData         bool
+			AnzeigeJahr        int
+			AnzeigeJahrLaufend bool
+			Card               *dashboardJahresCard
+			SimpleCard         *dashboardSimpleCard
+		}{HasAnyData: dd.HasAnyData, AnzeigeJahr: dd.Jahr, AnzeigeJahrLaufend: dd.Jahr == time.Now().Year()}
+
+		if dd.HasAnyData {
+			if simple != nil {
+				c := buildSimpleJahresCard(*simple, dd.Jahr, dd.PeriodenKosten)
+				data.SimpleCard = &c
+			} else {
+				a := findApartment(dd.Apartments, apartmentID)
+				c := buildJahresCard(a.ID, a.Name, a.QM, a.FlurstueckGroesse, dd.Jahr, dd.PeriodenKosten, dd.FixkostenListe)
+				data.Card = &c
+			}
+		}
+
+		if err := widgetJahressummeTemplate.ExecuteTemplate(w, "widget-layout", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+// handleWidgetVerbrauchswerte serves the 2. Ingress-freie HA-Widget-Route:
+// exactly ein Entity's Monatsverlauf-Panel (Verbrauch/Verbrauchswerte/
+// Fixkosten/Kombiniert-Umschalter bleibt nutzbar, nur die Entity ist fest).
+func handleWidgetVerbrauchswerte(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		apartmentID, simple := widgetEntity(r.PathValue("entity"))
+		if apartmentID == 0 && simple == nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		dd, err := loadDashboardData(db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		data := struct {
+			HasAnyData    bool
+			Verlauf       *dashboardVerlaufSpalte
+			SimpleVerlauf *dashboardSimpleSpalte
+			LogikOptions  []logikOption
+		}{HasAnyData: dd.HasAnyData, LogikOptions: logikOptions}
+
+		if dd.HasAnyData {
+			if simple != nil {
+				v := buildSimpleVerlauf(*simple, dd.PeriodenKosten)
+				data.SimpleVerlauf = &v
+			} else {
+				a := findApartment(dd.Apartments, apartmentID)
+				v := buildDashboardVerlauf(a.ID, a.Name, dd.PeriodenKosten, dd.FixkostenListe)
+				data.Verlauf = &v
+			}
+		}
+
+		if err := widgetVerbrauchswerteTemplate.ExecuteTemplate(w, "widget-layout", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+// NewWidgetMux serves ONLY the 2 read-only HA-Widget-Routen, deliberately
+// separate from NewMux's full app (Ablesungen/Fixkosten bearbeiten/
+// löschen etc.) - gedacht, auf einem 2. Port außerhalb von Ingress zu
+// laufen (siehe cmd/nebenkostenrechner), also ohne jede Auth: kleinstmögliche
+// Angriffsfläche, kein Zugriff auf mutierende Routen.
+func NewWidgetMux(db *sql.DB) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /widget/jahressumme/{entity}", handleWidgetJahressumme(db))
+	mux.HandleFunc("GET /widget/verbrauchswerte/{entity}", handleWidgetVerbrauchswerte(db))
+	return mux
 }
 
 // handleBerechnungslogik serves a static, informational explanation of the
