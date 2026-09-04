@@ -34,7 +34,7 @@
       {{end}}
     </div>
     <div class="muted stat-kategorien">
-      {{range .WallboxCard.Segmente}}<div>{{.Label}} {{de2 .Verbrauch}} {{.Einheit}}</div>{{end}}
+      {{range .WallboxCard.Segmente}}<div>{{.Label}} {{de0 .Verbrauch}} {{.Einheit}}</div>{{end}}
     </div>
   </div>
   <div class="panel stat-card">
@@ -46,7 +46,7 @@
       {{end}}
     </div>
     <div class="muted stat-kategorien">
-      {{range .PVCard.Segmente}}<div>{{.Label}} {{de2 .Verbrauch}} {{.Einheit}}</div>{{end}}
+      {{range .PVCard.Segmente}}<div>{{.Label}} {{de0 .Verbrauch}} {{.Einheit}}</div>{{end}}
     </div>
   </div>
 </div>
