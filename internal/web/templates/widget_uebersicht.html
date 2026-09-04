@@ -2,6 +2,8 @@
 {{if not .HasAnyData}}
 <p class="muted">Noch keine Ablesung oder Fixkosten-Eingabe erfasst.</p>
 {{else}}
+{{template "widget-jahressumme-body" .}}
+<div style="height:.75rem"></div>
 {{template "widget-verbrauchswerte-body" .}}
 {{end}}
 {{template "widget-verlauf-script"}}

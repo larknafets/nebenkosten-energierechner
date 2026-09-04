@@ -18,3 +18,200 @@
 </body>
 </html>
 {{end}}
+
+{{/* widget-jahressumme-body/widget-verbrauchswerte-body render exactly the
+     Jahressumme-Karte/Verlauf-Panel a Widget-Route shows - shared by
+     widget_jahressumme.html, widget_verbrauchswerte.html and
+     widget_uebersicht.html (Issue #78) so the 3. Route doesn't duplicate
+     either block a 3rd time. Dot must carry every field both bodies read;
+     the combined "content" data struct in handlers.go does. */}}
+{{define "widget-jahressumme-body"}}
+{{if .Card}}
+<div class="muted">Jahressummen {{.AnzeigeJahr}}{{if .AnzeigeJahrLaufend}} <span class="badge">laufend</span>{{end}}</div>
+<div class="panel stat-card">
+  <div class="muted"><strong>{{.Card.ApartmentName}}</strong>
+    <span class="badge badge-icon" title="Wohnungsgröße"><svg viewBox="0 0 24 24"><path d="M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z" /></svg>{{de0 .Card.ApartmentQM}} m²</span>
+    <span class="badge badge-icon" title="Flurstücksgröße"><svg viewBox="0 0 24 24"><path d="M11,21V16.74C10.53,16.91 10.03,17 9.5,17C7,17 5,15 5,12.5C5,11.23 5.5,10.09 6.36,9.27C6.13,8.73 6,8.13 6,7.5C6,5 8,3 10.5,3C12.06,3 13.44,3.8 14.25,5C14.33,5 14.41,5 14.5,5A5.5,5.5 0 0,1 20,10.5A5.5,5.5 0 0,1 14.5,16C14,16 13.5,15.93 13,15.79V21H11Z" /></svg>{{de0 .Card.ApartmentFlurstueck}} m²</span>
+    <span class="badge badge-icon" title="Personen-Schnitt"><svg viewBox="0 0 24 24"><path d="M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z" /></svg>{{de1 .Card.PersonenSchnitt}}</span>
+  </div>
+  <div class="stat-value">{{deEUR .Card.GesamtEUR}} €</div>
+  <div class="stat-bar-track">
+    {{range .Card.Segmente}}
+    <div class="stat-bar-seg cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%"></div>
+    {{end}}
+  </div>
+  <div class="muted stat-kategorien">
+    {{range .Card.Segmente}}<span class="v-{{.Farbe}}" title="{{.Label}}">{{kategorieIcon .Label}}{{deEUR .Kosten}} €</span>{{end}}
+  </div>
+</div>
+{{else}}
+<div class="muted">Jahressummen {{.AnzeigeJahr}}{{if .AnzeigeJahrLaufend}} <span class="badge">laufend</span>{{end}}</div>
+<div class="panel stat-card">
+  <div class="muted"><strong>{{.SimpleCard.Name}}</strong></div>
+  <div class="stat-value"{{if .SimpleCard.IstErtrag}} style="color:var(--success)"{{end}}>{{if .SimpleCard.IstErtrag}}+{{end}}{{deEUR .SimpleCard.GesamtEUR}} €</div>
+  <div class="stat-bar-track">
+    {{range .SimpleCard.Segmente}}
+    <div class="stat-bar-seg cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%"></div>
+    {{end}}
+  </div>
+  <div class="muted stat-kategorien">
+    {{range .SimpleCard.Segmente}}<span class="v-{{.Farbe}}" title="{{.Label}}">{{kategorieIcon .Label}}{{de0 .Verbrauch}} {{.Einheit}}</span>{{end}}
+  </div>
+</div>
+{{end}}
+{{end}}
+
+{{define "widget-verbrauchswerte-body"}}
+{{if .Verlauf}}
+<div class="panel verlauf-panel">
+  <div class="verlauf-legend">
+    <span class="legend-item" data-modus="verbrauch"><i class="cat-strom"></i>Strom</span>
+    <span class="legend-item" data-modus="verbrauch"><i class="cat-heizung"></i>Heizung/Warmwasser</span>
+    <span class="legend-item" data-modus="verbrauch"><i class="cat-wasser"></i>Wasser</span>
+    <span class="legend-item" data-modus="verbrauchswerte"><i class="cat-strom"></i>Strom</span>
+    <span class="legend-item" data-modus="verbrauchswerte"><i class="cat-heizung"></i>Heizung/Warmwasser</span>
+    <span class="legend-item" data-modus="verbrauchswerte"><i class="cat-wasser"></i>Wasser</span>
+    {{range .LogikOptions}}<span class="legend-item" data-modus="fixkosten"><i class="logik-{{.Value}}"></i>{{.Label}}</span>{{end}}
+    <span class="legend-item" data-modus="kombiniert"><i class="cat-verbrauch-gesamt"></i>Verbrauch</span>
+    <span class="legend-item" data-modus="kombiniert"><i class="cat-fix"></i>Fixkosten</span>
+    <div class="mode-toggle">
+      <button type="button" data-modus-btn="verbrauch">Verbrauch</button>
+      <button type="button" data-modus-btn="verbrauchswerte">Verbrauchswerte</button>
+      <button type="button" data-modus-btn="fixkosten">Fixkosten</button>
+      <button type="button" data-modus-btn="kombiniert">Kombiniert</button>
+    </div>
+  </div>
+
+  {{range .Verlauf.Eintraege}}
+  {{if .Jahreszeile}}
+  <div class="verlauf-year-row"><span>Jahr {{.Jahreszeile.Jahr}}{{if .Jahreszeile.IstLaufend}} (laufend){{end}}</span><span>Verbrauch {{deEUR .Jahreszeile.VerbrauchSumme}} € · Fixkosten {{deEUR .Jahreszeile.FixkostenSumme}} € · Gesamt {{deEUR .Jahreszeile.GesamtSumme}} €</span></div>
+  {{else}}
+  {{$m := .Monat}}
+  <div class="verlauf-row {{if $m.IsCurrent}}is-current{{end}}">
+    <span class="month-label">{{$m.Label}}</span>
+
+    <div class="bar-track" data-modus="verbrauch">
+      {{if $m.HasVerbrauch}}{{range $m.VerbrauchSegmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="verbrauch">– keine Ablesung</span>{{end}}
+    </div>
+    <div class="verbrauch-liste" data-modus="verbrauchswerte">
+      {{if $m.HasVerbrauch}}{{range $i2, $seg := $m.VerbrauchSegmente}}{{if $i2}} · {{end}}{{$seg.Label}} <span class="v-{{$seg.Farbe}}">{{de2 $seg.Verbrauch}} {{$seg.Einheit}}{{if $seg.Einheit2}} ({{de2 $seg.Verbrauch2}} {{$seg.Einheit2}}){{end}}</span>{{end}}{{else}}– keine Ablesung{{end}}
+    </div>
+    <div class="bar-track" data-modus="fixkosten">
+      {{if $m.HasFixkosten}}{{range $m.FixkostenSegmente}}<div class="{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="fixkosten">– keine Fixkosten-Eingabe</span>{{end}}
+    </div>
+    <div class="bar-track" data-modus="kombiniert">
+      {{if $m.HasKombiniert}}{{range $m.KombiniertSegmente}}<div class="cat-{{.Farbe}}{{if eq .Farbe "fix"}} fix-seg{{end}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="kombiniert">–</span>{{end}}
+    </div>
+
+    <span class="value-label" data-modus="verbrauch">{{if $m.HasVerbrauch}}{{deEUR $m.VerbrauchGesamt}} €{{end}}</span>
+    <span class="value-label" data-modus="fixkosten">{{if $m.HasFixkosten}}{{deEUR $m.FixkostenGesamt}} €{{end}}</span>
+    <span class="value-label" data-modus="kombiniert">{{if $m.HasKombiniert}}{{deEUR $m.KombiniertGesamt}} €{{end}}</span>
+  </div>
+  {{end}}
+  {{end}}
+</div>
+{{else}}
+<div class="panel verlauf-panel">
+  <div class="verlauf-legend">{{if .SimpleVerlauf.IstErtrag}}<span><i class="cat-pv"></i>Einspeisevergütung</span>{{else}}<span><i class="cat-strom"></i>Stromkosten</span><span><i class="cat-pv"></i>PV-Anteil</span>{{end}}</div>
+  {{range .SimpleVerlauf.Eintraege}}
+  {{if .Jahreszeile}}
+  <div class="verlauf-year-row"><span>Jahr {{.Jahreszeile.Jahr}}{{if .Jahreszeile.IstLaufend}} (laufend){{end}}</span><span>{{if $.SimpleVerlauf.IstErtrag}}+{{end}}{{deEUR .Jahreszeile.Summe}} €</span></div>
+  {{else}}
+  {{$m := .Monat}}
+  <div class="verlauf-row {{if $m.IsCurrent}}is-current{{end}}">
+    <span class="month-label">{{$m.Label}}</span>
+    <div class="bar-track">
+      {{if $m.HasWert}}{{range $m.Segmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{de2 .Verbrauch}} kWh"><span>{{de2 .Verbrauch}} kWh</span></div>{{end}}{{else}}<span class="verlauf-none">– keine Ablesung</span>{{end}}
+    </div>
+    <span class="value-label">{{if $m.HasWert}}{{if $.SimpleVerlauf.IstErtrag}}+{{end}}{{deEUR $m.EUR}} €{{end}}</span>
+  </div>
+  {{end}}
+  {{end}}
+</div>
+{{end}}
+{{end}}
+
+{{define "widget-verlauf-script"}}<script>
+  function fitVerlaufBarText() {
+    document.querySelectorAll(".bar-track > div").forEach(function (seg) {
+      var span = seg.querySelector("span");
+      if (!span) return;
+      span.style.display = "";
+      seg.classList.remove("text-hidden");
+      var size = 11;
+      span.style.fontSize = size + "px";
+      while (span.scrollWidth > seg.clientWidth - 4 && size > 7) {
+        size -= 1;
+        span.style.fontSize = size + "px";
+      }
+      if (span.scrollWidth > seg.clientWidth - 4) {
+        span.style.display = "none";
+        seg.classList.add("text-hidden");
+      }
+    });
+  }
+  window.addEventListener("load", fitVerlaufBarText);
+  window.addEventListener("resize", fitVerlaufBarText);
+
+  (function () {
+    var tooltipEl = null;
+    function showTooltip(seg) {
+      var eur = seg.getAttribute("data-eur");
+      if (!eur) return;
+      if (!tooltipEl) {
+        tooltipEl = document.createElement("div");
+        tooltipEl.className = "verlauf-tooltip";
+        document.body.appendChild(tooltipEl);
+      }
+      tooltipEl.textContent = eur;
+      tooltipEl.style.display = "block";
+      var rect = seg.getBoundingClientRect();
+      var top = rect.top - tooltipEl.offsetHeight - 6;
+      var left = rect.left + rect.width / 2 - tooltipEl.offsetWidth / 2;
+      left = Math.max(4, Math.min(left, window.innerWidth - tooltipEl.offsetWidth - 4));
+      tooltipEl.style.top = top + "px";
+      tooltipEl.style.left = left + "px";
+    }
+    function hideTooltip() { if (tooltipEl) tooltipEl.style.display = "none"; }
+    var longPressTimer = null;
+    document.querySelectorAll(".bar-track > div").forEach(function (seg) {
+      seg.addEventListener("mouseenter", function () { if (seg.classList.contains("text-hidden")) showTooltip(seg); });
+      seg.addEventListener("mouseleave", hideTooltip);
+      seg.addEventListener("touchstart", function () {
+        longPressTimer = setTimeout(function () { if (seg.classList.contains("text-hidden")) showTooltip(seg); }, 500);
+      }, { passive: true });
+      seg.addEventListener("touchend", function () { clearTimeout(longPressTimer); hideTooltip(); });
+      seg.addEventListener("touchcancel", function () { clearTimeout(longPressTimer); hideTooltip(); });
+    });
+  })();
+
+  (function () {
+    var MODI = ["verbrauch", "verbrauchswerte", "fixkosten", "kombiniert"];
+    var STORAGE_KEY = "widgetModus";
+
+    function applyModus(modus) {
+      document.querySelectorAll("[data-modus]").forEach(function (el) {
+        el.style.display = el.getAttribute("data-modus") === modus ? "" : "none";
+      });
+      document.querySelectorAll("[data-modus-btn]").forEach(function (btn) {
+        btn.classList.toggle("active", btn.getAttribute("data-modus-btn") === modus);
+      });
+      fitVerlaufBarText();
+    }
+
+    var modus = "verbrauch";
+    try {
+      var saved = localStorage.getItem(STORAGE_KEY);
+      if (saved && MODI.indexOf(saved) !== -1) modus = saved;
+    } catch (e) {}
+    applyModus(modus);
+
+    document.querySelectorAll("[data-modus-btn]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        modus = btn.getAttribute("data-modus-btn");
+        applyModus(modus);
+        try { localStorage.setItem(STORAGE_KEY, modus); } catch (e) {}
+      });
+    });
+  })();
+</script>{{end}}
