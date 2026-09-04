@@ -159,6 +159,52 @@ func TestGermanPeriodLabelShort(t *testing.T) {
 	}
 }
 
+// TestGroupKostenByMonat verifies Issue #86: periodenKosten sharing a Monat
+// (untermonatige Ablesungen) get their kategorien summed per Label, not
+// overwritten by whichever period is processed last.
+func TestGroupKostenByMonat(t *testing.T) {
+	first := kosten{Strom: &calc.StromErgebnis{KostenW2: 10, W2VerbrauchKWh: 50}, Wasser: &calc.WasserErgebnis{}, Heizung: &calc.HeizungErgebnis{}}
+	second := kosten{Strom: &calc.StromErgebnis{KostenW2: 15, W2VerbrauchKWh: 60}, Wasser: &calc.WasserErgebnis{}, Heizung: &calc.HeizungErgebnis{}}
+	october := kosten{Strom: &calc.StromErgebnis{KostenW2: 40, W2VerbrauchKWh: 200}, Wasser: &calc.WasserErgebnis{}, Heizung: &calc.HeizungErgebnis{}}
+
+	periods := []periodKosten{
+		{ReadingDate: "2026-09-01", Monat: "2026-09-01", K: first},
+		{ReadingDate: "2026-09-15", Monat: "2026-09-01", K: second},
+		{ReadingDate: "2026-10-01", Monat: "2026-10-01", K: october},
+	}
+
+	byMonat := groupKostenByMonat(2, periods)
+
+	if len(byMonat) != 2 {
+		t.Fatalf("want 2 Monate, got %d: %+v", len(byMonat), byMonat)
+	}
+
+	findStrom := func(kats []kategorie) *kategorie {
+		for i := range kats {
+			if kats[i].Label == "Strom" {
+				return &kats[i]
+			}
+		}
+		return nil
+	}
+
+	sept := findStrom(byMonat["2026-09-01"])
+	if sept == nil {
+		t.Fatalf("September: keine Strom-Kategorie gefunden: %+v", byMonat["2026-09-01"])
+	}
+	if sept.Kosten != 25 {
+		t.Errorf("September Strom.Kosten = %v, want 25 (10+15, summiert statt ueberschrieben)", sept.Kosten)
+	}
+	if sept.Verbrauch != 110 {
+		t.Errorf("September Strom.Verbrauch = %v, want 110 (50+60)", sept.Verbrauch)
+	}
+
+	okt := findStrom(byMonat["2026-10-01"])
+	if okt == nil || okt.Kosten != 40 {
+		t.Errorf("Oktober Strom = %+v, want Kosten=40 (eigener Monat, nicht mit September vermischt)", okt)
+	}
+}
+
 func TestBuildDashboardVerlauf_Skalierung(t *testing.T) {
 	// Neueste Periode (index 0) hat den kleineren Gesamtbetrag - eine
 	// aeltere, teurere Periode muss ueber 100% hinauslaufen (Ticket #19:
@@ -174,8 +220,8 @@ func TestBuildDashboardVerlauf_Skalierung(t *testing.T) {
 		Heizung: &calc.HeizungErgebnis{KostenHeizungW2: 20},
 	}
 	periods := []periodKosten{
-		{ReadingDate: "2026-11-15", K: neu},
-		{ReadingDate: "2026-10-01", K: alt},
+		{ReadingDate: "2026-11-15", Monat: "2026-11-01", K: neu},
+		{ReadingDate: "2026-10-01", Monat: "2026-10-01", K: alt},
 	}
 
 	spalte := buildDashboardVerlauf(2, "Wohnung 2", periods, nil)
@@ -228,7 +274,7 @@ func TestBuildDashboardVerlauf_Skalierung(t *testing.T) {
 
 	t.Run("neuester VerbrauchGesamt 0 erzeugt kein NaN", func(t *testing.T) {
 		zero := kosten{Strom: &calc.StromErgebnis{}, Wasser: &calc.WasserErgebnis{}, Heizung: &calc.HeizungErgebnis{}}
-		spalte := buildDashboardVerlauf(2, "Wohnung 2", []periodKosten{{ReadingDate: "2026-11-15", K: zero}}, nil)
+		spalte := buildDashboardVerlauf(2, "Wohnung 2", []periodKosten{{ReadingDate: "2026-11-15", Monat: "2026-11-01", K: zero}}, nil)
 		for _, seg := range spalte.Eintraege[0].Monat.VerbrauchSegmente {
 			if seg.ProzentNeuestesGesamt != 0 {
 				t.Errorf("ProzentNeuestesGesamt = %v, want 0", seg.ProzentNeuestesGesamt)
@@ -247,9 +293,9 @@ func TestBuildSimpleVerlaufUndJahresCard(t *testing.T) {
 	ohneWallbox := kosten{} // Strom nil - erste Periode ohne Vorperiode
 
 	periods := []periodKosten{
-		{ReadingDate: "2026-11-15", K: neu},
-		{ReadingDate: "2026-10-01", K: alt},
-		{ReadingDate: "2026-09-01", K: ohneWallbox},
+		{ReadingDate: "2026-11-15", Monat: "2026-11-01", K: neu},
+		{ReadingDate: "2026-10-01", Monat: "2026-10-01", K: alt},
+		{ReadingDate: "2026-09-01", Monat: "2026-09-01", K: ohneWallbox},
 	}
 
 	spalte := buildSimpleVerlauf(wallboxSeries, periods)
@@ -324,7 +370,7 @@ func TestBuildSimpleVerlaufUndJahresCard(t *testing.T) {
 	}
 
 	t.Run("PV-Anlage nutzt Einspeisung statt Wallbox", func(t *testing.T) {
-		p := []periodKosten{{ReadingDate: "2026-11-15", K: kosten{Einspeisung: &calc.EinspeisungErgebnis{EinspeisungKWh: 100, Ertrag: 8}}}}
+		p := []periodKosten{{ReadingDate: "2026-11-15", Monat: "2026-11-01", K: kosten{Einspeisung: &calc.EinspeisungErgebnis{EinspeisungKWh: 100, Ertrag: 8}}}}
 		pvCard := buildSimpleJahresCard(pvSeries, 2026, p)
 		if pvCard.GesamtEUR != 8 || !pvCard.IstErtrag {
 			t.Errorf("pvCard = %+v, want GesamtEUR=8 IstErtrag=true", pvCard)
@@ -335,6 +381,26 @@ func TestBuildSimpleVerlaufUndJahresCard(t *testing.T) {
 		spalte := buildSimpleVerlauf(wallboxSeries, nil)
 		if spalte.Eintraege != nil {
 			t.Errorf("want nil Eintraege for empty input, got %+v", spalte.Eintraege)
+		}
+	})
+
+	t.Run("mehrere Ablesungen im selben Monat werden zu einem Balken summiert", func(t *testing.T) {
+		erste := kosten{Strom: &calc.StromErgebnis{WallboxAnteilKWh: 10, PVAnteilWallboxKWh: 2, KostenWallbox: 4}}
+		zweite := kosten{Strom: &calc.StromErgebnis{WallboxAnteilKWh: 20, PVAnteilWallboxKWh: 3, KostenWallbox: 8}}
+		periods := []periodKosten{
+			{ReadingDate: "2026-09-15", Monat: "2026-09-01", K: zweite},
+			{ReadingDate: "2026-09-01", Monat: "2026-09-01", K: erste},
+		}
+		spalte := buildSimpleVerlauf(wallboxSeries, periods)
+		if len(spalte.Eintraege) != 2 { // 1 Monat + 1 Jahreszeile
+			t.Fatalf("want 2 Eintraege (1 Monat zusammengefasst), got %d: %+v", len(spalte.Eintraege), spalte.Eintraege)
+		}
+		m := spalte.Eintraege[0].Monat
+		if m == nil || m.EUR != 12 {
+			t.Fatalf("Monat = %+v, want EUR=12 (4+8, aus beiden Ablesungen desselben Monats)", m)
+		}
+		if s := m.Segmente[0]; s.Label != "Stromkosten" || s.Verbrauch != 30 {
+			t.Errorf("Stromkosten-Segment = %+v, want Verbrauch=30 (10+20)", s)
 		}
 	})
 }
@@ -350,7 +416,7 @@ func TestBuildDashboardVerlauf_KombiniertModus(t *testing.T) {
 		KostenW1:   15, KostenW2: 25,
 	}
 
-	periods := []periodKosten{{ReadingDate: "2026-09-01", K: verbrauch}}
+	periods := []periodKosten{{ReadingDate: "2026-09-01", Monat: "2026-09-01", K: verbrauch}}
 	fixkostenListe := []fixkostenKosten{{Monat: "2026-09-01", Erg: fix}}
 
 	spalte := buildDashboardVerlauf(2, "Wohnung 2", periods, fixkostenListe)
@@ -404,9 +470,9 @@ func TestMitJahreszeilen(t *testing.T) {
 
 	t.Run("jedes Jahr bekommt eine Summenzeile, auch das laufende", func(t *testing.T) {
 		periods := []periodKosten{
-			{ReadingDate: "2026-01-15", K: leer}, // 10
-			{ReadingDate: "2025-12-15", K: leer}, // 10
-			{ReadingDate: "2025-11-15", K: leer}, // 10
+			{ReadingDate: "2026-01-15", Monat: "2026-01-01", K: leer}, // 10
+			{ReadingDate: "2025-12-15", Monat: "2025-12-01", K: leer}, // 10
+			{ReadingDate: "2025-11-15", Monat: "2025-11-01", K: leer}, // 10
 		}
 		spalte := buildDashboardVerlauf(2, "Wohnung 2", periods, nil)
 		eintraege := spalte.Eintraege
@@ -464,9 +530,9 @@ func TestBuildJahresCard(t *testing.T) {
 		Heizung: &calc.HeizungErgebnis{},
 	}
 	periods := []periodKosten{
-		{ReadingDate: "2026-09-01", K: verbrauch2026, Personen: map[int64]int64{1: 3, 2: 2}},
-		{ReadingDate: "2026-08-01", K: verbrauch2026, Personen: map[int64]int64{1: 3, 2: 1}},
-		{ReadingDate: "2025-09-01", K: verbrauch2025, Personen: map[int64]int64{1: 3, 2: 99}}, // anderes Jahr, muss ausgeschlossen werden
+		{ReadingDate: "2026-09-01", Monat: "2026-09-01", K: verbrauch2026, Personen: map[int64]int64{1: 3, 2: 2}},
+		{ReadingDate: "2026-08-01", Monat: "2026-08-01", K: verbrauch2026, Personen: map[int64]int64{1: 3, 2: 1}},
+		{ReadingDate: "2025-09-01", Monat: "2025-09-01", K: verbrauch2025, Personen: map[int64]int64{1: 3, 2: 99}}, // anderes Jahr, muss ausgeschlossen werden
 	}
 	fixkostenListe := []fixkostenKosten{
 		{Monat: "2026-09-01", Erg: &calc.FixkostenErgebnis{KostenW1: 15, KostenW2: 25}},
@@ -514,6 +580,39 @@ func TestAnzeigeJahr(t *testing.T) {
 		got := anzeigeJahr(nil, nil)
 		if got != time.Now().Year() {
 			t.Errorf("anzeigeJahr(nil, nil) = %d, want %d", got, time.Now().Year())
+		}
+	})
+}
+
+// TestMonatInput verifies Issue #86's code-review fix: monatInput bundles
+// the "YYYY-MM" (<input type="month">) <-> "YYYY-MM-01" (store) conversion
+// in one place, and monatInputFromStored guards against a too-short stored
+// value instead of panicking (CreatePeriod never validates Monat, so a
+// malformed value can reach the edit form).
+func TestMonatInput(t *testing.T) {
+	t.Run("toStored ergaenzt -01 an ein blankes YYYY-MM", func(t *testing.T) {
+		if got := monatInput("2026-09").toStored(); got != "2026-09-01" {
+			t.Errorf("toStored() = %q, want 2026-09-01", got)
+		}
+	})
+
+	t.Run("toStored laesst ein bereits normalisiertes YYYY-MM-01 unveraendert", func(t *testing.T) {
+		if got := monatInput("2026-09-01").toStored(); got != "2026-09-01" {
+			t.Errorf("toStored() = %q, want 2026-09-01", got)
+		}
+	})
+
+	t.Run("monatInputFromStored kuerzt YYYY-MM-01 auf YYYY-MM", func(t *testing.T) {
+		if got := monatInputFromStored("2026-09-01"); got != "2026-09" {
+			t.Errorf("monatInputFromStored(%q) = %q, want 2026-09", "2026-09-01", got)
+		}
+	})
+
+	t.Run("monatInputFromStored gibt bei zu kurzem Wert leeren String zurueck, statt zu panicken", func(t *testing.T) {
+		for _, stored := range []string{"", "202", "2026-0"} {
+			if got := monatInputFromStored(stored); got != "" {
+				t.Errorf("monatInputFromStored(%q) = %q, want \"\" (kein Panic)", stored, got)
+			}
 		}
 	})
 }
@@ -584,6 +683,42 @@ func TestParsePeriodInput_NoQMFields(t *testing.T) {
 	}
 }
 
+// TestParsePeriodInput_Monat verifies Issue #86: the wizard's <input
+// type="month"> submits "YYYY-MM" (no day) - parsePeriodInput normalizes it
+// to the store's "YYYY-MM-01" format.
+func TestParsePeriodInput_Monat(t *testing.T) {
+	apartments := []store.Apartment{{ID: 1, Name: "Wohnung 1"}, {ID: 2, Name: "Wohnung 2"}}
+
+	form := url.Values{
+		"reading_date":       {"2026-08-31"},
+		"monat":              {"2026-09"},
+		"strompreis":         {"0.22"},
+		"frischwasser_preis": {"1.46"},
+		"abwasser_preis":     {"4.87"},
+		"einspeisung_preis":  {"0.08"},
+		"heizung_gewichtung": {"0.7"},
+		"personen_1":         {"2"},
+		"personen_2":         {"1"},
+	}
+	for _, key := range store.MeterKeys {
+		form.Set(key, "0")
+	}
+
+	r, err := http.NewRequest(http.MethodPost, "/ablesungen", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	in, err := parsePeriodInput(r, apartments)
+	if err != nil {
+		t.Fatalf("parsePeriodInput: %v", err)
+	}
+	if in.Monat != "2026-09-01" {
+		t.Errorf("Monat = %q, want 2026-09-01", in.Monat)
+	}
+}
+
 // TestCSVHeader_NoQMColumns verifies Issue #61's hard cut: the CSV
 // export/import format no longer has qm_1/qm_2 columns.
 func TestCSVHeader_NoQMColumns(t *testing.T) {
@@ -629,13 +764,23 @@ func TestParseDecimalDE(t *testing.T) {
 
 // csvRow builds one CSV data row (csvHeader order) with the given
 // reading_date/strom_gesamt, everything else at a fixed valid default -
-// the exact values elsewhere don't matter for the tests using this.
+// the exact values elsewhere don't matter for the tests using this. monat
+// is derived from readingDate (YYYY-MM-01), matching the wizard's own
+// auto-vorbelegung (Issue #86).
 func csvRow(readingDate string, stromGesamt string) string {
 	return strings.Join([]string{
-		readingDate, stromGesamt, "0", "0", "0", "0", "0", "0", "0", "0", "0",
+		readingDate, readingDate[:7] + "-01", stromGesamt, "0", "0", "0", "0", "0", "0", "0", "0", "0",
 		"0,22", "1,46", "4,87", "0,7", "0,08",
 		"2", "1",
 	}, ";")
+}
+
+// TestCSVHeader_HasMonatColumn verifies Issue #86: monat is exported/
+// imported right after reading_date.
+func TestCSVHeader_HasMonatColumn(t *testing.T) {
+	if len(csvHeader) < 2 || csvHeader[0] != "reading_date" || csvHeader[1] != "monat" {
+		t.Errorf("csvHeader[0:2] = %v, want [reading_date monat]", csvHeader[:min(2, len(csvHeader))])
+	}
 }
 
 func TestParseImportCSV_RoundTrip(t *testing.T) {
@@ -664,6 +809,9 @@ func TestParseImportCSV_RoundTrip(t *testing.T) {
 	}
 	if rows[1].input.Personen[1] != 2 || rows[1].input.Personen[2] != 1 {
 		t.Errorf("Personen = %v, want {1:2, 2:1}", rows[1].input.Personen)
+	}
+	if rows[1].input.Monat != "2026-07-01" {
+		t.Errorf("Monat = %q, want 2026-07-01 (aus der monat-Spalte, roundtrip-fest)", rows[1].input.Monat)
 	}
 }
 
@@ -768,22 +916,42 @@ func TestPeriodListItems(t *testing.T) {
 	}
 }
 
-func TestPeriodOverviewRows(t *testing.T) {
+// TestPeriodOverviewGroups verifies Issue #86: the Ablesungen-Übersicht
+// groups periods by Monat (Abrechnungsmonat), newest first - untermonatige
+// Ablesungen sharing a Monat land in one group's Rows, ready for the
+// template's rowspan-Spalte (Variante B).
+func TestPeriodOverviewGroups(t *testing.T) {
 	periods := []store.PeriodSummary{
-		{ID: 3, ReadingDate: "2026-08-01"},
-		{ID: 2, ReadingDate: "2026-07-01"},
-		{ID: 1, ReadingDate: "2026-06-01"},
+		{ID: 4, ReadingDate: "2026-10-01", Monat: "2026-10-01"},
+		{ID: 3, ReadingDate: "2026-09-15", Monat: "2026-09-01"},
+		{ID: 2, ReadingDate: "2026-09-01", Monat: "2026-09-01"},
+		{ID: 1, ReadingDate: "2026-08-01", Monat: "2026-08-01"},
 	}
 
-	rows := periodOverviewRows(periods)
-	if len(rows) != 3 {
-		t.Fatalf("len(rows) = %d, want 3", len(rows))
+	groups := periodOverviewGroups(periods)
+	if len(groups) != 3 {
+		t.Fatalf("len(groups) = %d, want 3 (Okt, Sept, Aug)", len(groups))
 	}
-	if rows[0].ReadingDate != "01.08.2026" || rows[0].Zeitraum != "01.07.2026–01.08.2026" {
-		t.Errorf("rows[0] = %+v, want ReadingDate=01.08.2026 Zeitraum=01.07.2026–01.08.2026", rows[0])
+
+	okt := groups[0]
+	if okt.MonatLabel != "Oktober 2026" || len(okt.Rows) != 1 {
+		t.Errorf("groups[0] = %+v, want MonatLabel=Oktober 2026 mit 1 Row", okt)
 	}
-	if rows[2].ReadingDate != "01.06.2026" || rows[2].Zeitraum != "keine Vorperiode" {
-		t.Errorf("rows[2] (oldest) = %+v, want ReadingDate=01.06.2026 Zeitraum=\"keine Vorperiode\"", rows[2])
+	if okt.Rows[0].ReadingDate != "01.10.2026" || okt.Rows[0].Zeitraum != "15.09.2026–01.10.2026" {
+		t.Errorf("Okt-Row = %+v, want ReadingDate=01.10.2026 Zeitraum=15.09.2026–01.10.2026", okt.Rows[0])
+	}
+
+	sept := groups[1]
+	if sept.MonatLabel != "September 2026" || len(sept.Rows) != 2 {
+		t.Fatalf("groups[1] = %+v, want MonatLabel=September 2026 mit 2 Rows (untermonatig)", sept)
+	}
+	if sept.Rows[0].ReadingDate != "15.09.2026" || sept.Rows[1].ReadingDate != "01.09.2026" {
+		t.Errorf("Sept-Rows Reihenfolge = [%q, %q], want [15.09.2026, 01.09.2026] (neueste zuerst)", sept.Rows[0].ReadingDate, sept.Rows[1].ReadingDate)
+	}
+
+	aug := groups[2]
+	if aug.MonatLabel != "August 2026" || len(aug.Rows) != 1 || aug.Rows[0].Zeitraum != "keine Vorperiode" {
+		t.Errorf("groups[2] = %+v, want MonatLabel=August 2026, 1 Row, Zeitraum=keine Vorperiode (aelteste)", aug)
 	}
 }
 

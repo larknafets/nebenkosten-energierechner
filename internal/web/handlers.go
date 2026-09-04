@@ -245,7 +245,7 @@ var meterDisplays = []meterDisplay{
 // apartment (fixed ids 1/2, see store's seed()). No qm_1/qm_2 columns
 // (Issue #61 moved Wohnungsgröße off the Ablesung onto /stammdaten - hard
 // cut, no backward compatibility with the old format).
-var csvHeader = append(append([]string{"reading_date"}, store.MeterKeys...),
+var csvHeader = append(append([]string{"reading_date", "monat"}, store.MeterKeys...),
 	"strompreis", "frischwasser_preis", "abwasser_preis", "heizung_gewichtung", "einspeisung_preis",
 	"personen_1", "personen_2",
 )
@@ -325,11 +325,16 @@ func handleIndex(db *sql.DB) http.HandlerFunc {
 // period - the negative-Verbrauch/Ausreißer-Warnung baseline the new
 // values are checked against - never the Ablesung being edited itself.
 type wizardData struct {
-	Base                string
-	Aktuell             string
-	FormAction          string
-	IsEdit              bool
-	ReadingDate         string
+	Base        string
+	Aktuell     string
+	FormAction  string
+	IsEdit      bool
+	ReadingDate string
+	// Monat is the Abrechnungsmonat field's value ("YYYY-MM", <input
+	// type="month">'s format), separate from ReadingDate - vorbelegt aus
+	// dem Ablesedatum in create mode, aus der Ablesung's eigenem Wert in
+	// edit mode (Issue #86).
+	Monat               string
 	Apartments          []store.Apartment
 	HasPrevious         bool
 	PreviousReadings    map[string]float64
@@ -411,6 +416,7 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			Aktuell:                   "ablesungen",
 			FormAction:                requestBase(r) + "/ablesungen",
 			ReadingDate:               time.Now().Format("2006-01-02"),
+			Monat:                     time.Now().Format("2006-01"),
 			Apartments:                apartments,
 			PreviousHeizungGewichtung: 0.7,
 			NoPeriods:                 previousPeriod == nil,
@@ -478,6 +484,7 @@ func handleEditWizardForm(db *sql.DB) http.HandlerFunc {
 			FormAction:                fmt.Sprintf("%s/ablesungen/%d", requestBase(r), target.ID),
 			IsEdit:                    true,
 			ReadingDate:               target.ReadingDate,
+			Monat:                     string(monatInputFromStored(target.Monat)),
 			Apartments:                apartments,
 			EditReadings:              target.Readings,
 			PreviousStrompreis:        target.Strompreis,
@@ -518,6 +525,35 @@ func parseHeizungGewichtung(raw string) (float64, error) {
 // parsePeriodInput parses an Ablesung form (shared by handleCreateAblesung
 // and handleUpdateAblesung - Ticket #34, same fields either way, only what
 // happens with the result differs).
+// monatInput is an <input type="month">'s value ("YYYY-MM") - the wizard-
+// facing Abrechnungsmonat format, distinct from periods.monat's persisted
+// "YYYY-MM-01" (Issue #86 code review: this was scattered as ad-hoc string
+// slicing/concatenation across parsePeriodInput and the edit form).
+type monatInput string
+
+// monatInputFromStored converts periods.monat ("YYYY-MM-01") to its
+// <input type="month"> value ("YYYY-MM"). Returns "" if stored is too
+// short to safely take the first 7 characters from - CreatePeriod never
+// validates Monat (only UpdatePeriod does, see checkMonatNeighbors), so a
+// malformed value can in principle reach the edit form; a blank field beats
+// a panic.
+func monatInputFromStored(stored string) monatInput {
+	if len(stored) < 7 {
+		return ""
+	}
+	return monatInput(stored[:7])
+}
+
+// toStored converts the wizard field's value back to periods.monat's
+// format, appending "-01" to a bare "YYYY-MM" if needed. Already-
+// normalized input passes through unchanged.
+func (m monatInput) toStored() string {
+	if len(m) == 7 {
+		return string(m) + "-01"
+	}
+	return string(m)
+}
+
 func parsePeriodInput(r *http.Request, apartments []store.Apartment) (store.PeriodInput, error) {
 	readings := make(map[string]float64, len(store.MeterKeys))
 	for _, key := range store.MeterKeys {
@@ -553,6 +589,7 @@ func parsePeriodInput(r *http.Request, apartments []store.Apartment) (store.Peri
 
 	return store.PeriodInput{
 		ReadingDate:             r.FormValue("reading_date"),
+		Monat:                   monatInput(r.FormValue("monat")).toStored(),
 		Strompreis:              strompreis,
 		FrischwasserPreis:       frischwasserPreis,
 		AbwasserPreis:           abwasserPreis,
@@ -635,11 +672,17 @@ func handleUpdateAblesung(db *sql.DB) http.HandlerFunc {
 		if err := store.UpdatePeriod(db, periodID, in); err != nil {
 			var tooEarly *store.PeriodDateTooEarlyError
 			var tooLate *store.PeriodDateTooLateError
+			var monatTooEarly *store.PeriodMonatTooEarlyError
+			var monatTooLate *store.PeriodMonatTooLateError
 			switch {
 			case errors.As(err, &tooEarly):
 				http.Error(w, fmt.Sprintf("Ablesedatum muss nach der Vorperiode (%s) liegen", tooEarly.Neighbor), http.StatusBadRequest)
 			case errors.As(err, &tooLate):
 				http.Error(w, fmt.Sprintf("Ablesedatum muss vor der Folgeperiode (%s) liegen", tooLate.Neighbor), http.StatusBadRequest)
+			case errors.As(err, &monatTooEarly):
+				http.Error(w, fmt.Sprintf("Abrechnungsmonat darf nicht vor dem der Vorperiode (%s) liegen", monatTooEarly.Neighbor), http.StatusBadRequest)
+			case errors.As(err, &monatTooLate):
+				http.Error(w, fmt.Sprintf("Abrechnungsmonat darf nicht nach dem der Folgeperiode (%s) liegen", monatTooLate.Neighbor), http.StatusBadRequest)
 			default:
 				http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 			}
@@ -748,10 +791,22 @@ type periodOverviewRow struct {
 	Zeitraum    string
 }
 
-// periodOverviewRows builds one periodOverviewRow per period, same order/
-// predecessor rule as periodListItems.
-func periodOverviewRows(periods []store.PeriodSummary) []periodOverviewRow {
-	out := make([]periodOverviewRow, len(periods))
+// periodMonatGroup is every Ablesung of one Abrechnungsmonat (Issue #86),
+// newest first - the Ablesungen-Übersicht's rowspan-Spalte (Ticket #83
+// Variante B): a Monat with 1 Ablesung renders a single row, a Monat with
+// several (untermonatige Ablesungen) spans the group under one Monat-cell.
+type periodMonatGroup struct {
+	MonatLabel string
+	Rows       []periodOverviewRow
+}
+
+// periodOverviewGroups builds one periodMonatGroup per distinct Monat,
+// newest first, same order/predecessor rule as periodListItems for each
+// row's Zeitraum. periods must already be newest-first (store.AllPeriods'
+// own order).
+func periodOverviewGroups(periods []store.PeriodSummary) []periodMonatGroup {
+	var out []periodMonatGroup
+	var currentMonat string
 	for i, p := range periods {
 		var zeitraum string
 		if i+1 < len(periods) {
@@ -759,7 +814,14 @@ func periodOverviewRows(periods []store.PeriodSummary) []periodOverviewRow {
 		} else {
 			zeitraum = "keine Vorperiode"
 		}
-		out[i] = periodOverviewRow{ID: p.ID, ReadingDate: formatDatumDE(p.ReadingDate), Zeitraum: zeitraum}
+		row := periodOverviewRow{ID: p.ID, ReadingDate: formatDatumDE(p.ReadingDate), Zeitraum: zeitraum}
+
+		if len(out) > 0 && p.Monat == currentMonat {
+			out[len(out)-1].Rows = append(out[len(out)-1].Rows, row)
+			continue
+		}
+		currentMonat = p.Monat
+		out = append(out, periodMonatGroup{MonatLabel: germanPeriodLabel(p.Monat), Rows: []periodOverviewRow{row}})
 	}
 	return out
 }
@@ -781,13 +843,13 @@ func handleAblesungenListe(db *sql.DB) http.HandlerFunc {
 		data := struct {
 			Base          string
 			Aktuell       string
-			Periods       []periodOverviewRow
+			MonatGruppen  []periodMonatGroup
 			ImportedCount int
 			Warnings      []string
 		}{
 			Base:          requestBase(r),
 			Aktuell:       "ablesungen",
-			Periods:       periodOverviewRows(periods),
+			MonatGruppen:  periodOverviewGroups(periods),
 			ImportedCount: importedCount,
 			Warnings:      r.URL.Query()["warning"],
 		}
@@ -820,7 +882,7 @@ func handleExportCSV(db *sql.DB) http.HandlerFunc {
 		}
 		for _, p := range details {
 			row := make([]string, 0, len(csvHeader))
-			row = append(row, p.ReadingDate)
+			row = append(row, p.ReadingDate, p.Monat)
 			for _, key := range store.MeterKeys {
 				row = append(row, formatDecimalDE(p.Readings[key]))
 			}
@@ -971,6 +1033,11 @@ func parseImportRow(record []string, colIdx map[string]int, line int) (store.Per
 		return store.PeriodInput{}, fmt.Errorf("Zeile %d: ungültiges Ablesedatum %q (Format JJJJ-MM-TT)", line, readingDate)
 	}
 
+	monat := strings.TrimSpace(cell("monat"))
+	if _, err := time.Parse("2006-01-02", monat); err != nil {
+		return store.PeriodInput{}, fmt.Errorf("Zeile %d: ungültiger Abrechnungsmonat %q (Format JJJJ-MM-01)", line, monat)
+	}
+
 	readings := make(map[string]float64, len(store.MeterKeys))
 	for _, key := range store.MeterKeys {
 		v, err := parseDecimalDE(cell(key))
@@ -1005,6 +1072,7 @@ func parseImportRow(record []string, colIdx map[string]int, line int) (store.Per
 
 	return store.PeriodInput{
 		ReadingDate:             readingDate,
+		Monat:                   monat,
 		Strompreis:              strompreis,
 		FrischwasserPreis:       frischwasserPreis,
 		AbwasserPreis:           abwasserPreis,
@@ -1256,8 +1324,12 @@ func kategorien(apartmentID int64, k kosten) []kategorie {
 // this across a Jahr's Perioden).
 type periodKosten struct {
 	ReadingDate string
-	K           kosten
-	Personen    map[int64]int64
+	// Monat is this period's Abrechnungsmonat (Issue #86, "YYYY-MM-01") -
+	// the key groupKostenByMonat and the Jahreskarten group/filter by,
+	// distinct from ReadingDate which stays the exact Ablesedatum.
+	Monat    string
+	K        kosten
+	Personen map[int64]int64
 }
 
 // dashboardData is every piece of already-computed data the Dashboard and
@@ -1315,7 +1387,7 @@ func loadDashboardData(db *sql.DB) (dashboardData, error) {
 		if err != nil {
 			return dashboardData{}, fmt.Errorf("personen: %w", err)
 		}
-		periodenKosten = append(periodenKosten, periodKosten{ReadingDate: p.ReadingDate, K: pk, Personen: personen})
+		periodenKosten = append(periodenKosten, periodKosten{ReadingDate: p.ReadingDate, Monat: p.Monat, K: pk, Personen: personen})
 	}
 
 	fixkostenListe, err := alleFixkostenKosten(db)

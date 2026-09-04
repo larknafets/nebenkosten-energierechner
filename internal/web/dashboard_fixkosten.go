@@ -145,7 +145,7 @@ func buildJahresCard(apartmentID int64, apartmentName string, apartmentQM, apart
 	var personenSumme float64
 	var personenAnzahl int
 	for _, pk := range periodenKosten {
-		t, err := time.Parse("2006-01-02", pk.ReadingDate)
+		t, err := time.Parse("2006-01-02", pk.Monat)
 		if err != nil || t.Year() != jahr {
 			continue
 		}
@@ -245,6 +245,37 @@ type dashboardVerlaufSpalte struct {
 	Eintraege     []dashboardVerlaufEintrag
 }
 
+// groupKostenByMonat merges every periodKosten's kategorien(apartmentID, ...)
+// row by Abrechnungsmonat (Issue #86): 2+ Ablesungen sharing a Monat
+// (untermonatige Ablesungen) get their rows summed (Kosten, Verbrauch,
+// Verbrauch2), instead of one silently overwriting another - replaces
+// buildDashboardVerlauf's old per-ReadingDate "first one wins" bucket,
+// which only ever saw 1 period per month in practice.
+//
+// Merging by position (not by Label) is safe here because kategorien's
+// result shape - which Kategorien it returns, in which order - depends
+// only on apartmentID, which is fixed for one groupKostenByMonat call
+// (code review: matches buildSimpleVerlauf's equivalent per-Monat merge,
+// rather than duplicating the same idea as a second, Label-keyed one).
+func groupKostenByMonat(apartmentID int64, periodenKosten []periodKosten) map[string][]kategorie {
+	out := map[string][]kategorie{}
+
+	for _, pk := range periodenKosten {
+		kats := kategorien(apartmentID, pk.K)
+		existing, ok := out[pk.Monat]
+		if !ok {
+			out[pk.Monat] = kats
+			continue
+		}
+		for i := range existing {
+			existing[i].Kosten += kats[i].Kosten
+			existing[i].Verbrauch += kats[i].Verbrauch
+			existing[i].Verbrauch2 += kats[i].Verbrauch2
+		}
+	}
+	return out
+}
+
 // buildDashboardVerlauf merges the given apartment's Verbrauch (from
 // periodenKosten) and Fixkosten (from fixkostenListe) into one calendar-
 // month Monatsverlauf. The 2 input series aren't forced 1:1 - a month with
@@ -258,27 +289,26 @@ func buildDashboardVerlauf(apartmentID int64, apartmentName string, periodenKost
 		verbrauchKats []kategorie
 		fixErg        *calc.FixkostenErgebnis
 	}
-	buckets := map[int]*bucket{}
-	var order []int
+	buckets := map[string]*bucket{}
+	var order []string
 
-	ensure := func(dateStr string) *bucket {
-		t, err := time.Parse("2006-01-02", dateStr)
+	ensure := func(monat string) *bucket {
+		t, err := time.Parse("2006-01-02", monat)
 		if err != nil {
 			return nil
 		}
-		key := t.Year()*1000 + int(t.Month())
-		b, ok := buckets[key]
+		b, ok := buckets[monat]
 		if !ok {
-			b = &bucket{label: germanPeriodLabelShort(dateStr), jahr: t.Year()}
-			buckets[key] = b
-			order = append(order, key)
+			b = &bucket{label: germanPeriodLabelShort(monat), jahr: t.Year()}
+			buckets[monat] = b
+			order = append(order, monat)
 		}
 		return b
 	}
 
-	for _, pk := range periodenKosten {
-		if b := ensure(pk.ReadingDate); b != nil && b.verbrauchKats == nil {
-			b.verbrauchKats = kategorien(apartmentID, pk.K)
+	for monat, kats := range groupKostenByMonat(apartmentID, periodenKosten) {
+		if b := ensure(monat); b != nil {
+			b.verbrauchKats = kats
 		}
 	}
 	for _, fk := range fixkostenListe {
@@ -287,7 +317,7 @@ func buildDashboardVerlauf(apartmentID int64, apartmentName string, periodenKost
 		}
 	}
 
-	sort.Sort(sort.Reverse(sort.IntSlice(order)))
+	sort.Sort(sort.Reverse(sort.StringSlice(order)))
 
 	monate := make([]dashboardMonat, 0, len(order))
 	for _, key := range order {
@@ -503,7 +533,7 @@ func buildSimpleJahresCard(series simpleSeries, jahr int, periodenKosten []perio
 	var sum float64
 	var segSummen []dashboardSegment // gleiche Reihenfolge/Label wie series.Wert liefert
 	for _, pk := range periodenKosten {
-		t, err := time.Parse("2006-01-02", pk.ReadingDate)
+		t, err := time.Parse("2006-01-02", pk.Monat)
 		if err != nil || t.Year() != jahr {
 			continue
 		}
@@ -546,17 +576,54 @@ func buildSimpleJahresCard(series simpleSeries, jahr int, periodenKosten []perio
 // Wallbox macht sonst der unbezahlte PV-Anteil die Breite unproportional.
 func buildSimpleVerlauf(series simpleSeries, periodenKosten []periodKosten) dashboardSimpleSpalte {
 	id, name, istErtrag, wert := series.ID, series.Name, series.IstErtrag, series.Wert
-	monate := make([]dashboardSimpleMonat, 0, len(periodenKosten))
+
+	type monatAgg struct {
+		jahr     int
+		hasWert  bool
+		eur      float64
+		segmente []dashboardSegment
+	}
+	byMonat := map[string]*monatAgg{}
+	var order []string
 	for _, pk := range periodenKosten {
-		t, err := time.Parse("2006-01-02", pk.ReadingDate)
+		t, err := time.Parse("2006-01-02", pk.Monat)
 		if err != nil {
 			continue
 		}
-		dm := dashboardSimpleMonat{Label: germanPeriodLabelShort(pk.ReadingDate), Jahr: t.Year()}
+		agg, ok := byMonat[pk.Monat]
+		if !ok {
+			agg = &monatAgg{jahr: t.Year()}
+			byMonat[pk.Monat] = agg
+			order = append(order, pk.Monat)
+		}
 		if segs, eur, ok := wert(pk.K); ok {
-			dm.HasWert = true
-			dm.Segmente = segs
-			dm.EUR = calc.Round2(eur)
+			agg.hasWert = true
+			agg.eur += eur
+			if agg.segmente == nil {
+				agg.segmente = make([]dashboardSegment, len(segs))
+				for i, s := range segs {
+					agg.segmente[i] = dashboardSegment{Farbe: s.Farbe, Label: s.Label, Einheit: s.Einheit}
+				}
+			}
+			for i, s := range segs {
+				agg.segmente[i].Kosten += s.Kosten
+				agg.segmente[i].Verbrauch += s.Verbrauch
+			}
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(order)))
+
+	monate := make([]dashboardSimpleMonat, 0, len(order))
+	for _, monat := range order {
+		agg := byMonat[monat]
+		dm := dashboardSimpleMonat{Label: germanPeriodLabelShort(monat), Jahr: agg.jahr, HasWert: agg.hasWert}
+		if agg.hasWert {
+			for i := range agg.segmente {
+				agg.segmente[i].Kosten = calc.Round2(agg.segmente[i].Kosten)
+				agg.segmente[i].Verbrauch = calc.Round2(agg.segmente[i].Verbrauch)
+			}
+			dm.Segmente = agg.segmente
+			dm.EUR = calc.Round2(agg.eur)
 		}
 		monate = append(monate, dm)
 	}

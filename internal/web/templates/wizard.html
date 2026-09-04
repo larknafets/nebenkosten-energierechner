@@ -13,10 +13,16 @@
 {{end}}
 
 <form method="post" action="{{.FormAction}}" class="panel">
-  <div class="field" style="max-width:220px">
-    <label>Ablesedatum</label>
-    <input type="date" name="reading_date" value="{{.ReadingDate}}" required {{if .HasPrevious}}data-prev-date="{{.PreviousReadingDate}}"{{end}}>
-    <div class="warning" id="warn-reading_date"></div>
+  <div style="display:flex; gap:1rem;">
+    <div class="field" style="max-width:220px">
+      <label>Ablesedatum</label>
+      <input type="date" name="reading_date" id="reading_date" value="{{.ReadingDate}}" required {{if .HasPrevious}}data-prev-date="{{.PreviousReadingDate}}"{{end}}>
+      <div class="warning" id="warn-reading_date"></div>
+    </div>
+    <div class="field" style="max-width:180px">
+      <label>Abrechnungsmonat</label>
+      <input type="month" name="monat" id="monat" value="{{.Monat}}" required>
+    </div>
   </div>
 
   <div class="c-steps">
@@ -155,6 +161,20 @@
   if (dateInput) {
     dateInput.addEventListener('change', checkGap);
     checkGap();
+  }
+
+  // Abrechnungsmonat folgt dem Ablesedatum, bis der Nutzer das Monat-Feld
+  // selbst anfasst (Issue #86) - danach bleibt die manuelle Wahl bestehen,
+  // auch wenn das Datum sich noch ändert.
+  const monatInput = document.getElementById('monat');
+  let monatTouched = false;
+  if (monatInput) {
+    monatInput.addEventListener('input', () => { monatTouched = true; });
+    if (dateInput) {
+      dateInput.addEventListener('input', () => {
+        if (!monatTouched && dateInput.value) monatInput.value = dateInput.value.slice(0, 7);
+      });
+    }
   }
 </script>
 {{end}}

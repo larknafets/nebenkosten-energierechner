@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS periods (
     frischwasser_preis         REAL NOT NULL,
     abwasser_preis             REAL NOT NULL,
     heizung_waerme_gewichtung  REAL NOT NULL DEFAULT 0.7,
-    einspeisung_preis          REAL NOT NULL DEFAULT 0
+    einspeisung_preis          REAL NOT NULL DEFAULT 0,
+    monat                      TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS meter_readings (

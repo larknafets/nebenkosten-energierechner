@@ -15,6 +15,10 @@ _Avoid_: Messwert, Reading
 **Verbrauch**:
 Die Differenz zwischen dem Zählerstand einer Ablesung und dem der chronologisch nächst-älteren Ablesung desselben Zählers.
 
+**Abrechnungsmonat**:
+Der Monat, dem eine Ablesung für die Abrechnung zugeordnet ist (`periods.monat`) - unabhängig vom Ablesedatum, das nur der tatsächliche Erfassungszeitpunkt ist. Wird beim Anlegen aus dem Ablesedatum vorbelegt, ist aber manuell überschreibbar; mehrere Ablesungen desselben Abrechnungsmonats (untermonatige Ablesungen) bleiben als eigene Datensätze erhalten, ihre Kosten werden für die Monatsanzeige summiert. Muss chronologisch monoton nicht-fallend mit dem Ablesedatum bleiben.
+_Avoid_: Zeitraum, Monat (zu unspezifisch - Ablesedatum trägt ebenfalls einen Monat)
+
 **Netzbezug**:
 Die vom Stromnetz bezogene Energiemenge (Zähler `strom_gesamt`) - bereits netto nach PV-Eigenverbrauch, da PV-Eigenverbrauch nie durch diesen Zähler läuft.
 

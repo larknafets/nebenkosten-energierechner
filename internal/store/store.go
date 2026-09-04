@@ -60,6 +60,11 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate flurstueck_groesse column: %w", err)
 	}
 
+	if err := ensurePeriodsMonatColumn(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate monat column: %w", err)
+	}
+
 	if err := seed(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("seed master data: %w", err)
@@ -153,6 +158,43 @@ func ensureApartmentsFlurstueckGroesseColumn(db *sql.DB) error {
 	}
 
 	_, err = db.Exec(`ALTER TABLE apartments ADD COLUMN flurstueck_groesse REAL NOT NULL DEFAULT 0`)
+	return err
+}
+
+// ensurePeriodsMonatColumn adds the monat column to an existing periods
+// table that predates it (Issue #86), backfilling every pre-existing row's
+// Abrechnungsmonat from its own reading_date (YYYY-MM-01) - unlike the
+// static-default migrations above, this needs a computed value per row, so
+// the backfill runs once, right here, in the same call that adds the
+// column. A later re-run finds the column already present and returns
+// before touching any row, so a manual monat override (via UpdatePeriod)
+// is never clobbered.
+func ensurePeriodsMonatColumn(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(periods)`)
+	if err != nil {
+		return fmt.Errorf("inspect periods columns: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scan periods column: %w", err)
+		}
+		if name == "monat" {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	if _, err := db.Exec(`ALTER TABLE periods ADD COLUMN monat TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE periods SET monat = substr(reading_date, 1, 7) || '-01' WHERE monat = ''`)
 	return err
 }
 

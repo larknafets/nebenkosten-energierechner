@@ -83,6 +83,7 @@ func UpdateStammdaten(db *sql.DB, in map[int64]StammdatenInput) error {
 // PeriodInput is one monthly reading, ready to be persisted.
 type PeriodInput struct {
 	ReadingDate             string // YYYY-MM-DD
+	Monat                   string // YYYY-MM-01, das Abrechnungsmonat-Label (Issue #86)
 	Strompreis              float64
 	FrischwasserPreis       float64
 	AbwasserPreis           float64
@@ -99,9 +100,9 @@ type PeriodInput struct {
 // transaction - Ticket #54).
 func insertPeriodTx(tx *sql.Tx, in PeriodInput) (periodID int64, err error) {
 	res, err := tx.Exec(
-		`INSERT INTO periods (reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		in.ReadingDate, in.Strompreis, in.FrischwasserPreis, in.AbwasserPreis, in.HeizungWaermeGewichtung, in.EinspeisungPreis,
+		`INSERT INTO periods (reading_date, monat, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		in.ReadingDate, in.Monat, in.Strompreis, in.FrischwasserPreis, in.AbwasserPreis, in.HeizungWaermeGewichtung, in.EinspeisungPreis,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert period: %w", err)
@@ -201,25 +202,54 @@ func (e *PeriodDateTooLateError) Error() string {
 	return fmt.Sprintf("reading date must be before the next period (%s)", e.Neighbor)
 }
 
-// dateNeighborBounds finds, among `all` periods excluding periodID, the
-// closest ReadingDate below and above `currentDate` - the range a
-// correction may move periodID's own date within without silently
-// reordering it past a neighbor (Ticket #44 review finding: generalizing
-// "korrigieren" to any period means a date change can now shift which
-// period is whose Vorperiode for everyone in between, not just itself).
-func dateNeighborBounds(all []PeriodSummary, periodID int64, currentDate string) (prev, next string, hasPrev, hasNext bool) {
+// neighborValues finds, among `all` periods excluding periodID, the
+// closest ReadingDate below and above `currentDate`, returning what
+// `value` reads off each of those two neighbors - the shared lookup behind
+// dateNeighborBounds and monatNeighborBounds (Issue #86 code review: these
+// were an exact structural duplicate, differing only in which field they
+// read off the neighbor). The range is the one a correction may move
+// periodID's own field within without silently reordering it past a
+// neighbor (Ticket #44 review finding: generalizing "korrigieren" to any
+// period means a change can now shift which period is whose Vorperiode for
+// everyone in between, not just itself).
+func neighborValues(all []PeriodSummary, periodID int64, currentDate string, value func(PeriodSummary) string) (prev, next string, hasPrev, hasNext bool) {
+	var prevDate, nextDate string
 	for _, p := range all {
 		if p.ID == periodID {
 			continue
 		}
-		if p.ReadingDate <= currentDate && (!hasPrev || p.ReadingDate > prev) {
-			prev, hasPrev = p.ReadingDate, true
+		if p.ReadingDate <= currentDate && (!hasPrev || p.ReadingDate > prevDate) {
+			prevDate, prev, hasPrev = p.ReadingDate, value(p), true
 		}
-		if p.ReadingDate >= currentDate && (!hasNext || p.ReadingDate < next) {
-			next, hasNext = p.ReadingDate, true
+		if p.ReadingDate >= currentDate && (!hasNext || p.ReadingDate < nextDate) {
+			nextDate, next, hasNext = p.ReadingDate, value(p), true
 		}
 	}
 	return
+}
+
+// dateNeighborBounds is neighborValues reading each neighbor's own
+// ReadingDate.
+func dateNeighborBounds(all []PeriodSummary, periodID int64, currentDate string) (prev, next string, hasPrev, hasNext bool) {
+	return neighborValues(all, periodID, currentDate, func(p PeriodSummary) string { return p.ReadingDate })
+}
+
+// periodNeighborContext fetches periodID's own (pre-edit) ReadingDate and
+// every period, for a neighbor-bounds check - the shared setup behind
+// checkDateNeighbors and checkMonatNeighbors.
+func periodNeighborContext(db *sql.DB, periodID int64) (currentDate string, all []PeriodSummary, err error) {
+	if err := db.QueryRow(`SELECT reading_date FROM periods WHERE id = ?`, periodID).Scan(&currentDate); err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil, fmt.Errorf("%w: period %d", ErrPeriodNotFound, periodID)
+		}
+		return "", nil, fmt.Errorf("query period %d: %w", periodID, err)
+	}
+
+	all, err = AllPeriods(db)
+	if err != nil {
+		return "", nil, fmt.Errorf("periods: %w", err)
+	}
+	return currentDate, all, nil
 }
 
 // checkDateNeighbors validates in.ReadingDate against periodID's
@@ -228,17 +258,9 @@ func dateNeighborBounds(all []PeriodSummary, periodID int64, currentDate string)
 // new one - a correction may only move the date within the gap it already
 // occupies, not jump elsewhere and skip the check.
 func checkDateNeighbors(db *sql.DB, periodID int64, readingDate string) error {
-	var currentDate string
-	if err := db.QueryRow(`SELECT reading_date FROM periods WHERE id = ?`, periodID).Scan(&currentDate); err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("%w: period %d", ErrPeriodNotFound, periodID)
-		}
-		return fmt.Errorf("query period %d: %w", periodID, err)
-	}
-
-	all, err := AllPeriods(db)
+	currentDate, all, err := periodNeighborContext(db, periodID)
 	if err != nil {
-		return fmt.Errorf("periods: %w", err)
+		return err
 	}
 
 	prev, next, hasPrev, hasNext := dateNeighborBounds(all, periodID, currentDate)
@@ -247,6 +269,56 @@ func checkDateNeighbors(db *sql.DB, periodID int64, readingDate string) error {
 	}
 	if hasNext && readingDate >= next {
 		return &PeriodDateTooLateError{Neighbor: next}
+	}
+	return nil
+}
+
+// PeriodMonatTooEarlyError is returned by UpdatePeriod when in.Monat would
+// move periodID's Abrechnungsmonat before its chronological predecessor's.
+type PeriodMonatTooEarlyError struct {
+	Neighbor string // the predecessor's Monat
+}
+
+func (e *PeriodMonatTooEarlyError) Error() string {
+	return fmt.Sprintf("monat must not be before the previous period's monat (%s)", e.Neighbor)
+}
+
+// PeriodMonatTooLateError is UpdatePeriod's mirror of
+// PeriodMonatTooEarlyError for the chronological successor.
+type PeriodMonatTooLateError struct {
+	Neighbor string // the successor's Monat
+}
+
+func (e *PeriodMonatTooLateError) Error() string {
+	return fmt.Sprintf("monat must not be after the next period's monat (%s)", e.Neighbor)
+}
+
+// monatNeighborBounds is neighborValues reading each neighbor's Monat -
+// dateNeighborBounds' counterpart for the ones in.Monat must stay within
+// (Issue #86). Unlike ReadingDate, equal to a neighbor's Monat is fine
+// (multiple Ablesungen may share an Abrechnungsmonat), so the caller
+// compares with < / >, not <= / >=.
+func monatNeighborBounds(all []PeriodSummary, periodID int64, currentDate string) (prev, next string, hasPrev, hasNext bool) {
+	return neighborValues(all, periodID, currentDate, func(p PeriodSummary) string { return p.Monat })
+}
+
+// checkMonatNeighbors validates in.Monat against periodID's chronological
+// neighbors before UpdatePeriod writes it - the monat-monotonicity
+// counterpart to checkDateNeighbors. Only UpdatePeriod calls this;
+// CreatePeriod leaves Monat unvalidated, consistent with ReadingDate's own
+// unvalidated creation path.
+func checkMonatNeighbors(db *sql.DB, periodID int64, monat string) error {
+	currentDate, all, err := periodNeighborContext(db, periodID)
+	if err != nil {
+		return err
+	}
+
+	prev, next, hasPrev, hasNext := monatNeighborBounds(all, periodID, currentDate)
+	if hasPrev && monat < prev {
+		return &PeriodMonatTooEarlyError{Neighbor: prev}
+	}
+	if hasNext && monat > next {
+		return &PeriodMonatTooLateError{Neighbor: next}
 	}
 	return nil
 }
@@ -263,6 +335,9 @@ func UpdatePeriod(db *sql.DB, periodID int64, in PeriodInput) error {
 	if err := checkDateNeighbors(db, periodID, in.ReadingDate); err != nil {
 		return err
 	}
+	if err := checkMonatNeighbors(db, periodID, in.Monat); err != nil {
+		return err
+	}
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -271,9 +346,9 @@ func UpdatePeriod(db *sql.DB, periodID int64, in PeriodInput) error {
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`UPDATE periods SET reading_date = ?, strompreis = ?, frischwasser_preis = ?, abwasser_preis = ?, heizung_waerme_gewichtung = ?, einspeisung_preis = ?
+		`UPDATE periods SET reading_date = ?, monat = ?, strompreis = ?, frischwasser_preis = ?, abwasser_preis = ?, heizung_waerme_gewichtung = ?, einspeisung_preis = ?
 		 WHERE id = ?`,
-		in.ReadingDate, in.Strompreis, in.FrischwasserPreis, in.AbwasserPreis, in.HeizungWaermeGewichtung, in.EinspeisungPreis, periodID,
+		in.ReadingDate, in.Monat, in.Strompreis, in.FrischwasserPreis, in.AbwasserPreis, in.HeizungWaermeGewichtung, in.EinspeisungPreis, periodID,
 	)
 	if err != nil {
 		return fmt.Errorf("update period: %w", err)
@@ -320,6 +395,7 @@ func UpdatePeriod(db *sql.DB, periodID int64, in PeriodInput) error {
 type LatestPeriod struct {
 	ID                      int64
 	ReadingDate             string
+	Monat                   string
 	Strompreis              float64
 	FrischwasserPreis       float64
 	AbwasserPreis           float64
@@ -391,11 +467,12 @@ func RecentPeriodReadings(db *sql.DB, limit int) ([]PeriodReadings, error) {
 type PeriodSummary struct {
 	ID          int64
 	ReadingDate string
+	Monat       string
 }
 
 // AllPeriods returns every period (newest first), without readings.
 func AllPeriods(db *sql.DB) ([]PeriodSummary, error) {
-	rows, err := db.Query(`SELECT id, reading_date FROM periods ORDER BY reading_date DESC, id DESC`)
+	rows, err := db.Query(`SELECT id, reading_date, monat FROM periods ORDER BY reading_date DESC, id DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("query periods: %w", err)
 	}
@@ -404,7 +481,7 @@ func AllPeriods(db *sql.DB) ([]PeriodSummary, error) {
 	var out []PeriodSummary
 	for rows.Next() {
 		var p PeriodSummary
-		if err := rows.Scan(&p.ID, &p.ReadingDate); err != nil {
+		if err := rows.Scan(&p.ID, &p.ReadingDate, &p.Monat); err != nil {
 			return nil, fmt.Errorf("scan period: %w", err)
 		}
 		out = append(out, p)
@@ -417,7 +494,7 @@ func AllPeriods(db *sql.DB) ([]PeriodSummary, error) {
 // batched queries total (periods, readings, occupancy), not one per period.
 func AllPeriodDetails(db *sql.DB) ([]*LatestPeriod, error) {
 	rows, err := db.Query(
-		`SELECT id, reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis
+		`SELECT id, reading_date, monat, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis
 		 FROM periods ORDER BY reading_date ASC, id ASC`,
 	)
 	if err != nil {
@@ -432,7 +509,7 @@ func AllPeriodDetails(db *sql.DB) ([]*LatestPeriod, error) {
 			Readings:            map[string]float64{},
 			PersonenByApartment: map[int64]int64{},
 		}
-		if err := rows.Scan(&p.ID, &p.ReadingDate, &p.Strompreis, &p.FrischwasserPreis, &p.AbwasserPreis, &p.HeizungWaermeGewichtung, &p.EinspeisungPreis); err != nil {
+		if err := rows.Scan(&p.ID, &p.ReadingDate, &p.Monat, &p.Strompreis, &p.FrischwasserPreis, &p.AbwasserPreis, &p.HeizungWaermeGewichtung, &p.EinspeisungPreis); err != nil {
 			return nil, fmt.Errorf("scan period: %w", err)
 		}
 		byID[p.ID] = p
@@ -505,7 +582,7 @@ func GetLatestPeriod(db *sql.DB) (*LatestPeriod, error) {
 // to the latest period anymore).
 func GetPeriodDetails(db *sql.DB, id int64) (*LatestPeriod, error) {
 	row := db.QueryRow(
-		`SELECT id, reading_date, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis
+		`SELECT id, reading_date, monat, strompreis, frischwasser_preis, abwasser_preis, heizung_waerme_gewichtung, einspeisung_preis
 		 FROM periods WHERE id = ?`,
 		id,
 	)
@@ -513,7 +590,7 @@ func GetPeriodDetails(db *sql.DB, id int64) (*LatestPeriod, error) {
 		Readings:            map[string]float64{},
 		PersonenByApartment: map[int64]int64{},
 	}
-	if err := row.Scan(&p.ID, &p.ReadingDate, &p.Strompreis, &p.FrischwasserPreis, &p.AbwasserPreis, &p.HeizungWaermeGewichtung, &p.EinspeisungPreis); err != nil {
+	if err := row.Scan(&p.ID, &p.ReadingDate, &p.Monat, &p.Strompreis, &p.FrischwasserPreis, &p.AbwasserPreis, &p.HeizungWaermeGewichtung, &p.EinspeisungPreis); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}

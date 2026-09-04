@@ -14,15 +14,20 @@
 </div>
 {{end}}
 
-{{if not .Periods}}
+{{if not .MonatGruppen}}
 <p class="muted">Noch keine Ablesung erfasst. <a href="{{.Base}}/ablesungen/neu">Jetzt erfassen</a>.</p>
 {{else}}
 <div class="panel">
   <table class="letzte">
-    <thead><tr><th>Ablesedatum</th><th>Zeitraum</th><th></th></tr></thead>
+    <thead><tr><th>Monat</th><th>Ablesedatum</th><th>Zeitraum</th><th></th></tr></thead>
     <tbody>
-      {{range .Periods}}
-      <tr><td>{{.ReadingDate}}</td><td>{{.Zeitraum}}</td><td><a href="{{$.Base}}/ablesungen/{{.ID}}">Details</a></td></tr>
+      {{range $group := .MonatGruppen}}
+      {{range $i, $row := $group.Rows}}
+      <tr>
+        {{if eq $i 0}}<td rowspan="{{len $group.Rows}}" style="vertical-align:top; font-weight:600">{{$group.MonatLabel}}</td>{{end}}
+        <td>{{$row.ReadingDate}}</td><td>{{$row.Zeitraum}}</td><td><a href="{{$.Base}}/ablesungen/{{$row.ID}}">Details</a></td>
+      </tr>
+      {{end}}
       {{end}}
     </tbody>
   </table>

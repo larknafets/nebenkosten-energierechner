@@ -89,6 +89,90 @@ func TestCreatePeriod_GetLatestPeriod_AllPeriods_Roundtrip(t *testing.T) {
 	}
 }
 
+// TestPeriod_Monat_Roundtrip verifies Issue #86: a period's Monat
+// (Abrechnungsmonat) persists independently of ReadingDate and comes back
+// through every read path.
+func TestPeriod_Monat_Roundtrip(t *testing.T) {
+	db := openTestDB(t)
+	p1, err := CreatePeriod(db, PeriodInput{
+		ReadingDate:             "2026-08-31",
+		Monat:                   "2026-08-01",
+		Strompreis:              0.22,
+		FrischwasserPreis:       1.46,
+		AbwasserPreis:           4.87,
+		HeizungWaermeGewichtung: 0.7,
+		Readings:                baseReadings(nil),
+		Personen:                map[int64]int64{1: 2, 2: 1},
+	})
+	if err != nil {
+		t.Fatalf("CreatePeriod: %v", err)
+	}
+
+	details, err := GetPeriodDetails(db, p1)
+	if err != nil {
+		t.Fatalf("GetPeriodDetails: %v", err)
+	}
+	if details.Monat != "2026-08-01" {
+		t.Errorf("GetPeriodDetails.Monat = %q, want 2026-08-01", details.Monat)
+	}
+
+	latest, err := GetLatestPeriod(db)
+	if err != nil {
+		t.Fatalf("GetLatestPeriod: %v", err)
+	}
+	if latest.Monat != "2026-08-01" {
+		t.Errorf("GetLatestPeriod.Monat = %q, want 2026-08-01", latest.Monat)
+	}
+
+	all, err := AllPeriods(db)
+	if err != nil {
+		t.Fatalf("AllPeriods: %v", err)
+	}
+	if len(all) != 1 || all[0].Monat != "2026-08-01" {
+		t.Errorf("AllPeriods[0].Monat = %q, want 2026-08-01", all[0].Monat)
+	}
+
+	allDetails, err := AllPeriodDetails(db)
+	if err != nil {
+		t.Fatalf("AllPeriodDetails: %v", err)
+	}
+	if len(allDetails) != 1 || allDetails[0].Monat != "2026-08-01" {
+		t.Errorf("AllPeriodDetails[0].Monat = %q, want 2026-08-01", allDetails[0].Monat)
+	}
+}
+
+// TestUpdatePeriod_Monat_Roundtrip verifies Issue #86: UpdatePeriod persists
+// a changed Monat, independent of ReadingDate.
+func TestUpdatePeriod_Monat_Roundtrip(t *testing.T) {
+	db := openTestDB(t)
+	p1, err := CreatePeriod(db, PeriodInput{
+		ReadingDate:             "2026-08-31",
+		Monat:                   "2026-08-01",
+		HeizungWaermeGewichtung: 0.7,
+		Readings:                baseReadings(nil),
+	})
+	if err != nil {
+		t.Fatalf("CreatePeriod: %v", err)
+	}
+
+	if err := UpdatePeriod(db, p1, PeriodInput{
+		ReadingDate:             "2026-08-31",
+		Monat:                   "2026-09-01",
+		HeizungWaermeGewichtung: 0.7,
+		Readings:                baseReadings(nil),
+	}); err != nil {
+		t.Fatalf("UpdatePeriod: %v", err)
+	}
+
+	got, err := GetPeriodDetails(db, p1)
+	if err != nil {
+		t.Fatalf("GetPeriodDetails: %v", err)
+	}
+	if got.Monat != "2026-09-01" {
+		t.Errorf("Monat after UpdatePeriod = %q, want 2026-09-01", got.Monat)
+	}
+}
+
 // TestSeed_ApartmentsQMStartsAtZero verifies Ticket #38: a fresh install
 // doesn't hardcode this household's real Wohnungsgröße as an app default -
 // qm starts at 0, like Strompreis/Personen have no seed default either.
@@ -444,6 +528,102 @@ func TestUpdatePeriod_DateConflict(t *testing.T) {
 	})
 }
 
+// TestUpdatePeriod_MonatConflict verifies Issue #86: UpdatePeriod rejects a
+// monat moved before the chronologically previous period's monat or after
+// the next one's - but allows it to equal a neighbor's monat (multiple
+// Ablesungen may share an Abrechnungsmonat).
+func TestUpdatePeriod_MonatConflict(t *testing.T) {
+	db := openTestDB(t)
+	create := func(date string) int64 {
+		id, err := CreatePeriod(db, PeriodInput{ReadingDate: date, Monat: date, HeizungWaermeGewichtung: 0.7, Readings: baseReadings(nil)})
+		if err != nil {
+			t.Fatalf("CreatePeriod %s: %v", date, err)
+		}
+		return id
+	}
+	create("2026-06-01")
+	p2 := create("2026-07-01")
+	create("2026-08-01")
+
+	t.Run("monat vor dem der vorherigen Ablesung", func(t *testing.T) {
+		err := UpdatePeriod(db, p2, PeriodInput{
+			ReadingDate:             "2026-07-01",
+			Monat:                   "2026-05-01",
+			HeizungWaermeGewichtung: 0.7,
+			Readings:                baseReadings(nil),
+		})
+		var tooEarly *PeriodMonatTooEarlyError
+		if !errors.As(err, &tooEarly) {
+			t.Fatalf("UpdatePeriod err = %v, want *PeriodMonatTooEarlyError", err)
+		}
+		if tooEarly.Neighbor != "2026-06-01" {
+			t.Errorf("Neighbor = %q, want 2026-06-01", tooEarly.Neighbor)
+		}
+	})
+
+	t.Run("monat nach dem der naechsten Ablesung", func(t *testing.T) {
+		err := UpdatePeriod(db, p2, PeriodInput{
+			ReadingDate:             "2026-07-01",
+			Monat:                   "2026-09-01",
+			HeizungWaermeGewichtung: 0.7,
+			Readings:                baseReadings(nil),
+		})
+		var tooLate *PeriodMonatTooLateError
+		if !errors.As(err, &tooLate) {
+			t.Fatalf("UpdatePeriod err = %v, want *PeriodMonatTooLateError", err)
+		}
+		if tooLate.Neighbor != "2026-08-01" {
+			t.Errorf("Neighbor = %q, want 2026-08-01", tooLate.Neighbor)
+		}
+	})
+
+	t.Run("monat gleich dem eines Nachbarn ist erlaubt", func(t *testing.T) {
+		if err := UpdatePeriod(db, p2, PeriodInput{
+			ReadingDate:             "2026-07-01",
+			Monat:                   "2026-06-01",
+			HeizungWaermeGewichtung: 0.7,
+			Readings:                baseReadings(nil),
+		}); err != nil {
+			t.Errorf("UpdatePeriod mit monat gleich dem Vorgaenger: %v", err)
+		}
+		if err := UpdatePeriod(db, p2, PeriodInput{
+			ReadingDate:             "2026-07-01",
+			Monat:                   "2026-08-01",
+			HeizungWaermeGewichtung: 0.7,
+			Readings:                baseReadings(nil),
+		}); err != nil {
+			t.Errorf("UpdatePeriod mit monat gleich dem Nachfolger: %v", err)
+		}
+	})
+}
+
+// TestCreatePeriod_MonatUnvalidated verifies Issue #86: unlike UpdatePeriod,
+// CreatePeriod does not enforce the monat-monotonicity invariant - matching
+// the existing behavior for reading_date, which also isn't checked against
+// neighbors on creation, only on correction.
+func TestCreatePeriod_MonatUnvalidated(t *testing.T) {
+	db := openTestDB(t)
+	if _, err := CreatePeriod(db, PeriodInput{
+		ReadingDate:             "2026-08-01",
+		Monat:                   "2026-08-01",
+		HeizungWaermeGewichtung: 0.7,
+		Readings:                baseReadings(nil),
+	}); err != nil {
+		t.Fatalf("CreatePeriod: %v", err)
+	}
+
+	// A chronologically later period with an earlier monat - would be
+	// rejected by UpdatePeriod, but CreatePeriod lets it through.
+	if _, err := CreatePeriod(db, PeriodInput{
+		ReadingDate:             "2026-09-01",
+		Monat:                   "2026-07-01",
+		HeizungWaermeGewichtung: 0.7,
+		Readings:                baseReadings(nil),
+	}); err != nil {
+		t.Errorf("CreatePeriod with out-of-order monat: %v, want no error", err)
+	}
+}
+
 func TestUpdatePeriod_UnknownID(t *testing.T) {
 	db := openTestDB(t)
 	err := UpdatePeriod(db, 999, PeriodInput{
@@ -647,6 +827,102 @@ func TestEnsurePeriodsEinspeisungPreisColumn(t *testing.T) {
 		db := openTestDB(t)
 		if err := ensurePeriodsEinspeisungPreisColumn(db); err != nil {
 			t.Fatalf("ensurePeriodsEinspeisungPreisColumn on an already-current schema: %v", err)
+		}
+	})
+}
+
+// TestEnsurePeriodsMonatColumn verifies Issue #86's migration: an existing
+// installation's periods get monat backfilled from their own reading_date
+// (YYYY-MM-01), and a second call doesn't clobber an already-set value.
+func TestEnsurePeriodsMonatColumn(t *testing.T) {
+	t.Run("fuegt Spalte zu einer alten Tabelle ohne sie hinzu, backfillt aus reading_date", func(t *testing.T) {
+		db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "old.db"))
+		if err != nil {
+			t.Fatalf("open sqlite: %v", err)
+		}
+		t.Cleanup(func() { db.Close() })
+
+		// Pre-#86-Schema: periods ohne monat.
+		if _, err := db.Exec(`CREATE TABLE periods (
+			id                 INTEGER PRIMARY KEY,
+			reading_date       TEXT NOT NULL,
+			strompreis         REAL NOT NULL,
+			frischwasser_preis REAL NOT NULL,
+			abwasser_preis     REAL NOT NULL
+		)`); err != nil {
+			t.Fatalf("create old-shape periods table: %v", err)
+		}
+		if _, err := db.Exec(
+			`INSERT INTO periods (reading_date, strompreis, frischwasser_preis, abwasser_preis) VALUES (?, ?, ?, ?)`,
+			"2026-08-31", 0.22, 1.46, 4.87,
+		); err != nil {
+			t.Fatalf("insert pre-existing row: %v", err)
+		}
+
+		if err := ensurePeriodsMonatColumn(db); err != nil {
+			t.Fatalf("ensurePeriodsMonatColumn: %v", err)
+		}
+
+		var monat string
+		if err := db.QueryRow(`SELECT monat FROM periods WHERE reading_date = '2026-08-31'`).Scan(&monat); err != nil {
+			t.Fatalf("query migrated column: %v", err)
+		}
+		if monat != "2026-08-01" {
+			t.Errorf("pre-existing row's monat = %q, want 2026-08-01 (backfilled from reading_date)", monat)
+		}
+
+		// Idempotent: ein zweiter Aufruf darf nicht mit "duplicate column" fehlschlagen.
+		if err := ensurePeriodsMonatColumn(db); err != nil {
+			t.Fatalf("second ensurePeriodsMonatColumn call: %v", err)
+		}
+	})
+
+	t.Run("zweiter Aufruf ueberschreibt einen bereits gesetzten Wert nicht", func(t *testing.T) {
+		db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "old.db"))
+		if err != nil {
+			t.Fatalf("open sqlite: %v", err)
+		}
+		t.Cleanup(func() { db.Close() })
+
+		if _, err := db.Exec(`CREATE TABLE periods (
+			id                 INTEGER PRIMARY KEY,
+			reading_date       TEXT NOT NULL,
+			strompreis         REAL NOT NULL,
+			frischwasser_preis REAL NOT NULL,
+			abwasser_preis     REAL NOT NULL
+		)`); err != nil {
+			t.Fatalf("create old-shape periods table: %v", err)
+		}
+		if _, err := db.Exec(
+			`INSERT INTO periods (reading_date, strompreis, frischwasser_preis, abwasser_preis) VALUES (?, ?, ?, ?)`,
+			"2026-08-31", 0.22, 1.46, 4.87,
+		); err != nil {
+			t.Fatalf("insert pre-existing row: %v", err)
+		}
+		if err := ensurePeriodsMonatColumn(db); err != nil {
+			t.Fatalf("first ensurePeriodsMonatColumn: %v", err)
+		}
+		if _, err := db.Exec(`UPDATE periods SET monat = '2026-09-01' WHERE reading_date = '2026-08-31'`); err != nil {
+			t.Fatalf("simulate manual override: %v", err)
+		}
+
+		if err := ensurePeriodsMonatColumn(db); err != nil {
+			t.Fatalf("second ensurePeriodsMonatColumn: %v", err)
+		}
+
+		var monat string
+		if err := db.QueryRow(`SELECT monat FROM periods WHERE reading_date = '2026-08-31'`).Scan(&monat); err != nil {
+			t.Fatalf("query column: %v", err)
+		}
+		if monat != "2026-09-01" {
+			t.Errorf("monat = %q, want 2026-09-01 (manual override must survive a re-run)", monat)
+		}
+	})
+
+	t.Run("neue Tabelle hat die Spalte bereits - no-op", func(t *testing.T) {
+		db := openTestDB(t)
+		if err := ensurePeriodsMonatColumn(db); err != nil {
+			t.Fatalf("ensurePeriodsMonatColumn on an already-current schema: %v", err)
 		}
 	})
 }
