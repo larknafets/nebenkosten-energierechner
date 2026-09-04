@@ -98,7 +98,8 @@
   .logik-flurstueck { background: var(--logik-flurstueck); }
   .logik-qm { background: var(--logik-qm); }
   .logik-personen { background: var(--logik-personen); }
-  .stat-kategorien { margin-top: .4rem; white-space: normal; overflow-wrap: break-word; }
+  .stat-kategorien { margin-top: .4rem; display: flex; flex-wrap: wrap; gap: .1rem .75rem; }
+  .stat-kategorien span { font-weight: normal; }
 
   .wohnung-tabs { display: flex; gap: .5rem; margin: 1.5rem 0 1rem; }
   .wohnung-tab { flex: 1; text-align: center; padding: .55rem; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: .85rem; font-weight: 600; border: none; cursor: pointer; }
@@ -114,9 +115,11 @@
   [data-modus] { display: none; } /* JS setzt die aktive Modus-Variante wieder sichtbar (leerer inline style, siehe applyModus) - jede Regel unten fuer ein data-modus-Element muss ihr eigenes display deklarieren, sonst gewinnt diese Regel per Cascade weiter */
   .legend-item { display: inline-flex; align-items: center; }
   .verbrauch-liste { display: block; font-size: .72rem; color: var(--muted); }
-  .verbrauch-liste .v-strom { color: var(--cat-strom); font-weight: 600; }
-  .verbrauch-liste .v-heizung { color: var(--cat-heizung); font-weight: 600; }
-  .verbrauch-liste .v-wasser { color: var(--cat-wasser); font-weight: 600; }
+  .v-strom { color: var(--cat-strom); font-weight: 600; }
+  .v-heizung { color: var(--cat-heizung); font-weight: 600; }
+  .v-wasser { color: var(--cat-wasser); font-weight: 600; }
+  .v-fix { color: var(--cat-fix); font-weight: 600; }
+  .v-pv { color: var(--success); font-weight: 600; }
   .verlauf-tooltip { display: none; position: fixed; background: var(--tooltip-bg); color: var(--tooltip-text); font-size: .72rem; font-weight: 600; padding: .25rem .5rem; border-radius: 4px; pointer-events: none; z-index: 30; white-space: nowrap; }
   .verlauf-row { display: flex; align-items: center; gap: .5rem; padding: .3rem 0; }
   .verlauf-row.is-current .month-label { font-weight: 700; color: var(--text); }

@@ -21,7 +21,7 @@
       {{end}}
     </div>
     <div class="muted stat-kategorien">
-      {{range .Segmente}}<div>{{.Label}} {{deEUR .Kosten}} €</div>{{end}}
+      {{range .Segmente}}<span class="v-{{.Farbe}}" title="{{.Label}}">{{kategorieIcon .Label}}{{deEUR .Kosten}} €</span>{{end}}
     </div>
   </div>
   {{end}}
@@ -34,7 +34,7 @@
       {{end}}
     </div>
     <div class="muted stat-kategorien">
-      {{range .WallboxCard.Segmente}}<div>{{.Label}} {{de0 .Verbrauch}} {{.Einheit}}</div>{{end}}
+      {{range .WallboxCard.Segmente}}<span class="v-{{.Farbe}}" title="{{.Label}}">{{kategorieIcon .Label}}{{de0 .Verbrauch}} {{.Einheit}}</span>{{end}}
     </div>
   </div>
   <div class="panel stat-card">
@@ -46,7 +46,7 @@
       {{end}}
     </div>
     <div class="muted stat-kategorien">
-      {{range .PVCard.Segmente}}<div>{{.Label}} {{de0 .Verbrauch}} {{.Einheit}}</div>{{end}}
+      {{range .PVCard.Segmente}}<span class="v-{{.Farbe}}" title="{{.Label}}">{{kategorieIcon .Label}}{{de0 .Verbrauch}} {{.Einheit}}</span>{{end}}
     </div>
   </div>
 </div>
