@@ -20,7 +20,7 @@
     <thead><tr><th>Zähler</th><th>Stand</th></tr></thead>
     <tbody>
       {{range .Meters}}
-      <tr><td>{{.Label}}</td><td>{{de .Value}} {{.Unit}}{{if .Diff}} ({{.Diff}} {{.Unit}}){{end}}</td></tr>
+      <tr><td>{{.Label}}</td><td>{{de2 .Value}} {{.Unit}}{{if .Diff}} ({{.Diff}} {{.Unit}}){{end}}</td></tr>
       {{end}}
     </tbody>
   </table>
@@ -40,15 +40,15 @@
   {{else if .Strom}}
   <table class="letzte">
     <tbody>
-      <tr><td>Netzbezug Gesamt</td><td>{{de .Strom.NetzbezugGesamtKWh}} kWh</td></tr>
-      <tr><td>Wohnung 2 Anteil</td><td>{{de .Strom.W2AnteilKWh}} kWh</td></tr>
-      <tr><td>Nicht dem Netzbezug zugeordnet (PV)</td><td>{{de .Strom.PVAnteilW2KWh}} kWh</td></tr>
+      <tr><td>Netzbezug Gesamt</td><td>{{de2 .Strom.NetzbezugGesamtKWh}} kWh</td></tr>
+      <tr><td>Wohnung 2 Anteil</td><td>{{de2 .Strom.W2AnteilKWh}} kWh</td></tr>
+      <tr><td>Nicht dem Netzbezug zugeordnet (PV)</td><td>{{de2 .Strom.PVAnteilW2KWh}} kWh</td></tr>
       <tr><td><strong>Kosten Wohnung 2</strong></td><td><strong>{{deEUR .Strom.KostenW2}} EUR</strong></td></tr>
-      <tr><td>Wärmepumpe Anteil</td><td>{{de .Strom.WPAnteilKWh}} kWh</td></tr>
-      <tr><td>Nicht dem Netzbezug zugeordnet (PV)</td><td>{{de .Strom.PVAnteilWPKWh}} kWh</td></tr>
+      <tr><td>Wärmepumpe Anteil</td><td>{{de2 .Strom.WPAnteilKWh}} kWh</td></tr>
+      <tr><td>Nicht dem Netzbezug zugeordnet (PV)</td><td>{{de2 .Strom.PVAnteilWPKWh}} kWh</td></tr>
       <tr><td>Kosten Wärmepumpe gesamt (Basis Heizungskosten)</td><td>{{deEUR .Strom.KostenWPGesamtUnrounded}} EUR</td></tr>
-      <tr><td>Wallbox Anteil</td><td>{{de .Strom.WallboxAnteilKWh}} kWh</td></tr>
-      <tr><td>Nicht dem Netzbezug zugeordnet (PV)</td><td>{{de .Strom.PVAnteilWallboxKWh}} kWh</td></tr>
+      <tr><td>Wallbox Anteil</td><td>{{de2 .Strom.WallboxAnteilKWh}} kWh</td></tr>
+      <tr><td>Nicht dem Netzbezug zugeordnet (PV)</td><td>{{de2 .Strom.PVAnteilWallboxKWh}} kWh</td></tr>
       <tr><td>Kosten Wallbox</td><td>{{deEUR .Strom.KostenWallbox}} EUR</td></tr>
     </tbody>
   </table>
@@ -62,9 +62,9 @@
     <thead><tr><th></th><th>Wohnung 1</th><th>Wohnung 2</th></tr></thead>
     <tbody>
       <tr><td>Personen</td><td>{{.Wasser.PersonenW1}}</td><td>{{.Wasser.PersonenW2}}</td></tr>
-      <tr><td>Warmwasseraufbereitung-Anteil</td><td>{{de .Wasser.WWAnteilW1}} m³</td><td>{{de .Wasser.WWAnteilW2}} m³</td></tr>
-      <tr><td>Frischwasser</td><td>{{de .Wasser.FrischwasserW1}} m³</td><td>{{de .Wasser.FrischwasserW2}} m³</td></tr>
-      <tr><td>Abwasser</td><td>{{de .Wasser.AbwasserW1}} m³</td><td>{{de .Wasser.AbwasserW2}} m³</td></tr>
+      <tr><td>Warmwasseraufbereitung-Anteil</td><td>{{de2 .Wasser.WWAnteilW1}} m³</td><td>{{de2 .Wasser.WWAnteilW2}} m³</td></tr>
+      <tr><td>Frischwasser</td><td>{{de2 .Wasser.FrischwasserW1}} m³</td><td>{{de2 .Wasser.FrischwasserW2}} m³</td></tr>
+      <tr><td>Abwasser</td><td>{{de2 .Wasser.AbwasserW1}} m³</td><td>{{de2 .Wasser.AbwasserW2}} m³</td></tr>
       <tr><td><strong>Kosten Frischwasser</strong></td><td><strong>{{deEUR .Wasser.KostenFrischwasserW1}} EUR</strong></td><td><strong>{{deEUR .Wasser.KostenFrischwasserW2}} EUR</strong></td></tr>
       <tr><td><strong>Kosten Abwasser</strong></td><td><strong>{{deEUR .Wasser.KostenAbwasserW1}} EUR</strong></td><td><strong>{{deEUR .Wasser.KostenAbwasserW2}} EUR</strong></td></tr>
     </tbody>
@@ -78,9 +78,9 @@
   <table class="letzte">
     <thead><tr><th></th><th>Wohnung 1</th><th>Wohnung 2</th></tr></thead>
     <tbody>
-      <tr><td>Wärmeverbrauch</td><td>{{de .Heizung.WaermeW1MWh}} MWh</td><td>{{de .Heizung.WaermeW2MWh}} MWh</td></tr>
+      <tr><td>Wärmeverbrauch</td><td>{{de2 .Heizung.WaermeW1MWh}} MWh</td><td>{{de2 .Heizung.WaermeW2MWh}} MWh</td></tr>
       <tr><td>Wohnungsgröße</td><td>{{de .Heizung.QMW1}} m²</td><td>{{de .Heizung.QMW2}} m²</td></tr>
-      <tr><td>Wärmepumpe-Strom (Heizung + Warmwasser)</td><td>{{de .Heizung.WPAnteilW1KWh}} kWh</td><td>{{de .Heizung.WPAnteilW2KWh}} kWh</td></tr>
+      <tr><td>Wärmepumpe-Strom (Heizung + Warmwasser)</td><td>{{de2 .Heizung.WPAnteilW1KWh}} kWh</td><td>{{de2 .Heizung.WPAnteilW2KWh}} kWh</td></tr>
       <tr><td><strong>Kosten Heizung/Warmwasser</strong></td><td><strong>{{deEUR .Heizung.KostenHeizungW1}} EUR</strong></td><td><strong>{{deEUR .Heizung.KostenHeizungW2}} EUR</strong></td></tr>
     </tbody>
   </table>
@@ -92,7 +92,7 @@
   {{else if .Einspeisung}}
   <table class="letzte">
     <tbody>
-      <tr><td>Einspeisung</td><td>{{de .Einspeisung.EinspeisungKWh}} kWh</td></tr>
+      <tr><td>Einspeisung</td><td>{{de2 .Einspeisung.EinspeisungKWh}} kWh</td></tr>
       <tr><td><strong>Ertrag</strong></td><td><strong>{{deEUR .Einspeisung.Ertrag}} EUR</strong></td></tr>
     </tbody>
   </table>

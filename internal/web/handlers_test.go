@@ -862,15 +862,32 @@ func TestFormatDecimalDE1(t *testing.T) {
 	}
 }
 
+func TestFormatDecimalDE2(t *testing.T) {
+	cases := []struct {
+		x    float64
+		want string
+	}{
+		{0.7, "0,70"},
+		{107, "107,00"},
+		{25.333333333333332, "25,33"},
+		{0, "0,00"},
+	}
+	for _, c := range cases {
+		if got := formatDecimalDE2(c.x); got != c.want {
+			t.Errorf("formatDecimalDE2(%v) = %q, want %q", c.x, got, c.want)
+		}
+	}
+}
+
 func TestFormatMeterDiff(t *testing.T) {
 	cases := []struct {
 		current, previous float64
 		want              string
 	}{
-		{107, 84, "+23"},
-		{107, 107, "0"},
-		{84, 107, "-23"},
-		{25.33, 20.13, "+5,2"},
+		{107, 84, "+23,00"},
+		{107, 107, "0,00"},
+		{84, 107, "-23,00"},
+		{25.33, 20.13, "+5,20"},
 	}
 	for _, c := range cases {
 		if got := formatMeterDiff(c.current, c.previous); got != c.want {

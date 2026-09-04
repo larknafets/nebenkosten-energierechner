@@ -114,6 +114,14 @@ func formatDecimalDE1(x float64) string {
 	return strings.ReplaceAll(strconv.FormatFloat(x, 'f', 1, 64), ".", ",")
 }
 
+// formatDecimalDE2 renders a float64 German-formatted, always padded to
+// exactly 2 decimal places (Ticket #76 - a displayed Verbrauchswert reads as
+// "0,70"/"107,00", not "0,7"/"107", analog to formatEuroDE but without a
+// currency unit).
+func formatDecimalDE2(x float64) string {
+	return strings.ReplaceAll(strconv.FormatFloat(x, 'f', 2, 64), ".", ",")
+}
+
 // formatDatumDE renders a period's ReadingDate ("YYYY-MM-DD") in the German
 // DD.MM.YYYY form (Ticket #36). Falls back to the raw string if it isn't a
 // parseable date, same convention as germanPeriodLabel.
@@ -139,6 +147,7 @@ func formatDatumZeitDE(buildDate string) string {
 var templateFuncs = template.FuncMap{
 	"de":          formatDecimalDE,
 	"de1":         formatDecimalDE1,
+	"de2":         formatDecimalDE2,
 	"deEUR":       formatEuroDE,
 	"deDatum":     formatDatumDE,
 	"deDatumZeit": formatDatumZeitDE,
@@ -978,14 +987,15 @@ func importWarnings(rows []importRow, ids []int64) []string {
 // formatMeterDiff renders one Zähler's absolute change since the previous
 // Ablesung (Ticket #73), "+"-prefixed when it rose (the normal case - a
 // Zählerstand only falls after a meter swap/correction, where the bare
-// minus sign from formatDecimalDE already reads correctly).
+// minus sign from formatDecimalDE2 already reads correctly), padded to 2
+// Nachkommastellen (Ticket #76) like every other displayed Verbrauchswert.
 func formatMeterDiff(current, previous float64) string {
 	diff := current - previous
 	sign := ""
 	if diff > 0 {
 		sign = "+"
 	}
-	return sign + formatDecimalDE(diff)
+	return sign + formatDecimalDE2(diff)
 }
 
 // handleAblesungDetail shows one period's Zählerstände and full

@@ -30,7 +30,7 @@
       {{end}}
     </div>
     <div class="muted stat-kategorien">
-      {{range .WallboxCard.Segmente}}<div>{{.Label}} {{de .Verbrauch}} {{.Einheit}}</div>{{end}}
+      {{range .WallboxCard.Segmente}}<div>{{.Label}} {{de2 .Verbrauch}} {{.Einheit}}</div>{{end}}
     </div>
   </div>
   <div class="panel stat-card">
@@ -42,7 +42,7 @@
       {{end}}
     </div>
     <div class="muted stat-kategorien">
-      {{range .PVCard.Segmente}}<div>{{.Label}} {{de .Verbrauch}} {{.Einheit}}</div>{{end}}
+      {{range .PVCard.Segmente}}<div>{{.Label}} {{de2 .Verbrauch}} {{.Einheit}}</div>{{end}}
     </div>
   </div>
 </div>
@@ -94,7 +94,7 @@
         {{if $m.HasVerbrauch}}{{range $m.VerbrauchSegmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="verbrauch">– keine Ablesung</span>{{end}}
       </div>
       <div class="verbrauch-liste" data-modus="verbrauchswerte">
-        {{if $m.HasVerbrauch}}{{range $i2, $seg := $m.VerbrauchSegmente}}{{if $i2}} · {{end}}{{$seg.Label}} <span class="v-{{$seg.Farbe}}">{{de $seg.Verbrauch}} {{$seg.Einheit}}{{if $seg.Einheit2}} ({{de $seg.Verbrauch2}} {{$seg.Einheit2}}){{end}}</span>{{end}}{{else}}– keine Ablesung{{end}}
+        {{if $m.HasVerbrauch}}{{range $i2, $seg := $m.VerbrauchSegmente}}{{if $i2}} · {{end}}{{$seg.Label}} <span class="v-{{$seg.Farbe}}">{{de2 $seg.Verbrauch}} {{$seg.Einheit}}{{if $seg.Einheit2}} ({{de2 $seg.Verbrauch2}} {{$seg.Einheit2}}){{end}}</span>{{end}}{{else}}– keine Ablesung{{end}}
       </div>
       <div class="bar-track" data-modus="fixkosten">
         {{if $m.HasFixkosten}}{{range $m.FixkostenSegmente}}<div class="{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="fixkosten">– keine Fixkosten-Eingabe</span>{{end}}
@@ -125,7 +125,7 @@
     <div class="verlauf-row {{if $m.IsCurrent}}is-current{{end}}">
       <span class="month-label">{{$m.Label}}</span>
       <div class="bar-track">
-        {{if $m.HasWert}}{{range $m.Segmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{de .Verbrauch}} kWh"><span>{{de .Verbrauch}} kWh</span></div>{{end}}{{else}}<span class="verlauf-none">– keine Ablesung</span>{{end}}
+        {{if $m.HasWert}}{{range $m.Segmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{de2 .Verbrauch}} kWh"><span>{{de2 .Verbrauch}} kWh</span></div>{{end}}{{else}}<span class="verlauf-none">– keine Ablesung</span>{{end}}
       </div>
       <span class="value-label">{{if $m.HasWert}}{{deEUR $m.EUR}} €{{end}}</span>
     </div>
@@ -147,7 +147,7 @@
     <div class="verlauf-row {{if $m.IsCurrent}}is-current{{end}}">
       <span class="month-label">{{$m.Label}}</span>
       <div class="bar-track">
-        {{if $m.HasWert}}{{range $m.Segmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{de .Verbrauch}} kWh"><span>{{de .Verbrauch}} kWh</span></div>{{end}}{{else}}<span class="verlauf-none">– keine Ablesung</span>{{end}}
+        {{if $m.HasWert}}{{range $m.Segmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{de2 .Verbrauch}} kWh"><span>{{de2 .Verbrauch}} kWh</span></div>{{end}}{{else}}<span class="verlauf-none">– keine Ablesung</span>{{end}}
       </div>
       <span class="value-label">{{if $m.HasWert}}+{{deEUR $m.EUR}} €{{end}}</span>
     </div>
