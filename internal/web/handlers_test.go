@@ -464,26 +464,40 @@ func TestBuildJahresCard(t *testing.T) {
 		Heizung: &calc.HeizungErgebnis{},
 	}
 	periods := []periodKosten{
-		{ReadingDate: "2026-09-01", K: verbrauch2026},
-		{ReadingDate: "2025-09-01", K: verbrauch2025}, // anderes Jahr, muss ausgeschlossen werden
+		{ReadingDate: "2026-09-01", K: verbrauch2026, Personen: map[int64]int64{1: 3, 2: 2}},
+		{ReadingDate: "2026-08-01", K: verbrauch2026, Personen: map[int64]int64{1: 3, 2: 1}},
+		{ReadingDate: "2025-09-01", K: verbrauch2025, Personen: map[int64]int64{1: 3, 2: 99}}, // anderes Jahr, muss ausgeschlossen werden
 	}
 	fixkostenListe := []fixkostenKosten{
 		{Monat: "2026-09-01", Erg: &calc.FixkostenErgebnis{KostenW1: 15, KostenW2: 25}},
 		{Monat: "2025-09-01", Erg: &calc.FixkostenErgebnis{KostenW1: 999, KostenW2: 999}}, // anderes Jahr
 	}
 
-	card := buildJahresCard(2, "Wohnung 2", 86, 2026, periods, fixkostenListe)
-	if card.StromEUR != 20 || card.HeizungEUR != 10 || card.WasserEUR != 10 {
-		t.Errorf("Strom/Heizung/Wasser = %v/%v/%v, want 20/10/10", card.StromEUR, card.HeizungEUR, card.WasserEUR)
+	card := buildJahresCard(2, "Wohnung 2", 86, 120.5, 2026, periods, fixkostenListe)
+	if card.StromEUR != 40 || card.HeizungEUR != 20 || card.WasserEUR != 20 {
+		t.Errorf("Strom/Heizung/Wasser = %v/%v/%v, want 40/20/20 (2 Perioden in 2026)", card.StromEUR, card.HeizungEUR, card.WasserEUR)
 	}
 	if card.FixkostenEUR != 25 {
 		t.Errorf("FixkostenEUR = %v, want 25 (2025er Eingabe ausgeschlossen)", card.FixkostenEUR)
 	}
-	if card.VerbrauchEUR != 40 {
-		t.Errorf("VerbrauchEUR = %v, want 40", card.VerbrauchEUR)
+	if card.VerbrauchEUR != 80 {
+		t.Errorf("VerbrauchEUR = %v, want 80", card.VerbrauchEUR)
 	}
-	if card.GesamtEUR != 65 {
-		t.Errorf("GesamtEUR = %v, want 65", card.GesamtEUR)
+	if card.GesamtEUR != 105 {
+		t.Errorf("GesamtEUR = %v, want 105", card.GesamtEUR)
+	}
+	if card.ApartmentFlurstueck != 120.5 {
+		t.Errorf("ApartmentFlurstueck = %v, want 120.5", card.ApartmentFlurstueck)
+	}
+	if card.PersonenSchnitt != 1.5 {
+		t.Errorf("PersonenSchnitt = %v, want 1.5 (Schnitt aus 2 und 1, 2025er Periode ausgeschlossen)", card.PersonenSchnitt)
+	}
+}
+
+func TestBuildJahresCard_PersonenSchnittOhneAblesung(t *testing.T) {
+	card := buildJahresCard(1, "Wohnung 1", 116.23, 200, 2026, nil, nil)
+	if card.PersonenSchnitt != 0 {
+		t.Errorf("PersonenSchnitt = %v, want 0 (keine Ablesung im Jahr)", card.PersonenSchnitt)
 	}
 }
 
@@ -827,6 +841,23 @@ func TestFormatEuroDE(t *testing.T) {
 	for _, c := range cases {
 		if got := formatEuroDE(c.x); got != c.want {
 			t.Errorf("formatEuroDE(%v) = %q, want %q", c.x, got, c.want)
+		}
+	}
+}
+
+func TestFormatDecimalDE1(t *testing.T) {
+	cases := []struct {
+		x    float64
+		want string
+	}{
+		{2, "2,0"},
+		{1.5, "1,5"},
+		{2.26, "2,3"},
+		{0, "0,0"},
+	}
+	for _, c := range cases {
+		if got := formatDecimalDE1(c.x); got != c.want {
+			t.Errorf("formatDecimalDE1(%v) = %q, want %q", c.x, got, c.want)
 		}
 	}
 }

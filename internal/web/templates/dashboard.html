@@ -9,7 +9,7 @@
 <div class="grid jahressummen-grid">
   {{range .Cards}}
   <div class="panel stat-card">
-    <div class="muted">{{.ApartmentName}} <span class="badge">{{de .ApartmentQM}} m²</span></div>
+    <div class="muted">{{.ApartmentName}} <span class="badge">{{de .ApartmentQM}} m²</span> <span class="badge">{{de .ApartmentFlurstueck}} m² Flurstück</span> <span class="badge">{{de1 .PersonenSchnitt}} Personen</span></div>
     <div class="stat-value">{{deEUR .GesamtEUR}} €</div>
     <div class="stat-bar-track">
       {{range .Segmente}}

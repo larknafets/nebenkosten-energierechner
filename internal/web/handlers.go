@@ -107,6 +107,13 @@ func formatEuroDE(x float64) string {
 	return strings.ReplaceAll(strconv.FormatFloat(x, 'f', 2, 64), ".", ",")
 }
 
+// formatDecimalDE1 renders a float64 German-formatted, always padded to
+// exactly 1 decimal place (Ticket #75 - the Personen-Schnitt reads as
+// "2,5", not "2" or "2,50").
+func formatDecimalDE1(x float64) string {
+	return strings.ReplaceAll(strconv.FormatFloat(x, 'f', 1, 64), ".", ",")
+}
+
 // formatDatumDE renders a period's ReadingDate ("YYYY-MM-DD") in the German
 // DD.MM.YYYY form (Ticket #36). Falls back to the raw string if it isn't a
 // parseable date, same convention as germanPeriodLabel.
@@ -131,6 +138,7 @@ func formatDatumZeitDE(buildDate string) string {
 
 var templateFuncs = template.FuncMap{
 	"de":          formatDecimalDE,
+	"de1":         formatDecimalDE1,
 	"deEUR":       formatEuroDE,
 	"deDatum":     formatDatumDE,
 	"deDatumZeit": formatDatumZeitDE,
@@ -1160,10 +1168,13 @@ func kategorien(apartmentID int64, k kosten) []kategorie {
 // periodKosten is one period's already-computed kosten, for the
 // Jahressummen-Karten and Monatsverlauf. ReadingDate stays in its raw
 // "YYYY-MM-DD" form (not pre-formatted) since downstream needs it for both
-// the month label and calendar-year grouping.
+// the month label and calendar-year grouping. Personen is this period's
+// Ablesung-Personenzahl je Wohnung (Ticket #75's Personen-Schnitt averages
+// this across a Jahr's Perioden).
 type periodKosten struct {
 	ReadingDate string
 	K           kosten
+	Personen    map[int64]int64
 }
 
 // handleDashboard serves the redesigned Dashboard (Issue #60): Jahressummen-
@@ -1216,7 +1227,12 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 			if pk.KostenNote != "" {
 				break
 			}
-			periodenKosten = append(periodenKosten, periodKosten{ReadingDate: p.ReadingDate, K: pk})
+			personen, err := store.PersonenByApartment(db, p.ID)
+			if err != nil {
+				http.Error(w, "personen: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			periodenKosten = append(periodenKosten, periodKosten{ReadingDate: p.ReadingDate, K: pk, Personen: personen})
 		}
 
 		fixkostenListe, err := alleFixkostenKosten(db)
@@ -1230,7 +1246,7 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 		var cards []dashboardJahresCard
 		var verlaufSpalten []dashboardVerlaufSpalte
 		for _, a := range apartments {
-			cards = append(cards, buildJahresCard(a.ID, a.Name, a.QM, jahr, periodenKosten, fixkostenListe))
+			cards = append(cards, buildJahresCard(a.ID, a.Name, a.QM, a.FlurstueckGroesse, jahr, periodenKosten, fixkostenListe))
 			verlaufSpalten = append(verlaufSpalten, buildDashboardVerlauf(a.ID, a.Name, periodenKosten, fixkostenListe))
 		}
 

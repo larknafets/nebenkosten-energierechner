@@ -122,22 +122,28 @@ func anzeigeJahr(allPeriods []store.PeriodSummary, fixkostenEingaben []store.Fix
 // Umschalter (VerbrauchEUR/FixkostenEUR/GesamtEUR), so the numbers always
 // match between the two.
 type dashboardJahresCard struct {
-	ApartmentID   int64
-	ApartmentName string
-	ApartmentQM   float64
-	FixkostenEUR  float64
-	StromEUR      float64
-	HeizungEUR    float64
-	WasserEUR     float64
-	VerbrauchEUR  float64
-	GesamtEUR     float64
-	Segmente      []dashboardSegment
+	ApartmentID       int64
+	ApartmentName     string
+	ApartmentQM       float64
+	ApartmentFlurstueck float64
+	PersonenSchnitt   float64
+	FixkostenEUR      float64
+	StromEUR          float64
+	HeizungEUR        float64
+	WasserEUR         float64
+	VerbrauchEUR      float64
+	GesamtEUR         float64
+	Segmente          []dashboardSegment
 }
 
-// buildJahresCard sums the given apartment's Verbrauch- and Fixkosten-Kosten
-// over every period/Eingabe whose date falls in jahr.
-func buildJahresCard(apartmentID int64, apartmentName string, apartmentQM float64, jahr int, periodenKosten []periodKosten, fixkostenListe []fixkostenKosten) dashboardJahresCard {
+// buildJahresCard sums the given apartment's Verbrauch- und Fixkosten-Kosten
+// over every period/Eingabe whose date falls in jahr, and (Ticket #75)
+// averages the apartment's Personenzahl over jahr's Ablesungen (1
+// Nachkommastelle, 0 if the year has no Ablesung yet).
+func buildJahresCard(apartmentID int64, apartmentName string, apartmentQM, apartmentFlurstueck float64, jahr int, periodenKosten []periodKosten, fixkostenListe []fixkostenKosten) dashboardJahresCard {
 	var strom, heizung, wasser, fix float64
+	var personenSumme float64
+	var personenAnzahl int
 	for _, pk := range periodenKosten {
 		t, err := time.Parse("2006-01-02", pk.ReadingDate)
 		if err != nil || t.Year() != jahr {
@@ -153,6 +159,14 @@ func buildJahresCard(apartmentID int64, apartmentName string, apartmentQM float6
 				wasser += kat.Kosten
 			}
 		}
+		if p, ok := pk.Personen[apartmentID]; ok {
+			personenSumme += float64(p)
+			personenAnzahl++
+		}
+	}
+	var personenSchnitt float64
+	if personenAnzahl > 0 {
+		personenSchnitt = personenSumme / float64(personenAnzahl)
 	}
 	for _, fk := range fixkostenListe {
 		t, err := time.Parse("2006-01-02", fk.Monat)
@@ -177,6 +191,7 @@ func buildJahresCard(apartmentID int64, apartmentName string, apartmentQM float6
 
 	return dashboardJahresCard{
 		ApartmentID: apartmentID, ApartmentName: apartmentName, ApartmentQM: apartmentQM,
+		ApartmentFlurstueck: apartmentFlurstueck, PersonenSchnitt: personenSchnitt,
 		FixkostenEUR: fix, StromEUR: strom, HeizungEUR: heizung, WasserEUR: wasser,
 		VerbrauchEUR: verbrauch, GesamtEUR: gesamt, Segmente: segs,
 	}
