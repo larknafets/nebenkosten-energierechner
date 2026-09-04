@@ -170,7 +170,7 @@ Berechnete Kosten werden nicht persistiert, sondern bei jedem Aufruf live aus de
 
 ## Tech-Stack
 
-Go, `modernc.org/sqlite` (kein ORM, `database/sql`), server-rendered `html/template` mit Vanilla-JS für die Wizard-Interaktivität (kein htmx - ursprünglich in der Spec vorgesehen, aber nicht gebraucht). SQLite-Datei unter `/data` im Container. Multi-Arch-Docker-Image (`linux/amd64`, `linux/arm64`, `linux/arm/v7`) auf Basis `gcr.io/distroless/static-debian12`, läuft als root. Version und Build-Datum werden per `-ldflags` eingebrannt und im Dashboard angezeigt (Ticket #48).
+Go, `modernc.org/sqlite` (kein ORM, `database/sql`), server-rendered `html/template` mit Vanilla-JS für die Wizard-Interaktivität (kein htmx - ursprünglich in der Spec vorgesehen, aber nicht gebraucht). SQLite-Datei unter `/data` im Container. Multi-Arch-Docker-Image (`linux/amd64`, `linux/arm64`, `linux/arm/v7`) auf Basis `gcr.io/distroless/static-debian12`, läuft als nicht-root User (UID/GID 65532). Version und Build-Datum werden per `-ldflags` eingebrannt und im Dashboard angezeigt (Ticket #48).
 
 ## Installation
 
@@ -185,6 +185,13 @@ docker run -d \
 ```
 
 Danach erreichbar unter `http://localhost:8080`, Health-Check unter `/healthz`. Die Image-Tags folgen den Release-Versionen - siehe [Releases](https://github.com/larknafets/nebenkostenrechner/releases).
+
+> **Breaking Change (ab dieser Version):** Der Container läuft nicht mehr als root, sondern als UID/GID 65532. Ein neues, leeres Volume bekommt die passenden Rechte automatisch. Ein **bestehendes** Volume aus einer älteren Version muss einmalig manuell angepasst werden:
+> ```bash
+> docker run --rm -v nebenkosten-data:/data busybox chown -R 65532:65532 /data
+> ```
+
+
 
 | Umgebungsvariable | Default | Beschreibung |
 |---|---|---|
