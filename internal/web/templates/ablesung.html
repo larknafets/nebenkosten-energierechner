@@ -20,7 +20,7 @@
     <thead><tr><th>Zähler</th><th>Stand</th></tr></thead>
     <tbody>
       {{range .Meters}}
-      <tr><td>{{.Label}}</td><td>{{de .Value}} {{.Unit}}</td></tr>
+      <tr><td>{{.Label}}</td><td>{{de .Value}} {{.Unit}}{{if .Diff}} ({{.Diff}} {{.Unit}}){{end}}</td></tr>
       {{end}}
     </tbody>
   </table>

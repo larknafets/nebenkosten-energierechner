@@ -967,6 +967,19 @@ func importWarnings(rows []importRow, ids []int64) []string {
 	return warnings
 }
 
+// formatMeterDiff renders one Zähler's absolute change since the previous
+// Ablesung (Ticket #73), "+"-prefixed when it rose (the normal case - a
+// Zählerstand only falls after a meter swap/correction, where the bare
+// minus sign from formatDecimalDE already reads correctly).
+func formatMeterDiff(current, previous float64) string {
+	diff := current - previous
+	sign := ""
+	if diff > 0 {
+		sign = "+"
+	}
+	return sign + formatDecimalDE(diff)
+}
+
 // handleAblesungDetail shows one period's Zählerstände and full
 // Kostenaufstellung (Ticket #43, generalized from the old "letzte Ablesung"
 // view to any period by id), with a dropdown to jump to any other period.
@@ -1000,25 +1013,6 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		var meters []struct {
-			Label string
-			Value float64
-			Unit  string
-		}
-		for _, m := range meterDisplays {
-			meters = append(meters, struct {
-				Label string
-				Value float64
-				Unit  string
-			}{m.Label, period.Readings[m.Key], m.Unit})
-		}
-
-		k, err := berechneKosten(db, period.ID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
 		// ZeitraumStart is the immediately preceding period's ReadingDate -
 		// the values shown here are the *consumption over that interval*,
 		// not just a single point-in-time reading, so the detail view
@@ -1033,6 +1027,34 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 			zeitraumStart = vorperiode[0].ReadingDate
 		}
 
+		// Diff is each Zähler's absolute change since the previous Ablesung
+		// ("+23,00" / "-5,00"), formatted ready-to-print - empty for the
+		// oldest period (no Vorperiode to diff against).
+		var meters []struct {
+			Label string
+			Value float64
+			Unit  string
+			Diff  string
+		}
+		for _, m := range meterDisplays {
+			entry := struct {
+				Label string
+				Value float64
+				Unit  string
+				Diff  string
+			}{Label: m.Label, Value: period.Readings[m.Key], Unit: m.Unit}
+			if len(vorperiode) > 0 {
+				entry.Diff = formatMeterDiff(period.Readings[m.Key], vorperiode[0].Readings[m.Key])
+			}
+			meters = append(meters, entry)
+		}
+
+		k, err := berechneKosten(db, period.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		data := struct {
 			Base          string
 			Aktuell       string
@@ -1045,6 +1067,7 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 				Label string
 				Value float64
 				Unit  string
+				Diff  string
 			}
 			Strom       *calc.StromErgebnis
 			Wasser      *calc.WasserErgebnis

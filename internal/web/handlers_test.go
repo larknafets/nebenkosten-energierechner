@@ -831,6 +831,23 @@ func TestFormatEuroDE(t *testing.T) {
 	}
 }
 
+func TestFormatMeterDiff(t *testing.T) {
+	cases := []struct {
+		current, previous float64
+		want              string
+	}{
+		{107, 84, "+23"},
+		{107, 107, "0"},
+		{84, 107, "-23"},
+		{25.33, 20.13, "+5,2"},
+	}
+	for _, c := range cases {
+		if got := formatMeterDiff(c.current, c.previous); got != c.want {
+			t.Errorf("formatMeterDiff(%v, %v) = %q, want %q", c.current, c.previous, got, c.want)
+		}
+	}
+}
+
 func TestFormatDatumDE(t *testing.T) {
 	cases := []struct {
 		readingDate string
