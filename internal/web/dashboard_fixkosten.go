@@ -145,17 +145,17 @@ func buildJahresCard(apartmentID int64, apartmentName string, apartmentQM, apart
 	var personenSumme float64
 	var personenAnzahl int
 	for _, pk := range periodenKosten {
-		t, err := time.Parse("2006-01-02", pk.Monat)
-		if err != nil || t.Year() != jahr {
+		y, ok := store.Abrechnungsmonat(pk.Monat).Jahr()
+		if !ok || y != jahr {
 			continue
 		}
 		for _, kat := range kategorien(apartmentID, pk.K) {
-			switch kat.Label {
-			case "Strom":
+			switch kat.Kind {
+			case kategorieKindStrom:
 				strom += kat.Kosten
-			case "Heizung/Warmwasser":
+			case kategorieKindHeizung:
 				heizung += kat.Kosten
-			case "Wasser":
+			case kategorieKindWasser:
 				wasser += kat.Kosten
 			}
 		}
@@ -293,13 +293,13 @@ func buildDashboardVerlauf(apartmentID int64, apartmentName string, periodenKost
 	var order []string
 
 	ensure := func(monat string) *bucket {
-		t, err := time.Parse("2006-01-02", monat)
-		if err != nil {
+		jahr, ok := store.Abrechnungsmonat(monat).Jahr()
+		if !ok {
 			return nil
 		}
-		b, ok := buckets[monat]
-		if !ok {
-			b = &bucket{label: germanPeriodLabelShort(monat), jahr: t.Year()}
+		b, exists := buckets[monat]
+		if !exists {
+			b = &bucket{label: germanPeriodLabelShort(monat), jahr: jahr}
 			buckets[monat] = b
 			order = append(order, monat)
 		}
@@ -390,40 +390,56 @@ func buildDashboardVerlauf(apartmentID int64, apartmentName string, periodenKost
 	}
 }
 
-// mitJahreszeilen inserts a dashboardJahreszeile right after every calendar
-// Jahr's last (=oldest displayed) Monat-row - triggered by the Jahr
-// changing while walking newest-to-oldest, plus once more after the final
-// (oldest) Monat, so every Jahr gets exactly one summary row (Issue #60
-// Story 27), unlike the old December-only separator.
+// walkJahre drives the "insert a Jahreszeile right after every calendar
+// Jahr's last (=oldest displayed) row" pattern (Issue #60 Story 27) shared
+// by mitJahreszeilen and buildSimpleVerlauf's Monatsverlauf: n items
+// (newest first), jahrAt(i) gives item i's Jahr. perMonat(i) runs for every
+// item; flush(jahr, istLaufend) runs once right after the last item of each
+// Jahr - triggered by the Jahr changing while walking newest-to-oldest,
+// plus once more after the final (oldest) item, so every Jahr gets exactly
+// one summary row, unlike the old December-only separator. No-op for n==0.
+func walkJahre(n int, jahrAt func(i int) int, perMonat func(i int), flush func(jahr int, istLaufend bool)) {
+	if n == 0 {
+		return
+	}
+	neuestesJahr := jahrAt(0)
+	currentJahr := neuestesJahr
+	for i := 0; i < n; i++ {
+		jahr := jahrAt(i)
+		if jahr != currentJahr {
+			flush(currentJahr, currentJahr == neuestesJahr)
+			currentJahr = jahr
+		}
+		perMonat(i)
+		if i == n-1 {
+			flush(currentJahr, currentJahr == neuestesJahr)
+		}
+	}
+}
+
+// mitJahreszeilen wraps walkJahre for dashboardMonat/dashboardVerlaufEintrag.
 func mitJahreszeilen(monate []dashboardMonat) []dashboardVerlaufEintrag {
 	if len(monate) == 0 {
 		return nil
 	}
-	neuestesJahr := monate[0].Jahr
-
 	out := make([]dashboardVerlaufEintrag, 0, len(monate)+4)
-	currentJahr := monate[0].Jahr
 	var vSumme, fSumme float64
-	flush := func() {
-		out = append(out, dashboardVerlaufEintrag{Jahreszeile: &dashboardJahreszeile{
-			Jahr: currentJahr, IstLaufend: currentJahr == neuestesJahr,
-			VerbrauchSumme: calc.Round2(vSumme), FixkostenSumme: calc.Round2(fSumme), GesamtSumme: calc.Round2(vSumme + fSumme),
-		}})
-	}
-	for i, m := range monate {
-		if m.Jahr != currentJahr {
-			flush()
-			currentJahr = m.Jahr
+	walkJahre(len(monate),
+		func(i int) int { return monate[i].Jahr },
+		func(i int) {
+			m := monate[i]
+			vSumme += m.VerbrauchGesamt
+			fSumme += m.FixkostenGesamt
+			out = append(out, dashboardVerlaufEintrag{Monat: &m})
+		},
+		func(jahr int, istLaufend bool) {
+			out = append(out, dashboardVerlaufEintrag{Jahreszeile: &dashboardJahreszeile{
+				Jahr: jahr, IstLaufend: istLaufend,
+				VerbrauchSumme: calc.Round2(vSumme), FixkostenSumme: calc.Round2(fSumme), GesamtSumme: calc.Round2(vSumme + fSumme),
+			}})
 			vSumme, fSumme = 0, 0
-		}
-		vSumme += m.VerbrauchGesamt
-		fSumme += m.FixkostenGesamt
-		mm := m
-		out = append(out, dashboardVerlaufEintrag{Monat: &mm})
-		if i == len(monate)-1 {
-			flush()
-		}
-	}
+		},
+	)
 	return out
 }
 
@@ -533,8 +549,8 @@ func buildSimpleJahresCard(series simpleSeries, jahr int, periodenKosten []perio
 	var sum float64
 	var segSummen []dashboardSegment // gleiche Reihenfolge/Label wie series.Wert liefert
 	for _, pk := range periodenKosten {
-		t, err := time.Parse("2006-01-02", pk.Monat)
-		if err != nil || t.Year() != jahr {
+		y, ok := store.Abrechnungsmonat(pk.Monat).Jahr()
+		if !ok || y != jahr {
 			continue
 		}
 		segs, eur, ok := series.Wert(pk.K)
@@ -586,13 +602,13 @@ func buildSimpleVerlauf(series simpleSeries, periodenKosten []periodKosten) dash
 	byMonat := map[string]*monatAgg{}
 	var order []string
 	for _, pk := range periodenKosten {
-		t, err := time.Parse("2006-01-02", pk.Monat)
-		if err != nil {
+		jahr, ok := store.Abrechnungsmonat(pk.Monat).Jahr()
+		if !ok {
 			continue
 		}
-		agg, ok := byMonat[pk.Monat]
-		if !ok {
-			agg = &monatAgg{jahr: t.Year()}
+		agg, exists := byMonat[pk.Monat]
+		if !exists {
+			agg = &monatAgg{jahr: jahr}
 			byMonat[pk.Monat] = agg
 			order = append(order, pk.Monat)
 		}
@@ -658,29 +674,21 @@ func buildSimpleVerlauf(series simpleSeries, periodenKosten []periodKosten) dash
 	}
 
 	var eintraege []dashboardSimpleEintrag
-	if len(monate) > 0 {
-		neuestesJahr := monate[0].Jahr
-		currentJahr := monate[0].Jahr
-		var summe float64
-		flush := func() {
-			eintraege = append(eintraege, dashboardSimpleEintrag{Jahreszeile: &dashboardSimpleJahreszeile{
-				Jahr: currentJahr, IstLaufend: currentJahr == neuestesJahr, Summe: calc.Round2(summe),
-			}})
-		}
-		for i, m := range monate {
-			if m.Jahr != currentJahr {
-				flush()
-				currentJahr = m.Jahr
-				summe = 0
-			}
+	var summe float64
+	walkJahre(len(monate),
+		func(i int) int { return monate[i].Jahr },
+		func(i int) {
+			m := monate[i]
 			summe += m.EUR
-			mm := m
-			eintraege = append(eintraege, dashboardSimpleEintrag{Monat: &mm})
-			if i == len(monate)-1 {
-				flush()
-			}
-		}
-	}
+			eintraege = append(eintraege, dashboardSimpleEintrag{Monat: &m})
+		},
+		func(jahr int, istLaufend bool) {
+			eintraege = append(eintraege, dashboardSimpleEintrag{Jahreszeile: &dashboardSimpleJahreszeile{
+				Jahr: jahr, IstLaufend: istLaufend, Summe: calc.Round2(summe),
+			}})
+			summe = 0
+		},
+	)
 
 	return dashboardSimpleSpalte{ID: id, Name: name, IstErtrag: istErtrag, Eintraege: eintraege}
 }

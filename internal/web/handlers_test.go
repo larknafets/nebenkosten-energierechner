@@ -1,8 +1,11 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -115,6 +118,15 @@ func TestKategorien(t *testing.T) {
 		}
 		if wasser.Verbrauch != 15 {
 			t.Errorf("Wasser.Verbrauch = %v, want 15", wasser.Verbrauch)
+		}
+	})
+
+	t.Run("Kind identifiziert jede Kategorie unabhängig vom Label (Architecture Review)", func(t *testing.T) {
+		want := map[string]kategorieKind{"Strom": kategorieKindStrom, "Heizung/Warmwasser": kategorieKindHeizung, "Wasser": kategorieKindWasser}
+		for _, kat := range kategorien(2, k) {
+			if kat.Kind != want[kat.Label] {
+				t.Errorf("Kategorie %q: Kind = %v, want %v", kat.Label, kat.Kind, want[kat.Label])
+			}
 		}
 	})
 
@@ -1136,4 +1148,114 @@ func TestGermanPeriodLabel(t *testing.T) {
 			t.Errorf("germanPeriodLabel(%q) = %q, want %q", c.readingDate, got, c.want)
 		}
 	}
+}
+
+// seedPeriodInputAt builds a valid PeriodInput at the given "YYYY-MM-DD"
+// date, ReadingDate and Monat both set to it - everything else a fixed
+// valid default (exact values don't matter for the ordering tests using
+// this).
+func seedPeriodInputAt(date string) store.PeriodInput {
+	readings := make(map[string]float64, len(store.MeterKeys))
+	for _, key := range store.MeterKeys {
+		readings[key] = 0
+	}
+	return store.PeriodInput{
+		ReadingDate:             date,
+		Monat:                   date,
+		Strompreis:              0.22,
+		FrischwasserPreis:       1.46,
+		AbwasserPreis:           4.87,
+		HeizungWaermeGewichtung: 0.7,
+		EinspeisungPreis:        0.08,
+		Readings:                readings,
+		Personen:                map[int64]int64{1: 2, 2: 1},
+	}
+}
+
+// periodFormValues builds a valid Ablesung-Formular Wertesatz for the given
+// reading_date/monat ("YYYY-MM"), everything else a fixed valid default -
+// handleUpdateAblesung's seam tests only care about the Vorperiode/
+// Folgeperiode-Konflikt branch.
+func periodFormValues(readingDate, monat string) url.Values {
+	v := url.Values{}
+	v.Set("reading_date", readingDate)
+	v.Set("monat", monat)
+	for _, key := range store.MeterKeys {
+		v.Set(key, "0")
+	}
+	v.Set("strompreis", "0.22")
+	v.Set("frischwasser_preis", "1.46")
+	v.Set("abwasser_preis", "4.87")
+	v.Set("einspeisung_preis", "0.08")
+	v.Set("heizung_gewichtung", "0.7")
+	v.Set("personen_1", "2")
+	v.Set("personen_2", "1")
+	return v
+}
+
+// TestHandleUpdateAblesung_ErrorMapping covers the seam the architecture
+// review flagged as untested: handleUpdateAblesung's errors.As-switch maps
+// store.PeriodDateTooEarly/TooLateError and PeriodMonatTooEarly/TooLateError
+// each to their own German message and StatusBadRequest, not a generic 500.
+func TestHandleUpdateAblesung_ErrorMapping(t *testing.T) {
+	db := openTestDB(t)
+
+	if _, err := store.CreatePeriod(db, seedPeriodInputAt("2026-01-01")); err != nil {
+		t.Fatalf("CreatePeriod older: %v", err)
+	}
+	target, err := store.CreatePeriod(db, seedPeriodInputAt("2026-06-01"))
+	if err != nil {
+		t.Fatalf("CreatePeriod target: %v", err)
+	}
+	if _, err := store.CreatePeriod(db, seedPeriodInputAt("2026-12-01")); err != nil {
+		t.Fatalf("CreatePeriod newer: %v", err)
+	}
+
+	cases := []struct {
+		name        string
+		readingDate string
+		monat       string
+		wantSubstr  string
+	}{
+		{"Ablesedatum vor Vorperiode", "2025-12-01", "2026-06", "Ablesedatum muss nach der Vorperiode"},
+		{"Ablesedatum nach Folgeperiode", "2027-01-01", "2026-06", "Ablesedatum muss vor der Folgeperiode"},
+		{"Abrechnungsmonat vor Vorperiode", "2026-06-15", "2025-12", "Abrechnungsmonat darf nicht vor dem der Vorperiode"},
+		{"Abrechnungsmonat nach Folgeperiode", "2026-06-15", "2027-01", "Abrechnungsmonat darf nicht nach dem der Folgeperiode"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			form := periodFormValues(c.readingDate, c.monat)
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/ablesungen/%d", target), strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.SetPathValue("id", strconv.FormatInt(target, 10))
+
+			w := httptest.NewRecorder()
+			handleUpdateAblesung(db)(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d (body: %s)", w.Code, http.StatusBadRequest, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), c.wantSubstr) {
+				t.Errorf("body = %q, want substring %q", w.Body.String(), c.wantSubstr)
+			}
+		})
+	}
+
+	t.Run("Erfolgsfall redirected mit StatusFound", func(t *testing.T) {
+		form := periodFormValues("2026-06-15", "2026-06")
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/ablesungen/%d", target), strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetPathValue("id", strconv.FormatInt(target, 10))
+
+		w := httptest.NewRecorder()
+		handleUpdateAblesung(db)(w, req)
+
+		if w.Code != http.StatusFound {
+			t.Fatalf("status = %d, want %d (body: %s)", w.Code, http.StatusFound, w.Body.String())
+		}
+		if loc := w.Header().Get("Location"); !strings.Contains(loc, fmt.Sprintf("/ablesungen/%d", target)) {
+			t.Errorf("Location = %q, want it to reference period %d", loc, target)
+		}
+	})
 }
