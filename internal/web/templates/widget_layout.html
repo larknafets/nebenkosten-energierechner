@@ -27,7 +27,6 @@
      the combined "content" data struct in handlers.go does. */}}
 {{define "widget-jahressumme-body"}}
 {{if .Card}}
-<div class="muted">Jahressummen {{.AnzeigeJahr}}{{if .AnzeigeJahrLaufend}} <span class="badge">laufend</span>{{end}}</div>
 <div class="panel stat-card">
   <div class="muted"><strong>{{.Card.ApartmentName}}</strong>
     <span class="badge badge-icon" title="Wohnungsgröße"><svg viewBox="0 0 24 24"><path d="M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z" /></svg>{{de0 .Card.ApartmentQM}} m²</span>
@@ -45,7 +44,6 @@
   </div>
 </div>
 {{else}}
-<div class="muted">Jahressummen {{.AnzeigeJahr}}{{if .AnzeigeJahrLaufend}} <span class="badge">laufend</span>{{end}}</div>
 <div class="panel stat-card">
   <div class="muted"><strong>{{.SimpleCard.Name}}</strong></div>
   <div class="stat-value"{{if .SimpleCard.IstErtrag}} style="color:var(--success)"{{end}}>{{if .SimpleCard.IstErtrag}}+{{end}}{{deEUR .SimpleCard.GesamtEUR}} €</div>
