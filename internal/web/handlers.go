@@ -362,6 +362,11 @@ type wizardData struct {
 	// a bootstrap path into a genuinely empty database, never set in edit
 	// mode (handleEditWizardForm leaves it at its zero value, false).
 	NoPeriods bool
+
+	// Variant is Ticket #83's throwaway UI-prototype switch ("a"/"b"/"c",
+	// via ?variant=), picking which Monat-Override mockup renders next to
+	// Ablesedatum - PROTOTYPE ONLY, remove with the rest of this branch.
+	Variant string
 }
 
 // outlierAvg computes the Ausreißer-Warnung baseline (Ticket #13) from up
@@ -414,6 +419,7 @@ func handleWizardForm(db *sql.DB) http.HandlerFunc {
 			Apartments:                apartments,
 			PreviousHeizungGewichtung: 0.7,
 			NoPeriods:                 previousPeriod == nil,
+			Variant:                   r.URL.Query().Get("variant"),
 		}
 		if len(recent) > 0 {
 			data.HasPrevious = true
@@ -764,6 +770,36 @@ func periodOverviewRows(periods []store.PeriodSummary) []periodOverviewRow {
 	return out
 }
 
+// protoRow/protoMonatGroup are Ticket #83's throwaway UI-prototype fixture
+// types for the Ablesungen-Übersicht Monat-Gruppierung mockup - the real
+// `monat` field doesn't exist in the schema yet (Ticket #81 is spec-only),
+// so the variant tables render this hardcoded example instead of live data.
+// PROTOTYPE ONLY, remove with the rest of this branch.
+type protoRow struct {
+	ReadingDate string
+	Zeitraum    string
+}
+type protoMonatGroup struct {
+	MonatLabel string
+	Rows       []protoRow
+	Shaded     bool
+}
+
+func protoMonatFixture() []protoMonatGroup {
+	return []protoMonatGroup{
+		{MonatLabel: "August 2026", Rows: []protoRow{
+			{ReadingDate: "31.08.2026", Zeitraum: "01.08.–31.08.2026"},
+		}},
+		{MonatLabel: "September 2026", Shaded: true, Rows: []protoRow{
+			{ReadingDate: "01.09.2026", Zeitraum: "01.09.–01.09.2026"},
+			{ReadingDate: "15.09.2026", Zeitraum: "02.09.–15.09.2026"},
+		}},
+		{MonatLabel: "Oktober 2026", Rows: []protoRow{
+			{ReadingDate: "01.10.2026", Zeitraum: "16.09.–01.10.2026"},
+		}},
+	}
+}
+
 // handleAblesungenListe lists every recorded period (Ticket #43), newest
 // first, linking each to its detail view. ImportedCount/Warnings surface the
 // CSV import's result (Ticket #54) - passed via query params since the app
@@ -777,6 +813,7 @@ func handleAblesungenListe(db *sql.DB) http.HandlerFunc {
 		}
 
 		importedCount, _ := strconv.Atoi(r.URL.Query().Get("imported"))
+		variant := r.URL.Query().Get("variant")
 
 		data := struct {
 			Base          string
@@ -784,12 +821,18 @@ func handleAblesungenListe(db *sql.DB) http.HandlerFunc {
 			Periods       []periodOverviewRow
 			ImportedCount int
 			Warnings      []string
+			Variant       string
+			MonatGruppen  []protoMonatGroup
 		}{
 			Base:          requestBase(r),
 			Aktuell:       "ablesungen",
 			Periods:       periodOverviewRows(periods),
 			ImportedCount: importedCount,
 			Warnings:      r.URL.Query()["warning"],
+			Variant:       variant,
+		}
+		if variant != "" {
+			data.MonatGruppen = protoMonatFixture()
 		}
 
 		if err := ablesungenTemplate.ExecuteTemplate(w, "layout", data); err != nil {

@@ -13,11 +13,65 @@
 {{end}}
 
 <form method="post" action="{{.FormAction}}" class="panel">
+  {{if eq .Variant "a"}}
+  <div style="display:flex; gap:1rem;">
+    <div class="field" style="max-width:220px">
+      <label>Ablesedatum</label>
+      <input type="date" name="reading_date" id="reading_date" value="{{.ReadingDate}}" required {{if .HasPrevious}}data-prev-date="{{.PreviousReadingDate}}"{{end}}>
+      <div class="warning" id="warn-reading_date"></div>
+    </div>
+    <div class="field" style="max-width:180px">
+      <label>Abrechnungsmonat</label>
+      <input type="month" name="monat" id="monat_a" value="{{slice .ReadingDate 0 7}}">
+    </div>
+  </div>
+  <script>
+    (function(){
+      var d = document.getElementById('reading_date'), m = document.getElementById('monat_a'), touched = false;
+      m.addEventListener('input', function(){ touched = true; });
+      d.addEventListener('input', function(){ if (!touched && d.value) m.value = d.value.slice(0,7); });
+    })();
+  </script>
+  {{else if eq .Variant "b"}}
+  <div class="field" style="max-width:220px">
+    <label>Ablesedatum</label>
+    <input type="date" name="reading_date" id="reading_date" value="{{.ReadingDate}}" required {{if .HasPrevious}}data-prev-date="{{.PreviousReadingDate}}"{{end}}>
+    <div class="warning" id="warn-reading_date"></div>
+    <div class="muted" style="font-size:.85em; margin-top:.4rem" id="monat_display_b">
+      Abrechnungsmonat: <strong id="monat_label_b">September 2026</strong> · <a href="#" id="monat_edit_b">ändern</a>
+    </div>
+    <select name="monat" id="monat_select_b" style="display:none; margin-top:.4rem">
+      <option value="2026-08-01">August 2026</option>
+      <option value="2026-09-01" selected>September 2026</option>
+      <option value="2026-10-01">Oktober 2026</option>
+    </select>
+  </div>
+  <script>
+    document.getElementById('monat_edit_b').addEventListener('click', function(e){
+      e.preventDefault();
+      document.getElementById('monat_display_b').style.display = 'none';
+      document.getElementById('monat_select_b').style.display = 'block';
+    });
+  </script>
+  {{else if eq .Variant "c"}}
+  <div style="display:flex; gap:1rem; align-items:flex-end;">
+    <div class="field" style="max-width:200px">
+      <label>Abrechnungsmonat</label>
+      <input type="month" name="monat" id="monat_c" value="{{slice .ReadingDate 0 7}}" required style="font-size:1.15em; font-weight:600;">
+    </div>
+    <div class="field" style="max-width:150px">
+      <label class="muted" style="font-size:.8em;">Ablesedatum</label>
+      <input type="date" name="reading_date" id="reading_date" value="{{.ReadingDate}}" required {{if .HasPrevious}}data-prev-date="{{.PreviousReadingDate}}"{{end}}>
+      <div class="warning" id="warn-reading_date"></div>
+    </div>
+  </div>
+  {{else}}
   <div class="field" style="max-width:220px">
     <label>Ablesedatum</label>
     <input type="date" name="reading_date" value="{{.ReadingDate}}" required {{if .HasPrevious}}data-prev-date="{{.PreviousReadingDate}}"{{end}}>
     <div class="warning" id="warn-reading_date"></div>
   </div>
+  {{end}}
 
   <div class="c-steps">
     <div class="c-step-dot active" data-step="1">1 · Strom</div>
@@ -157,4 +211,13 @@
     checkGap();
   }
 </script>
+
+<div style="position:fixed; bottom:1rem; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:.5rem 1rem; border-radius:999px; box-shadow:0 2px 8px rgba(0,0,0,.35); font-size:.85em; z-index:999;">
+  🧪 Ticket #83 ·
+  <a href="?variant=a" style="color:#9cf">A Parallel</a> ·
+  <a href="?variant=b" style="color:#9cf">B Chip</a> ·
+  <a href="?variant=c" style="color:#9cf">C Monat-first</a> ·
+  <a href="?" style="color:#f99">aus</a>
+  {{if .Variant}} — aktuell: <strong>{{.Variant}}</strong>{{end}}
+</div>
 {{end}}

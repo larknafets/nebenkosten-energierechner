@@ -14,9 +14,72 @@
 </div>
 {{end}}
 
+{{if .Variant}}
+<div class="panel" style="border-color:#e6a700; margin-bottom:1rem">
+  <strong>🧪 Prototyp Ticket #83</strong> - Beispieldaten (August 1 Ablesung, September 2 untermonatige Ablesungen, Oktober 1 Ablesung), nicht die echten Ablesungen.
+</div>
+{{if eq .Variant "a"}}
+<div class="panel">
+  <table class="letzte">
+    <thead><tr><th>Ablesedatum</th><th>Zeitraum</th><th></th></tr></thead>
+    <tbody>
+      {{range .MonatGruppen}}
+      <tr><td colspan="3" style="background:#00000010"><strong>{{.MonatLabel}}</strong></td></tr>
+      {{range .Rows}}
+      <tr><td style="padding-left:2rem">{{.ReadingDate}}</td><td>{{.Zeitraum}}</td><td><a href="#">Details</a></td></tr>
+      {{end}}
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else if eq .Variant "b"}}
+<div class="panel">
+  <table class="letzte">
+    <thead><tr><th>Monat</th><th>Ablesedatum</th><th>Zeitraum</th><th></th></tr></thead>
+    <tbody>
+      {{range $group := .MonatGruppen}}
+      {{range $i, $row := $group.Rows}}
+      <tr>
+        {{if eq $i 0}}<td rowspan="{{len $group.Rows}}" style="vertical-align:top; font-weight:600">{{$group.MonatLabel}}</td>{{end}}
+        <td>{{$row.ReadingDate}}</td><td>{{$row.Zeitraum}}</td><td><a href="#">Details</a></td>
+      </tr>
+      {{end}}
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else if eq .Variant "c"}}
+<div class="panel">
+  <table class="letzte">
+    <thead><tr><th>Ablesedatum</th><th>Monat</th><th>Zeitraum</th><th></th></tr></thead>
+    <tbody>
+      {{range .MonatGruppen}}
+      {{$group := .}}
+      {{range .Rows}}
+      <tr {{if $group.Shaded}}style="background:#00000008"{{end}}>
+        <td>{{.ReadingDate}}</td>
+        <td><span style="background:#00000015; border-radius:999px; padding:.1rem .6rem; font-size:.85em">{{$group.MonatLabel}}</span></td>
+        <td>{{.Zeitraum}}</td><td><a href="#">Details</a></td>
+      </tr>
+      {{end}}
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+<div style="position:fixed; bottom:1rem; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:.5rem 1rem; border-radius:999px; box-shadow:0 2px 8px rgba(0,0,0,.35); font-size:.85em; z-index:999;">
+  🧪 Ticket #83 ·
+  <a href="?variant=a" style="color:#9cf">A Überschrift</a> ·
+  <a href="?variant=b" style="color:#9cf">B Rowspan</a> ·
+  <a href="?variant=c" style="color:#9cf">C Badge</a> ·
+  <a href="?" style="color:#f99">aus</a>
+  — aktuell: <strong>{{.Variant}}</strong>
+</div>
+{{end}}
+
 {{if not .Periods}}
 <p class="muted">Noch keine Ablesung erfasst. <a href="{{.Base}}/ablesungen/neu">Jetzt erfassen</a>.</p>
-{{else}}
+{{else if not .Variant}}
 <div class="panel">
   <table class="letzte">
     <thead><tr><th>Ablesedatum</th><th>Zeitraum</th><th></th></tr></thead>
