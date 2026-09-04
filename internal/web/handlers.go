@@ -252,8 +252,20 @@ var csvHeader = append(append([]string{"reading_date", "monat"}, store.MeterKeys
 
 // parseDecimalDE is formatDecimalDE's inverse: German decimal-comma input
 // ("25,33") to float64. CSV cells always use this convention (Ticket #54).
+// parseDecimalDE is formatDecimalDE/groupThousandsDE's inverse: strips the
+// "." thousands separator from the integer part (Issue #87 - a value ≥
+// 1000 like "1.000" was misparsed as 1.0, treating the grouping dot as a
+// decimal point), then converts the "," decimal separator to ".".
 func parseDecimalDE(s string) (float64, error) {
-	return strconv.ParseFloat(strings.ReplaceAll(strings.TrimSpace(s), ",", "."), 64)
+	s = strings.TrimSpace(s)
+	intPart, dec, hasDec := strings.Cut(s, ",")
+	intPart = strings.ReplaceAll(intPart, ".", "")
+	if hasDec {
+		s = intPart + "." + dec
+	} else {
+		s = intPart
+	}
+	return strconv.ParseFloat(s, 64)
 }
 
 // parseFormFloat reads and parses one form field, returning a German

@@ -122,18 +122,18 @@ func anzeigeJahr(allPeriods []store.PeriodSummary, fixkostenEingaben []store.Fix
 // Umschalter (VerbrauchEUR/FixkostenEUR/GesamtEUR), so the numbers always
 // match between the two.
 type dashboardJahresCard struct {
-	ApartmentID       int64
-	ApartmentName     string
-	ApartmentQM       float64
+	ApartmentID         int64
+	ApartmentName       string
+	ApartmentQM         float64
 	ApartmentFlurstueck float64
-	PersonenSchnitt   float64
-	FixkostenEUR      float64
-	StromEUR          float64
-	HeizungEUR        float64
-	WasserEUR         float64
-	VerbrauchEUR      float64
-	GesamtEUR         float64
-	Segmente          []dashboardSegment
+	PersonenSchnitt     float64
+	FixkostenEUR        float64
+	StromEUR            float64
+	HeizungEUR          float64
+	WasserEUR           float64
+	VerbrauchEUR        float64
+	GesamtEUR           float64
+	Segmente            []dashboardSegment
 }
 
 // buildJahresCard sums the given apartment's Verbrauch- und Fixkosten-Kosten

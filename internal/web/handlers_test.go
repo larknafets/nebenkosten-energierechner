@@ -744,6 +744,12 @@ func TestParseDecimalDE(t *testing.T) {
 		{" 116,23 ", 116.23, false},
 		{"", 0, true},
 		{"abc", 0, true},
+		// Issue #87: formatDecimalDE gruppiert ab 1000 mit "." als
+		// Tausendertrenner (siehe groupThousandsDE) - parseDecimalDE muss
+		// das wieder entfernen, nicht als Dezimalpunkt fehlinterpretieren.
+		{"1.000", 1000, false},
+		{"2.345,43", 2345.43, false},
+		{"-12.345", -12345, false},
 	}
 	for _, c := range cases {
 		got, err := parseDecimalDE(c.raw)
@@ -812,6 +818,22 @@ func TestParseImportCSV_RoundTrip(t *testing.T) {
 	}
 	if rows[1].input.Monat != "2026-07-01" {
 		t.Errorf("Monat = %q, want 2026-07-01 (aus der monat-Spalte, roundtrip-fest)", rows[1].input.Monat)
+	}
+}
+
+// TestParseImportCSV_RoundTrip_ThousandsSeparator verifies Issue #87: a
+// Zählerstand ≥ 1000, which formatDecimalDE writes with a "." thousands
+// separator on export (e.g. "1.000"), survives reimport unchanged.
+func TestParseImportCSV_RoundTrip_ThousandsSeparator(t *testing.T) {
+	csvText := strings.Join(csvHeader, ";") + "\n" +
+		csvRow("2026-08-01", formatDecimalDE(1000)) + "\n"
+
+	rows, err := parseImportCSV(strings.NewReader(csvText))
+	if err != nil {
+		t.Fatalf("parseImportCSV: %v", err)
+	}
+	if got := rows[0].input.Readings["strom_gesamt"]; got != 1000 {
+		t.Errorf("Readings[strom_gesamt] = %v, want 1000 (export/reimport verlustfrei)", got)
 	}
 }
 
