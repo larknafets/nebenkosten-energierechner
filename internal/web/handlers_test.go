@@ -818,11 +818,29 @@ func TestFormatDecimalDE(t *testing.T) {
 		// Ticket #37: max. 2 Nachkommastellen, aber nicht auffuellen.
 		{25.333333333333332, "25,33"},
 		{0.46999999999999975, "0,47"},
-		{1406.3333333333333, "1406,33"},
+		{1406.3333333333333, "1.406,33"},
+		{-1234.5, "-1.234,5"},
+		{1234567, "1.234.567"},
 	}
 	for _, c := range cases {
 		if got := formatDecimalDE(c.x); got != c.want {
 			t.Errorf("formatDecimalDE(%v) = %q, want %q", c.x, got, c.want)
+		}
+	}
+}
+
+func TestGroupThousandsDE(t *testing.T) {
+	cases := []struct{ s, want string }{
+		{"0", "0"},
+		{"200", "200"},
+		{"1000", "1.000"},
+		{"12345,43", "12.345,43"},
+		{"-12345", "-12.345"},
+		{"1234567,89", "1.234.567,89"},
+	}
+	for _, c := range cases {
+		if got := groupThousandsDE(c.s); got != c.want {
+			t.Errorf("groupThousandsDE(%q) = %q, want %q", c.s, got, c.want)
 		}
 	}
 }
