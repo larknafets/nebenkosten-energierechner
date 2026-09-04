@@ -65,9 +65,15 @@
 <div class="wohnung-panel" data-wohnung="{{$card.ApartmentID}}">
   <div class="panel verlauf-panel" id="verlauf-panel">
     <div class="verlauf-legend">
-      <span><i class="cat-strom"></i>Strom</span>
-      <span><i class="cat-heizung"></i>Heizung/Warmwasser</span>
-      <span><i class="cat-wasser"></i>Wasser</span>
+      <span class="legend-item" data-modus="verbrauch"><i class="cat-strom"></i>Strom</span>
+      <span class="legend-item" data-modus="verbrauch"><i class="cat-heizung"></i>Heizung/Warmwasser</span>
+      <span class="legend-item" data-modus="verbrauch"><i class="cat-wasser"></i>Wasser</span>
+      <span class="legend-item" data-modus="verbrauchswerte"><i class="cat-strom"></i>Strom</span>
+      <span class="legend-item" data-modus="verbrauchswerte"><i class="cat-heizung"></i>Heizung/Warmwasser</span>
+      <span class="legend-item" data-modus="verbrauchswerte"><i class="cat-wasser"></i>Wasser</span>
+      {{range $.LogikOptions}}<span class="legend-item" data-modus="fixkosten"><i class="logik-{{.Value}}"></i>{{.Label}}</span>{{end}}
+      <span class="legend-item" data-modus="kombiniert"><i class="cat-verbrauch-gesamt"></i>Verbrauch</span>
+      <span class="legend-item" data-modus="kombiniert"><i class="cat-fix"></i>Fixkosten</span>
       <div class="mode-toggle">
         <button type="button" data-modus-btn="verbrauch">Verbrauch</button>
         <button type="button" data-modus-btn="verbrauchswerte">Verbrauchswerte</button>
@@ -88,7 +94,7 @@
         {{if $m.HasVerbrauch}}{{range $m.VerbrauchSegmente}}<div class="cat-{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="verbrauch">– keine Ablesung</span>{{end}}
       </div>
       <div class="verbrauch-liste" data-modus="verbrauchswerte">
-        {{if $m.HasVerbrauch}}{{range $i2, $seg := $m.VerbrauchSegmente}}{{if $i2}} · {{end}}{{$seg.Label}} {{de $seg.Verbrauch}} {{$seg.Einheit}}{{if $seg.Einheit2}} ({{de $seg.Verbrauch2}} {{$seg.Einheit2}}){{end}}{{end}}{{else}}– keine Ablesung{{end}}
+        {{if $m.HasVerbrauch}}{{range $i2, $seg := $m.VerbrauchSegmente}}{{if $i2}} · {{end}}{{$seg.Label}} <span class="v-{{$seg.Farbe}}">{{de $seg.Verbrauch}} {{$seg.Einheit}}{{if $seg.Einheit2}} ({{de $seg.Verbrauch2}} {{$seg.Einheit2}}){{end}}</span>{{end}}{{else}}– keine Ablesung{{end}}
       </div>
       <div class="bar-track" data-modus="fixkosten">
         {{if $m.HasFixkosten}}{{range $m.FixkostenSegmente}}<div class="{{.Farbe}}" style="width:{{.ProzentNeuestesGesamt}}%" data-eur="{{deEUR .Kosten}} €"><span>{{deEUR .Kosten}} €</span></div>{{end}}{{else}}<span class="verlauf-none" data-modus="fixkosten">– keine Fixkosten-Eingabe</span>{{end}}

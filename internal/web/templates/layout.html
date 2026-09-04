@@ -110,7 +110,11 @@
   .mode-toggle button { padding: .25rem .6rem; font-size: .72rem; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; }
   .mode-toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
   [data-modus] { display: none; } /* JS setzt die aktive Modus-Variante wieder sichtbar (leerer inline style, siehe applyModus) - jede Regel unten fuer ein data-modus-Element muss ihr eigenes display deklarieren, sonst gewinnt diese Regel per Cascade weiter */
+  .legend-item { display: inline-flex; align-items: center; }
   .verbrauch-liste { display: block; font-size: .72rem; color: var(--muted); }
+  .verbrauch-liste .v-strom { color: var(--cat-strom); font-weight: 600; }
+  .verbrauch-liste .v-heizung { color: var(--cat-heizung); font-weight: 600; }
+  .verbrauch-liste .v-wasser { color: var(--cat-wasser); font-weight: 600; }
   .verlauf-tooltip { display: none; position: fixed; background: var(--tooltip-bg); color: var(--tooltip-text); font-size: .72rem; font-weight: 600; padding: .25rem .5rem; border-radius: 4px; pointer-events: none; z-index: 30; white-space: nowrap; }
   .verlauf-row { display: flex; align-items: center; gap: .5rem; padding: .3rem 0; }
   .verlauf-row.is-current .month-label { font-weight: 700; color: var(--text); }

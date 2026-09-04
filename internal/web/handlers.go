@@ -1255,6 +1255,7 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 			WallboxVerlauf     dashboardSimpleSpalte
 			PVCard             dashboardSimpleCard
 			PVVerlauf          dashboardSimpleSpalte
+			LogikOptions       []logikOption
 			Version            string
 			BuildDate          string
 		}{
@@ -1269,6 +1270,7 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 			WallboxVerlauf:     wallboxVerlauf,
 			PVCard:             pvCard,
 			PVVerlauf:          pvVerlauf,
+			LogikOptions:       logikOptions,
 			Version:            version,
 			BuildDate:          buildDate,
 		}
