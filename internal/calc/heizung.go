@@ -34,6 +34,12 @@ type HeizungErgebnis struct {
 	// KostenHeizung* auf die Wohnungen verteilt.
 	WPAnteilW1KWh float64
 	WPAnteilW2KWh float64
+
+	// WPVerbrauch*KWh ist der tatsächliche (rohe, ohne PV-Abzug) WP-
+	// Stromverbrauch (strom.WPAnteilKWh+strom.PVAnteilWPKWh), mit denselben
+	// Gewichten wie WPAnteil*KWh auf die Wohnungen verteilt.
+	WPVerbrauchW1KWh float64
+	WPVerbrauchW2KWh float64
 }
 
 // Heizung computes the Heizungskosten-Zuteilung for the given period.
@@ -92,5 +98,8 @@ func Heizung(db *sql.DB, periodID int64) (*HeizungErgebnis, error) {
 
 		WPAnteilW1KWh: strom.WPAnteilKWh * (gewichtungWaerme*ratioWaermeW1 + gewichtungFlaeche*ratioFlaecheW1),
 		WPAnteilW2KWh: strom.WPAnteilKWh * (gewichtungWaerme*ratioWaermeW2 + gewichtungFlaeche*ratioFlaecheW2),
+
+		WPVerbrauchW1KWh: (strom.WPAnteilKWh + strom.PVAnteilWPKWh) * (gewichtungWaerme*ratioWaermeW1 + gewichtungFlaeche*ratioFlaecheW1),
+		WPVerbrauchW2KWh: (strom.WPAnteilKWh + strom.PVAnteilWPKWh) * (gewichtungWaerme*ratioWaermeW2 + gewichtungFlaeche*ratioFlaecheW2),
 	}, nil
 }

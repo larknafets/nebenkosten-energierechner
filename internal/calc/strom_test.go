@@ -121,6 +121,28 @@ func TestStrom_WallboxDritteZuteilungsstufe(t *testing.T) {
 	}
 }
 
+func TestStrom_W2VerbrauchKWh_TatsaechlicherWertOhnePVAbzug(t *testing.T) {
+	db := openTestDB(t)
+	mustCreatePeriod(t, db, "2026-10-01", 0.30, baseReadings(nil))
+	// Netzbezug 400 < Wohnung2-Unterzaehler 500 -> 100 kWh von Wohnung 2
+	// werden durch PV gedeckt, sind aber trotzdem tatsächlicher Verbrauch.
+	p2 := mustCreatePeriod(t, db, "2026-11-01", 0.30, baseReadings(map[string]float64{
+		"strom_gesamt":   400,
+		"strom_wohnung2": 500,
+	}))
+
+	got, err := calc.Strom(db, p2)
+	if err != nil {
+		t.Fatalf("calc.Strom: %v", err)
+	}
+	if got.W2AnteilKWh != 400 {
+		t.Errorf("W2AnteilKWh = %v, want 400 (abgerechneter, auf Netzbezug gedeckelter Anteil)", got.W2AnteilKWh)
+	}
+	if got.W2VerbrauchKWh != 500 {
+		t.Errorf("W2VerbrauchKWh = %v, want 500 (tatsächlicher Unterzähler-Verbrauch, ohne PV-Abzug)", got.W2VerbrauchKWh)
+	}
+}
+
 func TestStrom_WallboxKeinRestUebrig(t *testing.T) {
 	db := openTestDB(t)
 	mustCreatePeriod(t, db, "2026-10-01", 0.30, baseReadings(nil))

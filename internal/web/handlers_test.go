@@ -14,8 +14,9 @@ import (
 func TestKategorien(t *testing.T) {
 	k := kosten{
 		Strom: &calc.StromErgebnis{
-			W2AnteilKWh: 305,
-			KostenW2:    67.20,
+			W2AnteilKWh:    305,
+			W2VerbrauchKWh: 320,
+			KostenW2:       67.20,
 		},
 		Wasser: &calc.WasserErgebnis{
 			FrischwasserW1:       20,
@@ -26,22 +27,24 @@ func TestKategorien(t *testing.T) {
 			KostenAbwasserW2:     73.05,
 		},
 		Heizung: &calc.HeizungErgebnis{
-			WaermeW1MWh:     14.2,
-			WaermeW2MWh:     9.6,
-			WPAnteilW1KWh:   840,
-			WPAnteilW2KWh:   360,
-			KostenHeizungW1: 112.40,
-			KostenHeizungW2: 84.10,
+			WaermeW1MWh:      14.2,
+			WaermeW2MWh:      9.6,
+			WPAnteilW1KWh:    840,
+			WPAnteilW2KWh:    360,
+			WPVerbrauchW1KWh: 910,
+			WPVerbrauchW2KWh: 390,
+			KostenHeizungW1:  112.40,
+			KostenHeizungW2:  84.10,
 		},
 	}
 
-	t.Run("Heizung/Warmwasser zeigt WP-Anteil-kWh, dahinter Waermeverbrauch-MWh", func(t *testing.T) {
+	t.Run("Heizung/Warmwasser zeigt tatsächlichen WP-Verbrauch-kWh (ohne PV-Abzug), dahinter Waermeverbrauch-MWh", func(t *testing.T) {
 		for _, tc := range []struct {
 			apartmentID      int64
 			wantKWh, wantMWh float64
 		}{
-			{1, 840, 14.2},
-			{2, 360, 9.6},
+			{1, 910, 14.2},
+			{2, 390, 9.6},
 		} {
 			kats := kategorien(tc.apartmentID, k)
 			var heizung *kategorie
@@ -71,6 +74,25 @@ func TestKategorien(t *testing.T) {
 		}
 		if len(kats) != 2 {
 			t.Fatalf("want 2 Kategorien (Heizung, Wasser), got %d: %+v", len(kats), kats)
+		}
+	})
+
+	t.Run("Strom zeigt tatsächlichen Verbrauch (ohne PV-Abzug), nicht den abgerechneten Anteil", func(t *testing.T) {
+		kats := kategorien(2, k)
+		var strom *kategorie
+		for i := range kats {
+			if kats[i].Label == "Strom" {
+				strom = &kats[i]
+			}
+		}
+		if strom == nil {
+			t.Fatal("keine Strom-Kategorie gefunden")
+		}
+		if strom.Verbrauch != 320 {
+			t.Errorf("Strom.Verbrauch = %v, want 320 (W2VerbrauchKWh, nicht der abgerechnete Anteil 305)", strom.Verbrauch)
+		}
+		if strom.Kosten != 67.20 {
+			t.Errorf("Strom.Kosten = %v, want 67.20 (bleibt auf dem abgerechneten Anteil basiert)", strom.Kosten)
 		}
 	})
 
@@ -142,7 +164,7 @@ func TestBuildDashboardVerlauf_Skalierung(t *testing.T) {
 	// aeltere, teurere Periode muss ueber 100% hinauslaufen (Ticket #19:
 	// Skala ist relativ zum neuesten Monat, nicht gestaucht).
 	neu := kosten{
-		Strom:   &calc.StromErgebnis{KostenW2: 20, W2AnteilKWh: 123},
+		Strom:   &calc.StromErgebnis{KostenW2: 20, W2AnteilKWh: 123, W2VerbrauchKWh: 123},
 		Wasser:  &calc.WasserErgebnis{KostenFrischwasserW2: 5, KostenAbwasserW2: 5},
 		Heizung: &calc.HeizungErgebnis{KostenHeizungW2: 10},
 	}

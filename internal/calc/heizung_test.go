@@ -54,6 +54,46 @@ func TestHeizung_70_30_Verteilung(t *testing.T) {
 	}
 }
 
+func TestHeizung_WPVerbrauch_TatsaechlicherWertOhnePVAbzug(t *testing.T) {
+	db := openTestDB(t)
+	mustCreatePeriod(t, db, "2026-10-01", 0.22, baseReadings(nil))
+
+	// Netzbezug 6000 (nach W2-Zuteilung 0 Rest fuer WP) < WP-Unterzaehler
+	// 10000 -> die vollen 10000 kWh sind tatsächlicher WP-Verbrauch, davon
+	// wird aber nichts vom Netzbezug gedeckt (komplett durch PV gedeckt).
+	id, err := store.CreatePeriod(db, store.PeriodInput{
+		ReadingDate:             "2026-11-01",
+		Strompreis:              0.22,
+		FrischwasserPreis:       1.46,
+		AbwasserPreis:           4.87,
+		HeizungWaermeGewichtung: 0.7,
+		Readings: baseReadings(map[string]float64{
+			"strom_gesamt":      0,
+			"strom_waermepumpe": 10000,
+			"waerme_wohnung1":   6,
+			"waerme_wohnung2":   4,
+		}),
+		Personen: map[int64]int64{1: 2, 2: 1},
+	})
+	if err != nil {
+		t.Fatalf("create period: %v", err)
+	}
+
+	got, err := calc.Heizung(db, id)
+	if err != nil {
+		t.Fatalf("calc.Heizung: %v", err)
+	}
+	if got.WPAnteilW1KWh != 0 || got.WPAnteilW2KWh != 0 {
+		t.Errorf("WPAnteil = W1:%v W2:%v, want 0/0 (kein Netzbezug, kompletter WP-Verbrauch durch PV gedeckt)", got.WPAnteilW1KWh, got.WPAnteilW2KWh)
+	}
+	if sum := got.WPVerbrauchW1KWh + got.WPVerbrauchW2KWh; math.Abs(sum-10000) > 0.001 {
+		t.Errorf("WPVerbrauchW1KWh+WPVerbrauchW2KWh = %v, want 10000 (voller tatsächlicher WP-Verbrauch bleibt erhalten, auch wenn PV alles deckt)", sum)
+	}
+	if got.WPVerbrauchW1KWh <= 0 || got.WPVerbrauchW2KWh <= 0 {
+		t.Errorf("WPVerbrauch = W1:%v W2:%v, want beide > 0 (anders als WPAnteil, das hier 0 ist)", got.WPVerbrauchW1KWh, got.WPVerbrauchW2KWh)
+	}
+}
+
 func TestHeizung_KeinWaermeVerbrauch_FaelltAufHaelftigeVerteilungZurueck(t *testing.T) {
 	db := openTestDB(t)
 	mustCreatePeriod(t, db, "2026-10-01", 0.22, baseReadings(nil))

@@ -1092,10 +1092,10 @@ type kategorie struct {
 
 	// Verbrauch2/Einheit2 is a second, optional Mengenangabe shown behind
 	// Verbrauch/Einheit in der Verbrauchswerte-Ansicht - nur für Heizung/
-	// Warmwasser gesetzt: Verbrauch ist dort der anteilige WP-Strom (kWh,
-	// die Kostenbasis), Verbrauch2 der rohe Wärmemengenzähler-Verbrauch
-	// (MWh, reine Raumheizung) zum Vergleich. Einheit2 == "" heißt: kein
-	// zweiter Wert.
+	// Warmwasser gesetzt: Verbrauch ist dort der tatsächliche (rohe, ohne
+	// PV-Abzug) WP-Strom in kWh, Verbrauch2 der rohe Wärmemengenzähler-
+	// Verbrauch (MWh, reine Raumheizung) zum Vergleich. Einheit2 == "" heißt:
+	// kein zweiter Wert.
 	Verbrauch2 float64
 	Einheit2   string
 }
@@ -1108,17 +1108,17 @@ type kategorie struct {
 func kategorien(apartmentID int64, k kosten) []kategorie {
 	var list []kategorie
 	if apartmentID == 2 {
-		list = append(list, kategorie{Label: "Strom", Kosten: k.Strom.KostenW2, Verbrauch: k.Strom.W2AnteilKWh, Einheit: "kWh", Farbe: "strom"})
+		list = append(list, kategorie{Label: "Strom", Kosten: k.Strom.KostenW2, Verbrauch: k.Strom.W2VerbrauchKWh, Einheit: "kWh", Farbe: "strom"})
 	}
 
-	heizungKosten, wpAnteilKWh, waermeMWh := k.Heizung.KostenHeizungW1, k.Heizung.WPAnteilW1KWh, k.Heizung.WaermeW1MWh
+	heizungKosten, wpVerbrauchKWh, waermeMWh := k.Heizung.KostenHeizungW1, k.Heizung.WPVerbrauchW1KWh, k.Heizung.WaermeW1MWh
 	frischwasserKosten, abwasserKosten, wasserM3 := k.Wasser.KostenFrischwasserW1, k.Wasser.KostenAbwasserW1, k.Wasser.FrischwasserW1
 	if apartmentID == 2 {
-		heizungKosten, wpAnteilKWh, waermeMWh = k.Heizung.KostenHeizungW2, k.Heizung.WPAnteilW2KWh, k.Heizung.WaermeW2MWh
+		heizungKosten, wpVerbrauchKWh, waermeMWh = k.Heizung.KostenHeizungW2, k.Heizung.WPVerbrauchW2KWh, k.Heizung.WaermeW2MWh
 		frischwasserKosten, abwasserKosten, wasserM3 = k.Wasser.KostenFrischwasserW2, k.Wasser.KostenAbwasserW2, k.Wasser.FrischwasserW2
 	}
 	list = append(list,
-		kategorie{Label: "Heizung/Warmwasser", Kosten: heizungKosten, Verbrauch: wpAnteilKWh, Einheit: "kWh", Farbe: "heizung", Verbrauch2: waermeMWh, Einheit2: "MWh"},
+		kategorie{Label: "Heizung/Warmwasser", Kosten: heizungKosten, Verbrauch: wpVerbrauchKWh, Einheit: "kWh", Farbe: "heizung", Verbrauch2: waermeMWh, Einheit2: "MWh"},
 		kategorie{Label: "Wasser", Kosten: calc.Round2(frischwasserKosten + abwasserKosten), Verbrauch: wasserM3, Einheit: "m³", Farbe: "wasser"},
 	)
 

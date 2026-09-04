@@ -19,6 +19,11 @@ type StromErgebnis struct {
 	WPAnteilKWh        float64
 	WallboxAnteilKWh   float64
 
+	// W2VerbrauchKWh is Wohnung 2's tatsächlicher (roher) Unterzähler-
+	// Verbrauch, ohne PV-Abzug - anders als W2AnteilKWh (auf den Netzbezug
+	// gedeckelter, abgerechneter Anteil). Gleich W2AnteilKWh+PVAnteilW2KWh.
+	W2VerbrauchKWh float64
+
 	// PVAnteilW2KWh/PVAnteilWPKWh/PVAnteilWallboxKWh is the gap between the
 	// submeter's own consumption and what the min()-cap actually attributed
 	// to Netzbezug - since the submeters read gross consumption while
@@ -69,6 +74,7 @@ func Strom(db *sql.DB, periodID int64) (*StromErgebnis, error) {
 		W2AnteilKWh:             w2Anteil,
 		WPAnteilKWh:             wpAnteil,
 		WallboxAnteilKWh:        wallboxAnteil,
+		W2VerbrauchKWh:          verbrauch["strom_wohnung2"],
 		PVAnteilW2KWh:           max(0, verbrauch["strom_wohnung2"]-w2Anteil),
 		PVAnteilWPKWh:           max(0, verbrauch["strom_waermepumpe"]-wpAnteil),
 		PVAnteilWallboxKWh:      max(0, verbrauch["strom_wallbox"]-wallboxAnteil),
