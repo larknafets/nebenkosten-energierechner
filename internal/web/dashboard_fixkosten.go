@@ -362,26 +362,25 @@ func buildDashboardVerlauf(apartmentID int64, apartmentName string, periodenKost
 		monate[0].IsCurrent = true
 	}
 
-	// Baseline je Modus = das neueste Monat, das für diesen Modus überhaupt
-	// Daten hat - nicht zwingend monate[0]: die allerneueste Ablesung/
-	// Fixkosten-Eingabe kann fehlen, ohne dass jeder ältere Monat dadurch auf
-	// 0% einfriert.
-	var neuestesVerbrauch, neuestesFixkosten, neuestesKombiniert float64
+	// Baseline je Modus = das größte Monat über den gesamten angezeigten
+	// Zeitraum - kein Balken läuft dadurch über 100% (sonst hart am
+	// bar-track-Rand abgeschnitten, siehe Architecture Review).
+	var maxVerbrauch, maxFixkosten, maxKombiniert float64
 	for _, m := range monate {
-		if neuestesVerbrauch == 0 && m.HasVerbrauch {
-			neuestesVerbrauch = m.VerbrauchGesamt
+		if m.HasVerbrauch && m.VerbrauchGesamt > maxVerbrauch {
+			maxVerbrauch = m.VerbrauchGesamt
 		}
-		if neuestesFixkosten == 0 && m.HasFixkosten {
-			neuestesFixkosten = m.FixkostenGesamt
+		if m.HasFixkosten && m.FixkostenGesamt > maxFixkosten {
+			maxFixkosten = m.FixkostenGesamt
 		}
-		if neuestesKombiniert == 0 && m.HasKombiniert {
-			neuestesKombiniert = m.KombiniertGesamt
+		if m.HasKombiniert && m.KombiniertGesamt > maxKombiniert {
+			maxKombiniert = m.KombiniertGesamt
 		}
 	}
 	for i := range monate {
-		setSegmentPct(monate[i].VerbrauchSegmente, neuestesVerbrauch)
-		setSegmentPct(monate[i].FixkostenSegmente, neuestesFixkosten)
-		setSegmentPct(monate[i].KombiniertSegmente, neuestesKombiniert)
+		setSegmentPct(monate[i].VerbrauchSegmente, maxVerbrauch)
+		setSegmentPct(monate[i].FixkostenSegmente, maxFixkosten)
+		setSegmentPct(monate[i].KombiniertSegmente, maxKombiniert)
 	}
 
 	return dashboardVerlaufSpalte{
@@ -655,20 +654,23 @@ func buildSimpleVerlauf(series simpleSeries, periodenKosten []periodKosten) dash
 		return sum
 	}
 
-	var neuestesKWh float64
+	// Baseline = das größte Monat über den gesamten angezeigten Zeitraum
+	// (kein Balken über 100%, siehe buildDashboardVerlauf).
+	var maxKWh float64
 	for _, m := range monate {
 		if m.HasWert {
-			neuestesKWh = segmentSumme(m.Segmente)
-			break
+			if s := segmentSumme(m.Segmente); s > maxKWh {
+				maxKWh = s
+			}
 		}
 	}
-	if neuestesKWh > 0 {
+	if maxKWh > 0 {
 		for i := range monate {
 			if !monate[i].HasWert {
 				continue
 			}
 			for j := range monate[i].Segmente {
-				monate[i].Segmente[j].ProzentNeuestesGesamt = monate[i].Segmente[j].Verbrauch / neuestesKWh * 100
+				monate[i].Segmente[j].ProzentNeuestesGesamt = monate[i].Segmente[j].Verbrauch / maxKWh * 100
 			}
 		}
 	}

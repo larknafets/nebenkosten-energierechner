@@ -218,9 +218,10 @@ func TestGroupKostenByMonat(t *testing.T) {
 }
 
 func TestBuildDashboardVerlauf_Skalierung(t *testing.T) {
-	// Neueste Periode (index 0) hat den kleineren Gesamtbetrag - eine
-	// aeltere, teurere Periode muss ueber 100% hinauslaufen (Ticket #19:
-	// Skala ist relativ zum neuesten Monat, nicht gestaucht).
+	// Neueste Periode (index 0) hat den kleineren Gesamtbetrag - die Skala
+	// ist relativ zum groessten Monat im Zeitraum (Architecture Review:
+	// vorher relativ zum neuesten Monat, was aeltere/teurere Monate ueber
+	// 100% hinauslaufen liess und ihren Text am bar-track-Rand abschnitt).
 	neu := kosten{
 		Strom:   &calc.StromErgebnis{KostenW2: 20, W2AnteilKWh: 123, W2VerbrauchKWh: 123},
 		Wasser:  &calc.WasserErgebnis{KostenFrischwasserW2: 5, KostenAbwasserW2: 5},
@@ -266,15 +267,21 @@ func TestBuildDashboardVerlauf_Skalierung(t *testing.T) {
 		t.Errorf("Strom-Segment = %+v, want Label=Strom Verbrauch=123 Einheit=kWh", strom)
 	}
 
-	// Skala = neuester VerbrauchGesamt (40). Der aeltere Monat kostet
-	// doppelt so viel -> jedes Segment soll auf 200% seines eigenen
-	// Kosten-Anteils an 40 EUR kommen, nicht auf 100% gestaucht werden.
-	var altSum float64
+	// Skala = groesster VerbrauchGesamt im Zeitraum (80, der aeltere Monat).
+	// Der aeltere Monat kommt also auf 100%, der neuere (40, halb so teuer)
+	// auf 50% - kein Balken laeuft ueber den Rand hinaus.
+	var altSum, neuSum float64
 	for _, seg := range monate[1].VerbrauchSegmente {
 		altSum += seg.ProzentNeuestesGesamt
 	}
-	if altSum < 199 || altSum > 201 {
-		t.Errorf("Summe der Prozentanteile des aelteren Monats = %v, want ~200 (laeuft ueber den Rand)", altSum)
+	if altSum < 99 || altSum > 101 {
+		t.Errorf("Summe der Prozentanteile des aelteren (groessten) Monats = %v, want ~100", altSum)
+	}
+	for _, seg := range monate[0].VerbrauchSegmente {
+		neuSum += seg.ProzentNeuestesGesamt
+	}
+	if neuSum < 49 || neuSum > 51 {
+		t.Errorf("Summe der Prozentanteile des neueren Monats = %v, want ~50 (halb so teuer wie der groesste)", neuSum)
 	}
 
 	t.Run("leere Eintraege", func(t *testing.T) {

@@ -531,7 +531,7 @@ func handleFixkostenDetail(db *sql.DB) http.HandlerFunc {
 			KostenNote  string
 		}{
 			Base:        requestBase(r),
-			Aktuell:     "fixkosten",
+			Aktuell:     "fixkosten-detail",
 			Eingabe:     eingabe,
 			MonatLabel:  germanPeriodLabel(eingabe.Monat),
 			AllEingaben: allItems,

@@ -753,7 +753,7 @@ func handleAblesungDetail(db *sql.DB) http.HandlerFunc {
 			KostenNote  string
 		}{
 			Base:          requestBase(r),
-			Aktuell:       "ablesungen",
+			Aktuell:       "ablesungen-detail",
 			Period:        period,
 			AllPeriods:    periodListItems(allPeriods),
 			Apartments:    apartments,
