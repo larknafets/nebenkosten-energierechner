@@ -123,6 +123,8 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 		pvCard := buildSimpleJahresCard(pvSeries, jahr, periodenKosten)
 		pvVerlauf := buildSimpleVerlauf(pvSeries, periodenKosten)
 
+		latestVersion, updateAvailable := checkForUpdate(version)
+
 		data := struct {
 			Base               string
 			Aktuell            string
@@ -138,6 +140,8 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 			LogikOptions       []logikOption
 			Version            string
 			BuildDate          string
+			UpdateAvailable    bool
+			LatestVersion      string
 		}{
 			Base:               requestBase(r),
 			Aktuell:            "dashboard",
@@ -153,6 +157,8 @@ func handleDashboard(db *sql.DB, version, buildDate string) http.HandlerFunc {
 			LogikOptions:       logikOptions,
 			Version:            version,
 			BuildDate:          buildDate,
+			UpdateAvailable:    updateAvailable,
+			LatestVersion:      latestVersion,
 		}
 
 		if err := dashboardTemplate.ExecuteTemplate(w, "layout", data); err != nil {
