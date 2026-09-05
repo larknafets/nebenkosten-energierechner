@@ -48,11 +48,9 @@
   </div>
   {{end}}
   <div class="btn-row">
+    <button type="submit" formaction="{{$.Base}}/stammdaten/jahre/{{.Jahr}}/loeschen" class="danger" onclick="return confirm('Jahr {{.Jahr}} wirklich löschen?');">Jahr {{.Jahr}} löschen</button>
     <button type="submit" class="primary">Speichern</button>
   </div>
-</form>
-<form method="post" action="{{$.Base}}/stammdaten/jahre/{{.Jahr}}/loeschen" onsubmit="return confirm('Jahr {{.Jahr}} wirklich löschen?');" style="margin-top:.5rem">
-  <button type="submit" class="danger">Jahr {{.Jahr}} löschen</button>
 </form>
 {{end}}
 {{end}}

@@ -37,7 +37,7 @@
 </div>
 
 <div class="btn-row">
-  <a href="{{.Base}}/fixkosten/neu" class="button success">Neue Fixkosten-Eingabe erfassen</a>
+  <a href="{{.Base}}/fixkosten/neu" class="button success">Neue Fixkosteneingabe</a>
   <a href="{{.Base}}/fixkosten/{{.Eingabe.ID}}/bearbeiten" class="button secondary">Diese Eingabe korrigieren</a>
   <form method="post" action="{{.Base}}/fixkosten/{{.Eingabe.ID}}/loeschen" onsubmit="return confirm('Fixkosten-Eingabe {{.MonatLabel}} wirklich löschen?');">
     <button type="submit" class="danger">Diese Eingabe löschen</button>
