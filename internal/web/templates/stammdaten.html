@@ -18,6 +18,10 @@
 <h3 style="margin-top:1.5rem">Kostenpositionen je Jahr</h3>
 <p class="muted">Jahresgebühren und Grundpreise, jahresweise gepflegt. Der Jahreswert greift nur bei Typ "jährlich" - er wird für die Fixkosten-Eingabe automatisch durch 12 geteilt und ist dort nicht editierbar. Bei Typ "monatlich" wird der Wert stattdessen direkt in der jeweiligen monatlichen Fixkosten-Eingabe gepflegt (dort frei überschreibbar); der Jahreswert hier dient dann nur noch als Fallback für Monate ohne eigenen Wert.</p>
 
+<form method="post" action="{{.Base}}/stammdaten/jahre" class="btn-row" style="margin-top:1rem">
+  <button type="submit" class="secondary">+ Jahr {{.NextJahr}} anlegen{{if .JahrBloecke}} (vorbelegt vom Vorjahr){{end}}</button>
+</form>
+
 {{range .JahrBloecke}}
 <form method="post" action="{{$.Base}}/stammdaten/jahre/{{.Jahr}}" class="panel" style="margin-top:1rem">
   <h4>Jahr {{.Jahr}}</h4>
@@ -51,8 +55,4 @@
   <button type="submit" class="danger">Jahr {{.Jahr}} löschen</button>
 </form>
 {{end}}
-
-<form method="post" action="{{.Base}}/stammdaten/jahre" class="btn-row" style="margin-top:1rem">
-  <button type="submit" class="secondary">+ Jahr {{.NextJahr}} anlegen{{if .JahrBloecke}} (vorbelegt vom Vorjahr){{end}}</button>
-</form>
 {{end}}

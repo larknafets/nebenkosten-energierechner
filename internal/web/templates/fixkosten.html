@@ -2,6 +2,10 @@
 <h1>Fixkosten</h1>
 {{template "nav" .}}
 
+<div class="btn-row">
+  <a href="{{.Base}}/fixkosten/neu" class="button success">Neue Fixkosteneingabe</a>
+</div>
+
 {{if not .Eingaben}}
 <p class="muted">Noch keine Fixkosten-Eingabe erfasst. <a href="{{.Base}}/fixkosten/neu">Jetzt erfassen</a>.</p>
 {{else}}
@@ -23,10 +27,6 @@
       {{end}}
     </tbody>
   </table>
-</div>
-
-<div class="btn-row">
-  <a href="{{.Base}}/fixkosten/neu" class="button success">Neue Fixkosten-Eingabe erfassen</a>
 </div>
 {{end}}
 {{end}}
