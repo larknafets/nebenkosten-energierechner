@@ -2,15 +2,15 @@
 <h1>Ablesungen</h1>
 {{template "nav" .}}
 
-<div class="btn-row" style="margin-bottom:1.5rem">
+<div class="btn-row">
   <a href="{{.Base}}/ablesungen/neu" class="button success">Neue Ablesung</a>
 </div>
 
 {{if .ImportedCount}}
-<p class="panel" style="border-color:#2e7d32">✓ {{.ImportedCount}} Ablesungen importiert.</p>
+<p class="panel" style="border-color:#2e7d32; margin-top:1rem">✓ {{.ImportedCount}} Ablesungen importiert.</p>
 {{end}}
 {{if .Warnings}}
-<div class="panel" style="border-color:#e6a700">
+<div class="panel" style="border-color:#e6a700; margin-top:1rem">
   <strong>Hinweise beim Import:</strong>
   <ul>
     {{range .Warnings}}<li>{{.}}</li>{{end}}
@@ -19,9 +19,9 @@
 {{end}}
 
 {{if not .MonatGruppen}}
-<p class="muted">Noch keine Ablesung erfasst. <a href="{{.Base}}/ablesungen/neu">Jetzt erfassen</a>.</p>
+<p class="muted" style="margin-top:1rem">Noch keine Ablesung erfasst. <a href="{{.Base}}/ablesungen/neu">Jetzt erfassen</a>.</p>
 {{else}}
-<div class="panel">
+<div class="panel" style="margin-top:1rem">
   <table class="letzte">
     <thead><tr><th>Monat</th><th>Ablesedatum</th><th>Zeitraum</th><th></th></tr></thead>
     <tbody>

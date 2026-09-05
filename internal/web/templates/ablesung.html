@@ -101,9 +101,9 @@
 
 <div class="btn-row">
   <a href="{{.Base}}/ablesungen/neu" class="button success">Neue Ablesung</a>
-  <a href="{{.Base}}/ablesungen/{{.Period.ID}}/bearbeiten" class="button secondary">Diese Ablesung korrigieren</a>
+  <a href="{{.Base}}/ablesungen/{{.Period.ID}}/bearbeiten" class="button secondary">Ablesung korrigieren</a>
   <form method="post" action="{{.Base}}/ablesungen/{{.Period.ID}}/loeschen" onsubmit="return confirm('Ablesung vom {{deDatum .Period.ReadingDate}} wirklich löschen?');">
-    <button type="submit" class="danger">Diese Ablesung löschen</button>
+    <button type="submit" class="danger">Ablesung löschen</button>
   </form>
 </div>
 {{end}}
